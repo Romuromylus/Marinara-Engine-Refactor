@@ -75,3 +75,24 @@ Status: Complete.
 - Moved original browser UI state stores `stores/ui.store.ts` and `stores/dialog.store.ts` into `src/shared/stores`.
 - Global styles are present under `src/styles/globals.css` and `src/styles/themes/sillytavern.css`; `src/app/main.tsx` imports them directly.
 - Deferred feature screens and backend-backed surfaces from `components/chat`, `components/panels`, `components/modals`, `components/spotify`, `components/onboarding`, feature hooks, feature stores, and backend API clients to Phase 2+ slices. Current shell placeholders preserve navigation locations without adding fake backend behavior.
+
+### Phase 2 Slice 1 Settings Shell And Settings Sections
+
+Status: Complete.
+
+- Moved original `components/panels/SettingsPanel.tsx` into `src/features/settings/components/SettingsPanel.tsx` with layout and markup preserved.
+- Moved original `components/panels/settings/SettingControls.tsx` into `src/features/settings/components/settings/SettingControls.tsx`.
+- Moved original shared UI primitives used by settings, `components/ui/HelpTooltip.tsx`, `DraftNumberInput.tsx`, and `ExportFormatDialog.tsx`, into `src/shared/components/ui`.
+- Mapped server-backed settings dependencies to Phase 2-safe placeholders: themes/extensions query hooks, admin/server API client, chat metadata/data-clearing hooks, game asset rescanning, character embedded-lorebook inspection, browser refresh, and notification sound helper.
+- Wired the existing right panel settings route to render the migrated `SettingsPanel`.
+- Deferred real persistence, imports, backups, updates, background/font file operations, extension execution, and destructive data actions until their owning Rust backend slices.
+
+### Phase 2 Slice 2 Theme/Preferences UI
+
+Status: Complete.
+
+- Mapped theme and appearance preferences from original `components/panels/SettingsPanel.tsx` to the migrated settings feature, preserving the Appearance and Themes tab UI.
+- Mapped original theme preference state from `stores/ui.store.ts` to `src/shared/stores/ui.store.ts`, including color scheme, visual theme, font sizing, conversation gradient, text appearance, avatar style, and local custom theme fields.
+- Wired app-level preference effects in `src/app/App.tsx` and `src/app/providers/CustomThemeInjector.tsx` so color scheme, visual theme, font size, font family, and active custom CSS apply to the document shell.
+- Reworked `src/features/settings/hooks/use-themes.ts` to use the existing persisted UI store for local custom theme create, edit, import, activate, export, and delete behavior instead of the temporary query-cache placeholder.
+- Deferred Rust-backed theme storage/sync, custom font folder operations, Google Fonts download, background file operations, and chat metadata persistence until their owning backend/file slices.

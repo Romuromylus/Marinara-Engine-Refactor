@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { X, Users, BookOpen, FileText, Link, Sparkles, Settings, UserCircle, Bot } from "lucide-react";
 import { useUIStore } from "../../shared/stores/ui.store";
+import { SettingsPanel } from "../../features/settings/components/SettingsPanel";
 
 const PANEL_CONFIG: Record<string, { title: string; icon: ReactNode; gradient: string }> = {
   "bot-browser": { title: "Browser", icon: <Bot size="0.875rem" />, gradient: "from-cyan-400 to-blue-500" },
@@ -43,14 +44,18 @@ export function RightPanel() {
         </button>
       </div>
 
-      <div className="flex flex-1 items-center justify-center overflow-hidden px-6 text-center">
-        <div className="max-w-xs">
-          <p className="text-sm font-medium text-[var(--foreground)]">{config.title} panel deferred</p>
-          <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
-            The shell navigation is in place. This feature panel moves in its own reviewed slice.
-          </p>
+      {panel === "settings" ? (
+        <SettingsPanel />
+      ) : (
+        <div className="flex flex-1 items-center justify-center overflow-hidden px-6 text-center">
+          <div className="max-w-xs">
+            <p className="text-sm font-medium text-[var(--foreground)]">{config.title} panel deferred</p>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              The shell navigation is in place. This feature panel moves in its own reviewed slice.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
