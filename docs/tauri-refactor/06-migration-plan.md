@@ -46,9 +46,9 @@ Exit criteria:
 
 Move copied UI in this order, one small reviewed surface at a time:
 
-1. Settings shell and settings sections.
-2. Theme/preferences UI.
-3. Character/persona library read surfaces.
+1. Settings shell and settings sections. Complete.
+2. Theme/preferences UI. Complete.
+3. Character/persona library read surfaces. Complete.
 4. Chat shell/navigation without generation.
 5. Chat message display/input UI.
 6. Lorebooks/prompts/presets editors.

@@ -96,3 +96,16 @@ Status: Complete.
 - Wired app-level preference effects in `src/app/App.tsx` and `src/app/providers/CustomThemeInjector.tsx` so color scheme, visual theme, font size, font family, and active custom CSS apply to the document shell.
 - Reworked `src/features/settings/hooks/use-themes.ts` to use the existing persisted UI store for local custom theme create, edit, import, activate, export, and delete behavior instead of the temporary query-cache placeholder.
 - Deferred Rust-backed theme storage/sync, custom font folder operations, Google Fonts download, background file operations, and chat metadata persistence until their owning backend/file slices.
+
+### Phase 2 Slice 3 Character/Persona Library Read Surfaces
+
+Status: Complete.
+
+- Moved original `components/panels/CharactersPanel.tsx` into `src/features/characters/components/CharactersPanel.tsx` and wired the right-panel `characters` route to render it.
+- Moved original `components/panels/PersonasPanel.tsx` into `src/features/personas/components/PersonasPanel.tsx` and wired the right-panel `personas` route to render it.
+- Moved original `components/characters/CharacterLibraryView.tsx` into `src/features/characters/components/CharacterLibraryView.tsx` and wired the existing character-library UI state to render it in the center shell.
+- Moved original shared `components/ui/ContextMenu.tsx` into `src/shared/components/ui/ContextMenu.tsx`.
+- Mapped original `lib/character-display.ts` to `src/features/characters/lib/character-display.ts`.
+- Added feature-owned frontend API seams in `src/features/characters/api/characters-api.ts` and `src/features/personas/api/personas-api.ts`; these intentionally fail with explicit Rust-backend-slice errors instead of fake persistence.
+- Added Phase 2-safe character/persona query and mutation hooks under `src/features/characters/hooks` and `src/features/personas/hooks`, preserving click paths while deferring real storage.
+- Deferred full character editor, persona editor, create/import/maker modals, PNG import/export, avatar upload, group persistence, duplicate/delete, active persona persistence, and start-chat behavior until their owning frontend/modal and Rust backend slices.

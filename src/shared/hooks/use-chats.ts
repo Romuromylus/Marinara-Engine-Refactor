@@ -12,6 +12,7 @@ export type ExpungeScope =
 
 export const chatKeys = {
   list: () => ["chats"] as const,
+  messages: (chatId: string) => ["chats", chatId, "messages"] as const,
 };
 
 const deferred = async (): Promise<never> => {
@@ -21,6 +22,18 @@ const deferred = async (): Promise<never> => {
 export function useUpdateChatMetadata() {
   return useMutation({
     mutationFn: (_metadata: unknown) => deferred(),
+  });
+}
+
+export function useUpdateChat() {
+  return useMutation({
+    mutationFn: (_chat: unknown) => deferred(),
+  });
+}
+
+export function useCreateMessage(_chatId: string | null) {
+  return useMutation({
+    mutationFn: (_message: unknown): Promise<{ id: string }> => deferred(),
   });
 }
 

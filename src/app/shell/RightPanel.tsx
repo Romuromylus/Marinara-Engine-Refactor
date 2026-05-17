@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { X, Users, BookOpen, FileText, Link, Sparkles, Settings, UserCircle, Bot } from "lucide-react";
 import { useUIStore } from "../../shared/stores/ui.store";
 import { SettingsPanel } from "../../features/settings/components/SettingsPanel";
+import { CharactersPanel } from "../../features/characters/components/CharactersPanel";
+import { PersonasPanel } from "../../features/personas/components/PersonasPanel";
 
 const PANEL_CONFIG: Record<string, { title: string; icon: ReactNode; gradient: string }> = {
   "bot-browser": { title: "Browser", icon: <Bot size="0.875rem" />, gradient: "from-cyan-400 to-blue-500" },
@@ -46,6 +48,10 @@ export function RightPanel() {
 
       {panel === "settings" ? (
         <SettingsPanel />
+      ) : panel === "characters" ? (
+        <CharactersPanel />
+      ) : panel === "personas" ? (
+        <PersonasPanel />
       ) : (
         <div className="flex flex-1 items-center justify-center overflow-hidden px-6 text-center">
           <div className="max-w-xs">
