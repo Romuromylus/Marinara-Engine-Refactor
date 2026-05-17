@@ -1,12 +1,30 @@
-import type { ReactNode } from "react";
-import { X, Users, BookOpen, FileText, Link, Sparkles, Settings, UserCircle, Bot } from "lucide-react";
+// ──────────────────────────────────────────────
+// Layout: Right Panel (polished with panel transitions)
+// ──────────────────────────────────────────────
+import { lazy, Suspense, type ComponentType, type LazyExoticComponent, type ReactNode } from "react";
+import { X, Users, BookOpen, FileText, Link, Sparkles, Settings, User, Bot } from "lucide-react";
 import { useUIStore } from "../../shared/stores/ui.store";
-import { SettingsPanel } from "../../features/settings/components/SettingsPanel";
-import { CharactersPanel } from "../../features/characters/components/CharactersPanel";
-import { ConnectionsPanel } from "../../features/connections/components/ConnectionsPanel";
-import { PersonasPanel } from "../../features/personas/components/PersonasPanel";
-import { LorebooksPanel } from "../../features/lorebooks/components/LorebooksPanel";
-import { PresetsPanel } from "../../features/presets/components/PresetsPanel";
+
+const CharactersPanel = lazy(() =>
+  import("../../features/characters/components/CharactersPanel").then((module) => ({ default: module.CharactersPanel })),
+);
+const LorebooksPanel = lazy(() =>
+  import("../../features/lorebooks/components/LorebooksPanel").then((module) => ({ default: module.LorebooksPanel })),
+);
+const PresetsPanel = lazy(() =>
+  import("../../features/presets/components/PresetsPanel").then((module) => ({ default: module.PresetsPanel })),
+);
+const ConnectionsPanel = lazy(() =>
+  import("../../features/connections/components/ConnectionsPanel").then((module) => ({ default: module.ConnectionsPanel })),
+);
+const AgentsPanel = lazy(() => Promise.resolve({ default: NullPanel }));
+const PersonasPanel = lazy(() =>
+  import("../../features/personas/components/PersonasPanel").then((module) => ({ default: module.PersonasPanel })),
+);
+const SettingsPanel = lazy(() =>
+  import("../../features/settings/components/SettingsPanel").then((module) => ({ default: module.SettingsPanel })),
+);
+const BotBrowserPanel = lazy(() => Promise.resolve({ default: NullPanel }));
 
 const PANEL_CONFIG: Record<string, { title: string; icon: ReactNode; gradient: string }> = {
   "bot-browser": { title: "Browser", icon: <Bot size="0.875rem" />, gradient: "from-cyan-400 to-blue-500" },
@@ -15,13 +33,41 @@ const PANEL_CONFIG: Record<string, { title: string; icon: ReactNode; gradient: s
   presets: { title: "Presets", icon: <FileText size="0.875rem" />, gradient: "from-purple-400 to-violet-500" },
   connections: { title: "Connections", icon: <Link size="0.875rem" />, gradient: "from-sky-400 to-blue-500" },
   agents: { title: "Agents", icon: <Sparkles size="0.875rem" />, gradient: "from-pink-300 to-purple-400" },
-  personas: { title: "Personas", icon: <UserCircle size="0.875rem" />, gradient: "from-emerald-400 to-teal-500" },
+  personas: { title: "Personas", icon: <User size="0.875rem" />, gradient: "from-emerald-400 to-teal-500" },
   settings: { title: "Settings", icon: <Settings size="0.875rem" />, gradient: "from-gray-400 to-gray-500" },
 };
+
+const PANELS: Record<string, LazyExoticComponent<ComponentType>> = {
+  "bot-browser": BotBrowserPanel,
+  characters: CharactersPanel,
+  lorebooks: LorebooksPanel,
+  presets: PresetsPanel,
+  connections: ConnectionsPanel,
+  agents: AgentsPanel,
+  personas: PersonasPanel,
+  settings: SettingsPanel,
+};
+
+// Module-level set survives component remounts (e.g. mobile AnimatePresence unmount/remount)
+const mountedPanels = new Set<string>();
+
+function PanelFallback() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-[var(--muted-foreground)]">Loading...</div>
+  );
+}
+
+function NullPanel() {
+  return null;
+}
 
 export function RightPanel() {
   const panel = useUIStore((s) => s.rightPanel);
   const close = useUIStore((s) => s.closeRightPanel);
+
+  // Add synchronously so the current panel is in the set for this render.
+  // Module-level Set is not React state, so mutating it during render is safe.
+  mountedPanels.add(panel);
 
   const config = PANEL_CONFIG[panel] ?? { title: "Panel", icon: null, gradient: "from-slate-400 to-slate-500" };
 
@@ -31,6 +77,7 @@ export function RightPanel() {
       aria-label={config.title}
       className="mari-right-panel-content flex h-full flex-col"
     >
+      {/* Header - OS window style */}
       <div className="mari-right-panel-header relative flex h-12 flex-shrink-0 items-center justify-between bg-[var(--card)]/80 px-4 backdrop-blur-sm">
         <div className="absolute inset-x-0 bottom-0 h-px bg-[var(--border)]/30" />
         <div className="flex items-center gap-2.5">
@@ -49,28 +96,24 @@ export function RightPanel() {
         </button>
       </div>
 
-      {panel === "settings" ? (
-        <SettingsPanel />
-      ) : panel === "characters" ? (
-        <CharactersPanel />
-      ) : panel === "personas" ? (
-        <PersonasPanel />
-      ) : panel === "connections" ? (
-        <ConnectionsPanel />
-      ) : panel === "lorebooks" ? (
-        <LorebooksPanel />
-      ) : panel === "presets" ? (
-        <PresetsPanel />
-      ) : (
-        <div className="flex flex-1 items-center justify-center overflow-hidden px-6 text-center">
-          <div className="max-w-xs">
-            <p className="text-sm font-medium text-[var(--foreground)]">{config.title} panel deferred</p>
-            <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
-              The shell navigation is in place. This feature panel moves in its own reviewed slice.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Content — keep visited panels mounted but hidden to avoid re-animation */}
+      <div className="relative flex-1 overflow-hidden">
+        {Object.entries(PANELS).map(([key, PanelComp]) => {
+          if (!mountedPanels.has(key)) return null;
+          const active = key === panel;
+          return (
+            <div
+              key={key}
+              className={`absolute inset-0 overflow-y-auto ${active ? "" : "hidden"}`}
+              aria-hidden={!active}
+            >
+              <Suspense fallback={active ? <PanelFallback /> : null}>
+                <PanelComp />
+              </Suspense>
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

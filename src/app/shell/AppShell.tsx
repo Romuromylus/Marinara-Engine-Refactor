@@ -265,20 +265,7 @@ export function AppShell() {
             ) : presetDetailId ? (
               <PresetEditor />
             ) : characterDetailId || personaDetailId || connectionDetailId ? (
-              <div className="flex flex-1 flex-col items-center justify-center overflow-hidden px-6 text-center">
-                <div className="glass max-w-xl rounded-2xl p-6">
-                  <p className="text-sm font-medium text-[var(--foreground)]">
-                    {characterDetailId
-                      ? "Character editor deferred"
-                      : personaDetailId
-                        ? "Persona editor deferred"
-                        : "Connection editor deferred"}
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
-                    The library click path is wired. The editor UI moves in a later reviewed slice.
-                  </p>
-                </div>
-              </div>
+              null
             ) : (
               <ChatConversationView activeChatId={activeChatId} />
             )}

@@ -1,53 +1,63 @@
+// ──────────────────────────────────────────────
+// Layout: Chat Sidebar (polished with rich buttons)
+// ──────────────────────────────────────────────
 import {
-  ArrowUpDown,
+  Plus,
+  MessageSquare,
+  Search,
+  Trash2,
   BookOpen,
+  Theater,
+  GitBranch,
+  AlertTriangle,
+  X,
+  Circle,
+  Moon,
+  MinusCircle,
+  FolderOpen,
+  FolderPlus,
   ChevronDown,
   ChevronRight,
-  Circle,
-  FolderOpen,
-  GitBranch,
-  MessageSquare,
-  MinusCircle,
-  Moon,
-  Plus,
-  Search,
+  ChevronUp,
+  GripVertical,
+  CheckSquare,
+  Square as SquareIcon,
+  ArrowUpDown,
   Tag,
-  Theater,
+  Pencil,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useChats, useCreateChat, useDeleteChat, useDeleteChatGroup } from "../../features/chats/hooks/use-chats";
+import { useChatPresets, useApplyChatPreset } from "../../features/chat-presets/hooks/use-chat-presets";
+import { useConnections } from "../../features/connections/hooks/use-connections";
+import {
+  useChatFolders,
+  useCreateFolder,
+  useUpdateFolder,
+  useDeleteFolder,
+  useReorderFolders,
+  useMoveChat,
+} from "../../features/chats/hooks/use-chat-folders";
 import { useCharacters } from "../../features/characters/hooks/use-characters";
-import { useChatFolders } from "../../features/chats/hooks/use-chat-folders";
-import { useChats } from "../../features/chats/hooks/use-chats";
-import type { Chat, ChatFolder, ChatMode } from "../../features/chats/types";
-import { cn, getAvatarCropStyle } from "../../shared/lib/utils";
 import { useChatStore } from "../../shared/stores/chat.store";
+import { showConfirmDialog } from "../../shared/lib/app-dialogs";
 import { useUIStore, type UserStatus } from "../../shared/stores/ui.store";
+import { cn, getAvatarCropStyle, type AvatarCropValue } from "../../shared/lib/utils";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import type { Chat, ChatFolder, ChatMode } from "@marinara-engine/shared";
+import { Modal } from "../../shared/components/ui/Modal";
+import { Reorder, useDragControls } from "framer-motion";
+import { parseChatMetadata } from "../../shared/lib/chat-display";
 
 type ChatSortOption = "newest" | "oldest" | "name-asc" | "name-desc";
-type SidebarMode = Exclude<ChatMode, "visual_novel">;
-
-const MODE_TABS: Array<{
-  id: SidebarMode;
-  label: string;
-  shortLabel: string;
-  icon: typeof MessageSquare;
-}> = [
-  { id: "conversation", label: "Conversation", shortLabel: "CONVO", icon: MessageSquare },
-  { id: "roleplay", label: "Roleplay", shortLabel: "RP", icon: BookOpen },
-  { id: "game", label: "Game", shortLabel: "GM", icon: Theater },
-];
-
-const SORT_LABELS: Record<ChatSortOption, string> = {
-  newest: "Newest",
-  oldest: "Oldest",
-  "name-asc": "A-Z",
-  "name-desc": "Z-A",
-};
 
 function getChatTags(chat: Pick<Chat, "metadata">): string[] {
   return Array.isArray(chat.metadata?.tags)
     ? chat.metadata.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
     : [];
+}
+
+function toSearchText(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
 }
 
 function normalizeChatCharacterIds(value: unknown): string[] {
@@ -65,78 +75,150 @@ function normalizeChatCharacterIds(value: unknown): string[] {
     : [];
 }
 
-function toSearchText(value: unknown): string {
-  return typeof value === "string" ? value : value == null ? "" : String(value);
-}
-
-function formatChatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Chat data is waiting for the Rust chats backend slice.";
-}
+const MODE_CONFIG: Record<
+  string,
+  { icon: React.ReactNode; label: string; shortLabel: string; bg: string; description: string; comingSoon?: boolean }
+> = {
+  conversation: {
+    icon: <MessageSquare size="0.875rem" />,
+    label: "Conversation",
+    shortLabel: "CONVO",
+    bg: "linear-gradient(135deg, #4de5dd, #3ab8b1)",
+    description: "A straightforward AI conversation — no roleplay elements.",
+  },
+  roleplay: {
+    icon: <BookOpen size="0.875rem" />,
+    label: "Roleplay",
+    shortLabel: "RP",
+    bg: "linear-gradient(135deg, #eb8951, #d97530)",
+    description: "Immersive roleplay with characters, game state tracking, and world simulation.",
+  },
+  visual_novel: {
+    icon: <Theater size="0.875rem" />,
+    label: "Visual Novel",
+    shortLabel: "VN",
+    bg: "linear-gradient(135deg, #e15c8c, #c94776)",
+    description: "A full game experience with backgrounds, sprites, text boxes, and choices.",
+    comingSoon: true,
+  },
+  game: {
+    icon: <Theater size="0.875rem" />,
+    label: "Game",
+    shortLabel: "GM",
+    bg: "linear-gradient(135deg, #e15c8c, #c94776)",
+    description: "AI-managed singleplayer RPG with a Game Master, party, dice, maps, and quests.",
+  },
+};
 
 export function ChatSidebar() {
-  const { data: chats, error: chatsError, isFetching, isLoading, refetch } = useChats();
-  const { data: folders } = useChatFolders();
-  const { data: characters } = useCharacters();
+  const { data: chats, isError: chatsError, isLoading, isFetching, refetch: refetchChats } = useChats();
+  const { data: connections } = useConnections();
+  const createChat = useCreateChat();
+  const { data: chatPresetsData } = useChatPresets();
+  const applyChatPreset = useApplyChatPreset();
+  const deleteChat = useDeleteChat();
+  const deleteChatGroup = useDeleteChatGroup();
   const activeChatId = useChatStore((s) => s.activeChatId);
   const setActiveChatId = useChatStore((s) => s.setActiveChatId);
-  const setActiveChatSnapshot = useChatStore((s) => s.setActiveChat);
   const unreadCounts = useChatStore((s) => s.unreadCounts);
-  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const hydrateUnread = useChatStore((s) => s.hydrateUnread);
+  const { data: allCharacters } = useCharacters();
+  const hasAnyDetailOpen = useUIStore((s) => s.hasAnyDetailOpen);
+  const editorDirty = useUIStore((s) => s.editorDirty);
   const closeAllDetails = useUIStore((s) => s.closeAllDetails);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<SidebarMode>("conversation");
-  const [sort, setSort] = useState<ChatSortOption>("newest");
-  const [activeTag, setActiveTag] = useState<string | null>(null);
-  const [tagsExpanded, setTagsExpanded] = useState(false);
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const setPendingNewChatMode = useChatStore((s) => s.setPendingNewChatMode);
 
-  const characterLookup = useMemo(() => {
+  // Folder hooks
+  const { data: folders } = useChatFolders();
+  const createFolderMut = useCreateFolder();
+  const updateFolderMut = useUpdateFolder();
+  const deleteFolderMut = useDeleteFolder();
+  const reorderFoldersMut = useReorderFolders();
+  const moveChatMut = useMoveChat();
+
+  // Build character lookup: id → { name, avatarUrl, avatarCrop, conversationStatus }
+  const charLookup = useMemo(() => {
     const map = new Map<
       string,
       {
         name: string;
         avatarUrl: string | null;
-        avatarCrop?: { zoom: number; offsetX: number; offsetY: number } | null;
+        avatarCrop?: AvatarCropValue | null;
         conversationStatus?: string;
       }
     >();
-
-    for (const character of (characters ?? []) as Array<{ id: string; data?: unknown; avatarPath?: string | null }>) {
-      const record = (() => {
-        if (typeof character.data === "string") {
-          try {
-            return JSON.parse(character.data) as Record<string, unknown>;
-          } catch {
-            return {};
-          }
-        }
-        return character.data && typeof character.data === "object" ? (character.data as Record<string, unknown>) : {};
-      })();
-      const extensions =
-        record.extensions && typeof record.extensions === "object" ? (record.extensions as Record<string, unknown>) : {};
-      map.set(character.id, {
-        name: typeof record.name === "string" && record.name.trim() ? record.name.trim() : "Unknown",
-        avatarUrl: character.avatarPath ?? null,
-        avatarCrop:
-          extensions.avatarCrop && typeof extensions.avatarCrop === "object"
-            ? (extensions.avatarCrop as { zoom: number; offsetX: number; offsetY: number })
-            : null,
-        conversationStatus:
-          typeof extensions.conversationStatus === "string" ? extensions.conversationStatus : undefined,
-      });
+    if (!allCharacters) return map;
+    for (const char of allCharacters as Array<{ id: string; data: unknown; avatarPath: string | null }>) {
+      try {
+        const parsed = typeof char.data === "string" ? JSON.parse(char.data) : char.data;
+        const record = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+        const extensions =
+          record.extensions && typeof record.extensions === "object"
+            ? (record.extensions as Record<string, unknown>)
+            : {};
+        const name = typeof record.name === "string" && record.name.trim() ? record.name.trim() : "Unknown";
+        const conversationStatus =
+          typeof extensions.conversationStatus === "string" ? extensions.conversationStatus : undefined;
+        map.set(char.id, {
+          name,
+          avatarUrl: char.avatarPath ?? null,
+          avatarCrop: (extensions.avatarCrop as AvatarCropValue | undefined) ?? null,
+          conversationStatus,
+        });
+      } catch {
+        map.set(char.id, { name: "Unknown", avatarUrl: null });
+      }
     }
-
     return map;
-  }, [characters]);
+  }, [allCharacters]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sort, setSort] = useState<ChatSortOption>("newest");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"conversation" | "roleplay" | "game">("conversation");
+  const [deleteTarget, setDeleteTarget] = useState<{
+    chatId: string;
+    groupId: string | null;
+    branchCount: number;
+  } | null>(null);
+
+  // Folder UI state
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [movingChatId, setMovingChatId] = useState<string | null>(null);
+
+  // Multi-select state
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
+
+  const toggleSelectChat = useCallback((chatId: string) => {
+    setSelectedChatIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(chatId)) next.delete(chatId);
+      else next.add(chatId);
+      return next;
+    });
+  }, []);
+
+  const exitMultiSelect = useCallback(() => {
+    setMultiSelectMode(false);
+    setSelectedChatIds(new Set());
+  }, []);
+
+  // Exit multi-select when switching tabs
+  useEffect(() => {
+    exitMultiSelect();
+    setActiveTag(null);
+    setTagsExpanded(false);
+  }, [activeTab, exitMultiSelect]);
 
   const modeChats = useMemo(
-    () => (chats ?? []).filter((chat) => chat.mode === activeTab && !(chat.mode === "conversation" && chat.metadata?.gameId)),
-    [activeTab, chats],
+    () =>
+      (chats ?? []).filter(
+        (chat) => chat.mode === activeTab && !(chat.mode === "conversation" && chat.metadata?.gameId),
+      ),
+    [chats, activeTab],
   );
 
   const allTags = useMemo(() => {
@@ -148,33 +230,46 @@ export function ChatSidebar() {
   }, [modeChats]);
 
   useEffect(() => {
-    if (activeTag && !allTags.includes(activeTag)) setActiveTag(null);
+    if (activeTag && !allTags.includes(activeTag)) {
+      setActiveTag(null);
+    }
   }, [activeTag, allTags]);
 
-  useEffect(() => {
-    const activeChat = chats?.find((chat) => chat.id === activeChatId);
-    if (activeChat?.mode === "conversation" || activeChat?.mode === "roleplay" || activeChat?.mode === "game") {
-      setActiveTab(activeChat.mode);
-    }
-  }, [activeChatId, chats]);
-
-  const filteredChats = useMemo(() => {
+  const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const sorted = modeChats.filter((chat) => {
+
+    return modeChats.filter((chat) => {
       const tags = getChatTags(chat);
       if (activeTag && !tags.includes(activeTag)) return false;
       if (!query) return true;
-      const characterNames = normalizeChatCharacterIds(chat.characterIds)
-        .map((characterId) => characterLookup.get(characterId)?.name ?? "")
+
+      const characterNames = normalizeChatCharacterIds((chat as { characterIds?: unknown }).characterIds)
+        .map((characterId) => charLookup.get(characterId)?.name ?? "")
         .filter(Boolean);
+
       return (
         toSearchText(chat.name).toLowerCase().includes(query) ||
         tags.some((tag) => tag.toLowerCase().includes(query)) ||
         characterNames.some((name) => name.toLowerCase().includes(query))
       );
     });
+  }, [modeChats, searchQuery, activeTag, charLookup]);
 
-    return sorted.sort((a, b) => {
+  // ── Collapse chats that share a groupId into one entry ──
+  const displayChats = useMemo(() => {
+    if (!filtered) return [];
+
+    // Total group sizes from unfiltered chats (for accurate branch count)
+    const totalGroupSizes = new Map<string, number>();
+    if (chats) {
+      for (const chat of chats) {
+        if (chat.groupId) {
+          totalGroupSizes.set(chat.groupId, (totalGroupSizes.get(chat.groupId) ?? 0) + 1);
+        }
+      }
+    }
+
+    const sorted = [...filtered].sort((a, b) => {
       switch (sort) {
         case "oldest":
           return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
@@ -187,191 +282,731 @@ export function ChatSidebar() {
           return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       }
     });
-  }, [activeTag, characterLookup, modeChats, searchQuery, sort]);
-
-  const displayChats = useMemo(() => {
-    const totalGroupSizes = new Map<string, number>();
-    for (const chat of chats ?? []) {
-      if (chat.groupId) totalGroupSizes.set(chat.groupId, (totalGroupSizes.get(chat.groupId) ?? 0) + 1);
-    }
 
     const seenGroups = new Set<string>();
-    const entries: Array<{ chat: Chat; branchCount: number }> = [];
-    for (const chat of filteredChats) {
+    const result: { chat: (typeof sorted)[number]; branchCount: number }[] = [];
+
+    for (const chat of sorted) {
       if (chat.groupId) {
         if (seenGroups.has(chat.groupId)) continue;
         seenGroups.add(chat.groupId);
-        entries.push({ chat, branchCount: totalGroupSizes.get(chat.groupId) ?? 1 });
+        result.push({ chat, branchCount: totalGroupSizes.get(chat.groupId) ?? 1 });
       } else {
-        entries.push({ chat, branchCount: 1 });
+        result.push({ chat, branchCount: 1 });
       }
     }
-    return entries;
-  }, [chats, filteredChats]);
 
-  const modeFolders = useMemo(
-    () => (folders ?? []).filter((folder) => folder.mode === activeTab).sort((a, b) => a.sortOrder - b.sortOrder),
-    [activeTab, folders],
-  );
+    return result;
+  }, [chats, filtered, sort]);
 
-  const { folderChatsMap, unfiledChats } = useMemo(() => {
-    const map = new Map<string, Array<{ chat: Chat; branchCount: number }>>();
-    const unfiled: Array<{ chat: Chat; branchCount: number }> = [];
+  // ── Folder grouping ──
+  const modeFolders = useMemo(() => {
+    if (!folders) return [] as ChatFolder[];
+    return folders.filter((f) => f.mode === activeTab).sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [folders, activeTab]);
+
+  const { unfiledChats, folderChatsMap } = useMemo(() => {
+    if (!displayChats.length)
+      return { unfiledChats: displayChats, folderChatsMap: new Map<string, typeof displayChats>() };
+    const unfiled: typeof displayChats = [];
+    const map = new Map<string, typeof displayChats>();
     for (const entry of displayChats) {
-      if (!entry.chat.folderId) {
+      const fid = entry.chat.folderId;
+      if (!fid) {
         unfiled.push(entry);
         continue;
       }
-      const entries = map.get(entry.chat.folderId) ?? [];
-      entries.push(entry);
-      map.set(entry.chat.folderId, entries);
+      if (!map.has(fid)) map.set(fid, []);
+      map.get(fid)!.push(entry);
     }
-    return { folderChatsMap: map, unfiledChats: unfiled };
+    return { unfiledChats: unfiled, folderChatsMap: map };
   }, [displayChats]);
 
-  const selectChat = (chat: Chat) => {
-    closeAllDetails();
-    setActiveChatId(chat.id);
-    setActiveChatSnapshot({ ...chat, characterIds: normalizeChatCharacterIds(chat.characterIds) } as never);
-    if (window.matchMedia("(max-width: 767px)").matches) setSidebarOpen(false);
-  };
+  const [localFolderOrder, setLocalFolderOrder] = useState<string[]>([]);
+  useEffect(() => {
+    setLocalFolderOrder(modeFolders.map((f) => f.id));
+  }, [modeFolders]);
 
-  const cycleSort = () => {
-    setSort((current) => {
-      if (current === "newest") return "oldest";
-      if (current === "oldest") return "name-asc";
-      if (current === "name-asc") return "name-desc";
-      return "newest";
-    });
-  };
+  // Detect if active chat belongs to a group (so its group row highlights)
+  const activeChat = chats?.find((c) => c.id === activeChatId);
+  const activeGroupId = activeChat?.groupId ?? null;
 
-  const activeTabLabel = MODE_TABS.find((tab) => tab.id === activeTab)?.label ?? "Chat";
-  const canShowEmpty = displayChats.length === 0 && !isLoading && !chatsError;
+  useEffect(() => {
+    const allChats = chats ?? [];
+    const unread = allChats
+      .map((chat) => {
+        const metadata = parseChatMetadata(chat.metadata);
+        const count = typeof metadata.autonomousUnreadCount === "number" ? metadata.autonomousUnreadCount : 0;
+        if (count <= 0) return null;
+        const characterId =
+          (Array.isArray(metadata.autonomousUnreadCharacterIds)
+            ? metadata.autonomousUnreadCharacterIds.find((id): id is string => typeof id === "string")
+            : null) ?? normalizeChatCharacterIds(chat.characterIds)[0];
+        const character = characterId ? charLookup.get(characterId) : null;
+        return {
+          chatId: chat.id,
+          count,
+          characterName: character?.name ?? "Someone",
+          avatarUrl: character?.avatarUrl ?? null,
+          avatarCrop: character?.avatarCrop ?? null,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    hydrateUnread(
+      unread,
+      allChats.map((chat) => chat.id),
+    );
+  }, [chats, charLookup, hydrateUnread]);
 
-  return (
-    <nav data-component="ChatSidebar" className="flex h-full flex-col overflow-hidden">
-      <div className="mari-sidebar-header border-b border-[var(--border)]/30 px-3 py-3">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[var(--sidebar-foreground)]">Marinara</p>
-            <p className="text-[0.6875rem] text-[var(--muted-foreground)]">Local workspace</p>
+  // ── Sync sidebar tab + folder with the currently active chat ──
+  // Covers: recent-chat clicks, page refresh, connected-chat switch,
+  // scene navigation, notification bubbles, branch switch, import, etc.
+  //
+  // Uses a structured ref so each concern (tab, folder, scroll) resolves
+  // independently — folder expansion retries when folders load late, and
+  // scroll waits until both tab and folder are settled.
+  const syncRef = useRef<{ chatId: string | null; tabSynced: boolean; folderSynced: boolean }>({
+    chatId: null,
+    tabSynced: false,
+    folderSynced: false,
+  });
+  // When true the next sync skips clearing the search query — set by
+  // the sidebar's own click handler so clicking a search result doesn't
+  // wipe the filter the user is actively browsing.
+  const internalNavRef = useRef(false);
+  useEffect(() => {
+    if (!activeChatId || !chats?.length) return;
+
+    const chat = chats.find((c) => c.id === activeChatId);
+    if (!chat) return;
+
+    const s = syncRef.current;
+    const isNewChat = s.chatId !== activeChatId;
+    let needsScroll = false;
+
+    if (isNewChat) {
+      s.chatId = activeChatId;
+      s.tabSynced = false;
+      s.folderSynced = false;
+    }
+
+    // 1. Tab sync — once per chat switch
+    if (!s.tabSynced) {
+      const chatMode = chat.mode as "conversation" | "roleplay" | "game";
+      if (chatMode === "conversation" || chatMode === "roleplay" || chatMode === "game") {
+        setActiveTab(chatMode);
+      }
+      // Clear search so the active chat isn't hidden by a stale filter.
+      // Skip when the navigation originated from a sidebar click (the
+      // user is actively browsing search results and shouldn't lose them).
+      if (!internalNavRef.current) {
+        setSearchQuery("");
+        setActiveTag(null);
+        setTagsExpanded(false);
+      }
+      internalNavRef.current = false;
+      s.tabSynced = true;
+      needsScroll = true;
+    }
+
+    // 2. Folder expansion — waits for folders data; if the folder is
+    //    collapsed we fire a mutation and stay !folderSynced so the effect
+    //    re-runs after the query delivers the expanded state.
+    if (!s.folderSynced) {
+      if (!chat.folderId) {
+        s.folderSynced = true;
+      } else if (folders) {
+        const folder = folders.find((f) => f.id === chat.folderId);
+        if (folder?.collapsed) {
+          updateFolderMut.mutate({ id: folder.id, collapsed: false });
+          // folderSynced stays false — re-runs after query invalidation
+        } else {
+          s.folderSynced = true;
+          needsScroll = true;
+        }
+      }
+      // else: folders not loaded yet — effect re-runs when they arrive
+    }
+
+    // 3. Scroll active chat row into view once both tab + folder are settled
+    if (needsScroll && s.tabSynced && s.folderSynced) {
+      const timer = setTimeout(() => {
+        const el = document.querySelector(`[data-chat-id="${activeChatId}"]`);
+        el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [activeChatId, chats, folders, updateFolderMut]);
+
+  const handleNewChat = useCallback(
+    (mode: ChatMode) => {
+      const connectionRows = ((connections ?? []) as Array<{ id: string }>).filter((connection) => !!connection.id);
+      if (connectionRows.length === 0) {
+        if (mode === "conversation" || mode === "roleplay") {
+          setPendingNewChatMode(mode);
+        }
+        return;
+      }
+
+      // Close any open detail editors so the chat area is visible
+      if (hasAnyDetailOpen()) {
+        closeAllDetails();
+      }
+      // Resolve the user's starred default preset for this mode (only modes with presets).
+      const presets = chatPresetsData ?? [];
+      const presetMode: ChatMode | null = mode === "conversation" || mode === "roleplay" ? mode : null;
+      const starred = presetMode
+        ? (presets.find((p) => p.mode === presetMode && p.isActive && !p.isDefault) ?? null)
+        : null;
+      createChat.mutate(
+        { name: `New ${MODE_CONFIG[mode]?.label ?? mode}`, mode, characterIds: [] },
+        {
+          onSuccess: async (chat) => {
+            setActiveChatId(chat.id);
+            if (starred) {
+              try {
+                await applyChatPreset.mutateAsync({ presetId: starred.id, chatId: chat.id });
+              } catch {
+                /* non-fatal — chat still opens with system defaults */
+              }
+            }
+            useChatStore.getState().setShouldOpenSettings(true);
+            useChatStore.getState().setShouldOpenWizard(true);
+          },
+        },
+      );
+    },
+    [
+      connections,
+      createChat,
+      setActiveChatId,
+      setPendingNewChatMode,
+      hasAnyDetailOpen,
+      closeAllDetails,
+      chatPresetsData,
+      applyChatPreset,
+    ],
+  );
+
+  const handleNewChatFromTab = useCallback(() => {
+    handleNewChat(activeTab);
+  }, [handleNewChat, activeTab]);
+
+  // ── Folder handlers ──
+  const handleCreateFolder = useCallback(() => {
+    if (!newFolderName.trim()) return;
+    createFolderMut.mutate({ name: newFolderName.trim(), mode: activeTab });
+    setNewFolderName("");
+    setCreatingFolder(false);
+  }, [newFolderName, activeTab, createFolderMut]);
+
+  const handleToggleCollapse = useCallback(
+    (folder: ChatFolder) => {
+      updateFolderMut.mutate({ id: folder.id, collapsed: !folder.collapsed });
+    },
+    [updateFolderMut],
+  );
+
+  const handleRenameFolder = useCallback(
+    (id: string, name: string) => {
+      if (!name.trim()) return;
+      updateFolderMut.mutate({ id, name: name.trim() });
+    },
+    [updateFolderMut],
+  );
+
+  const handleDeleteFolder = useCallback(
+    async (id: string) => {
+      if (
+        await showConfirmDialog({
+          title: "Delete Folder",
+          message: "Delete this folder? Chats will be moved to the top level.",
+          confirmLabel: "Delete",
+          tone: "destructive",
+        })
+      ) {
+        deleteFolderMut.mutate(id);
+      }
+    },
+    [deleteFolderMut],
+  );
+
+  const handleFolderReorder = useCallback(
+    (newOrder: string[]) => {
+      setLocalFolderOrder(newOrder);
+      reorderFoldersMut.mutate(newOrder);
+    },
+    [reorderFoldersMut],
+  );
+
+  const handleMoveToFolder = useCallback(
+    (chatId: string, folderId: string | null) => {
+      moveChatMut.mutate({ chatId, folderId });
+      setMovingChatId(null);
+    },
+    [moveChatMut],
+  );
+
+  // ── Batch actions ──
+  const [batchMovingFolder, setBatchMovingFolder] = useState(false);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedChatIds.size === 0) return;
+    if (
+      !(await showConfirmDialog({
+        title: "Delete Chats",
+        message: `Delete ${selectedChatIds.size} chat${selectedChatIds.size > 1 ? "s" : ""}?`,
+        confirmLabel: "Delete",
+        tone: "destructive",
+      }))
+    ) {
+      return;
+    }
+    for (const id of selectedChatIds) {
+      deleteChat.mutate(id);
+    }
+    if (activeChatId && selectedChatIds.has(activeChatId)) setActiveChatId(null);
+    exitMultiSelect();
+  }, [selectedChatIds, deleteChat, activeChatId, setActiveChatId, exitMultiSelect]);
+
+  const handleBatchMoveToFolder = useCallback(
+    (folderId: string | null) => {
+      for (const id of selectedChatIds) {
+        moveChatMut.mutate({ chatId: id, folderId });
+      }
+      setBatchMovingFolder(false);
+      exitMultiSelect();
+    },
+    [selectedChatIds, moveChatMut, exitMultiSelect],
+  );
+
+  // ── Chat row renderer (shared between unfiled + folder sections) ──
+  const renderChatRow = ({ chat, branchCount }: (typeof displayChats)[number]) => {
+    const cfg = MODE_CONFIG[chat.mode] ?? MODE_CONFIG.conversation;
+    const isActive = activeChatId === chat.id || (chat.groupId != null && chat.groupId === activeGroupId);
+    const isSelected = selectedChatIds.has(chat.id);
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        key={chat.groupId ?? chat.id}
+        data-chat-id={chat.id}
+        onClick={async () => {
+          if (multiSelectMode) {
+            toggleSelectChat(chat.id);
+            return;
+          }
+          if (hasAnyDetailOpen()) {
+            if (editorDirty) {
+              if (
+                !(await showConfirmDialog({
+                  title: "Unsaved Changes",
+                  message: "You have unsaved changes. Discard and continue?",
+                  confirmLabel: "Discard",
+                  tone: "destructive",
+                }))
+              ) {
+                return;
+              }
+            }
+            closeAllDetails();
+          }
+          internalNavRef.current = true;
+          setActiveChatId(chat.id);
+          if (window.innerWidth < 768) setSidebarOpen(false);
+        }}
+        className={cn(
+          "group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all duration-150",
+          multiSelectMode && isSelected
+            ? "bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/30"
+            : isActive
+              ? "bg-[var(--sidebar-accent)] shadow-sm"
+              : "hover:bg-[var(--sidebar-accent)]/60",
+        )}
+      >
+        {/* Multi-select checkbox */}
+        {multiSelectMode && (
+          <div className="shrink-0 text-[var(--primary)]">
+            {isSelected ? (
+              <CheckSquare size="0.875rem" />
+            ) : (
+              <SquareIcon size="0.875rem" className="text-[var(--muted-foreground)]" />
+            )}
           </div>
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)] text-white opacity-50 shadow-sm"
-            title="New chat waits for the Rust chats backend slice"
-            disabled
-          >
-            <Plus size="0.9375rem" />
-          </button>
+        )}
+
+        {/* Active indicator */}
+        {isActive && (
+          <span
+            className="absolute -left-0.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full"
+            style={{ background: cfg.bg }}
+          />
+        )}
+
+        {/* Chat avatar(s) or mode icon fallback — with unread badge overlay */}
+        <div className="relative flex-shrink-0">
+          {(() => {
+            const charIds = normalizeChatCharacterIds((chat as { characterIds?: unknown }).characterIds);
+            const avatars = charIds
+              .slice(0, 3)
+              .map((id) => charLookup.get(id))
+              .filter(Boolean) as {
+              name: string;
+              avatarUrl: string | null;
+              avatarCrop?: AvatarCropValue | null;
+              conversationStatus?: string;
+            }[];
+
+            const isConvoMode = chat.mode === "conversation";
+            const statusDot = (status?: string) => {
+              if (!isConvoMode) return null;
+              const s = status ?? "online";
+              const color =
+                s === "online"
+                  ? "bg-green-500"
+                  : s === "idle"
+                    ? "bg-yellow-500"
+                    : s === "dnd"
+                      ? "bg-red-500"
+                      : "bg-gray-400";
+              return (
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-[1.5px] ring-[var(--sidebar-background)] ${color}`}
+                />
+              );
+            };
+
+            if (avatars.length === 0) {
+              return (
+                <div
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-lg text-xs transition-transform group-active:scale-90",
+                    isActive ? "text-white shadow-sm" : "bg-[var(--secondary)] text-[var(--muted-foreground)]",
+                  )}
+                  style={isActive ? { background: cfg.bg } : undefined}
+                >
+                  {cfg.icon}
+                </div>
+              );
+            }
+
+            if (avatars.length === 1) {
+              const a = avatars[0]!;
+              return a.avatarUrl ? (
+                <div className="relative h-7 w-7 flex-shrink-0 transition-transform group-active:scale-90">
+                  <span className="relative block h-7 w-7 overflow-hidden rounded-full">
+                    <img
+                      src={a.avatarUrl}
+                      alt={a.name}
+                      className="h-full w-full object-cover"
+                      style={getAvatarCropStyle(a.avatarCrop)}
+                    />
+                  </span>
+                  {statusDot(a.conversationStatus)}
+                </div>
+              ) : (
+                <div className="relative h-7 w-7 flex-shrink-0 transition-transform group-active:scale-90">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--secondary)] text-[0.625rem] font-bold text-[var(--muted-foreground)]">
+                    {a.name[0]}
+                  </div>
+                  {statusDot(a.conversationStatus)}
+                </div>
+              );
+            }
+
+            // Multiple characters — stacked avatars
+            return (
+              <div className="relative h-7 w-7 flex-shrink-0 transition-transform group-active:scale-90">
+                {avatars.slice(0, 2).map((a, i) =>
+                  a.avatarUrl ? (
+                    <span
+                      key={i}
+                      className={cn(
+                        "absolute h-5 w-5 overflow-hidden rounded-full ring-2 ring-[var(--sidebar-background)]",
+                        i === 0 ? "top-0 left-0 z-10" : "bottom-0 right-0",
+                      )}
+                    >
+                      <img
+                        src={a.avatarUrl}
+                        alt={a.name}
+                        className="h-full w-full object-cover"
+                        style={getAvatarCropStyle(a.avatarCrop)}
+                      />
+                    </span>
+                  ) : (
+                    <div
+                      key={i}
+                      className={cn(
+                        "absolute flex h-5 w-5 items-center justify-center rounded-full bg-[var(--secondary)] text-[0.5rem] font-bold text-[var(--muted-foreground)] ring-2 ring-[var(--sidebar-background)]",
+                        i === 0 ? "top-0 left-0 z-10" : "bottom-0 right-0",
+                      )}
+                    >
+                      {a.name[0]}
+                    </div>
+                  ),
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Unread count badge */}
+          {(() => {
+            const count = unreadCounts.get(chat.id) || 0;
+            if (count === 0 || isActive) return null;
+            return (
+              <span className="absolute -top-1 -right-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[0.5625rem] font-bold leading-none text-white shadow-sm ring-2 ring-[var(--sidebar-background)]">
+                {count > 99 ? "99+" : count}
+              </span>
+            );
+          })()}
         </div>
 
-        <div className="relative">
-          <Search
-            size="0.875rem"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-          />
-          <input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search chats..."
-            className="w-full rounded-xl border border-[var(--border)]/40 bg-[var(--sidebar-accent)]/35 py-2 pl-9 pr-3 text-xs text-[var(--sidebar-foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)]/70 focus:border-[var(--primary)]/40"
-          />
+        {/* Name */}
+        <div className="min-w-0 flex-1">
+          <span
+            className={cn(
+              "block truncate text-sm",
+              isActive ? "font-medium text-[var(--sidebar-accent-foreground)]" : "text-[var(--sidebar-foreground)]",
+            )}
+          >
+            {chat.name}
+          </span>
+        </div>
+
+        {/* Branch count badge */}
+        {branchCount > 1 && (
+          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--secondary)] px-1.5 py-0.5 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
+            <GitBranch size="0.625rem" />
+            {branchCount}
+          </span>
+        )}
+
+        {/* Mode badge on hover */}
+        {!multiSelectMode && (
+          <span className="shrink-0 text-[0.625rem] text-[var(--muted-foreground)] opacity-0 transition-opacity group-hover:opacity-100 max-md:opacity-100">
+            {cfg.shortLabel}
+          </span>
+        )}
+
+        {/* Move to folder */}
+        {!multiSelectMode && modeFolders.length > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setMovingChatId(chat.id);
+            }}
+            className="shrink-0 rounded-md p-1 opacity-0 transition-all hover:bg-[var(--accent)] group-hover:opacity-100 max-md:opacity-100"
+            title="Move to folder"
+          >
+            <FolderOpen size="0.75rem" className="text-[var(--muted-foreground)]" />
+          </button>
+        )}
+
+        {/* Delete button */}
+        {!multiSelectMode && (
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (branchCount > 1 && chat.groupId) {
+                setDeleteTarget({ chatId: chat.id, groupId: chat.groupId, branchCount });
+              } else {
+                if (
+                  await showConfirmDialog({
+                    title: "Delete Chat",
+                    message: "Delete this chat?",
+                    confirmLabel: "Delete",
+                    tone: "destructive",
+                  })
+                ) {
+                  deleteChat.mutate(chat.id);
+                  if (activeChatId === chat.id) setActiveChatId(null);
+                }
+              }
+            }}
+            className="shrink-0 rounded-md p-1 opacity-0 transition-all hover:bg-[var(--destructive)]/20 group-hover:opacity-100 max-md:opacity-100"
+          >
+            <Trash2 size="0.75rem" className="text-[var(--destructive)]" />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <nav data-component="ChatSidebar" aria-label="Chat navigation" className="mari-chat-sidebar flex h-full flex-col">
+      {/* Header */}
+      <div className="mari-sidebar-header relative flex h-12 items-center justify-between bg-[var(--card)]/80 px-4 backdrop-blur-sm">
+        <div className="absolute inset-x-0 bottom-0 h-px bg-[var(--border)]/30" />
+        <h2 className="retro-glow-text text-sm font-bold tracking-tight">✧ Chats</h2>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleNewChatFromTab}
+            className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition-all hover:bg-[var(--sidebar-accent)] hover:text-[var(--primary)] active:scale-90"
+            title={`New ${activeTab === "conversation" ? "Conversation" : activeTab === "game" ? "Game" : "Roleplay"}`}
+          >
+            <Plus size="1rem" />
+          </button>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition-all hover:bg-[var(--sidebar-accent)] hover:text-[var(--primary)] active:scale-90 md:hidden"
+            title="Close"
+          >
+            <X size="1rem" />
+          </button>
         </div>
       </div>
 
-      <div className="border-b border-[var(--border)]/30 px-3 py-2">
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-[var(--sidebar-accent)]/25 p-1">
-          {MODE_TABS.map(({ id, shortLabel, icon: Icon }) => (
+      {/* Tabs */}
+      <div className="flex items-center gap-1 px-3 pt-2">
+        {(["conversation", "roleplay", "game"] as const).map((tab) => {
+          const cfg = MODE_CONFIG[tab];
+          const isActive = activeTab === tab;
+          const tabUnread =
+            chats?.filter((c) => c.mode === tab).reduce((sum, c) => sum + (unreadCounts.get(c.id) || 0), 0) ?? 0;
+          return (
             <button
-              key={id}
-              type="button"
-              onClick={() => {
-                setActiveTab(id);
-                setActiveTag(null);
-                setTagsExpanded(false);
-              }}
+              key={tab}
+              onClick={() => setActiveTab(tab)}
               className={cn(
-                "flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[0.6875rem] font-medium transition-all",
-                activeTab === id
-                  ? "bg-[var(--accent)] text-[var(--primary)] shadow-sm"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+                "relative flex min-h-[2.125rem] flex-1 items-center justify-center gap-1.5 overflow-visible rounded-lg px-2 py-2 text-xs leading-normal font-medium transition-all",
+                isActive
+                  ? "bg-[var(--sidebar-accent)] text-[var(--sidebar-accent-foreground)] shadow-sm"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)]/50 hover:text-[var(--sidebar-foreground)]",
               )}
             >
-              <Icon size="0.75rem" />
-              <span className="truncate">{shortLabel}</span>
+              <span className="shrink-0 leading-none">{cfg.icon}</span>
+              <span className="inline-flex min-h-[1rem] items-center whitespace-nowrap pb-px leading-normal">
+                {cfg.shortLabel}
+              </span>
+              {tabUnread > 0 && !isActive && (
+                <span className="absolute -top-1 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[0.5rem] font-bold leading-none text-white">
+                  {tabUnread > 99 ? "99+" : tabUnread}
+                </span>
+              )}
             </button>
-          ))}
+          );
+        })}
+      </div>
+
+      {/* Search + filters */}
+      <div className="space-y-1.5 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2 rounded-lg bg-[var(--secondary)] px-3 py-2 ring-1 ring-transparent transition-all focus-within:ring-[var(--primary)]/40">
+          <Search size="0.8125rem" className="shrink-0 text-[var(--muted-foreground)]" />
+          <input
+            type="text"
+            placeholder={`Search ${activeTab === "conversation" ? "conversations" : activeTab === "game" ? "games" : "roleplays"}...`}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] outline-none"
+          />
         </div>
 
-        <div className="mt-2 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={cycleSort}
-            className="flex min-w-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[0.6875rem] text-[var(--muted-foreground)] transition-all hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--foreground)]"
-            title="Change chat sort"
-          >
-            <ArrowUpDown size="0.75rem" />
-            {SORT_LABELS[sort]}
-          </button>
-          {allTags.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setTagsExpanded((value) => !value)}
-              className="flex min-w-0 flex-1 items-center justify-end gap-1.5 rounded-lg px-2.5 py-1.5 text-[0.6875rem] text-[var(--muted-foreground)] transition-all hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--foreground)]"
+        <div className="space-y-1.5">
+          <div className="relative">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as ChatSortOption)}
+              className="w-full appearance-none rounded-lg bg-[var(--secondary)] py-2 pl-2.5 pr-7 text-[0.6875rem] text-[var(--foreground)] outline-none ring-1 ring-transparent transition-all focus:ring-[var(--primary)]/40"
+              title="Sort chats"
             >
-              <Tag size="0.75rem" />
-              Tags
-              <ChevronDown size="0.75rem" className={cn("transition-transform", tagsExpanded && "rotate-180")} />
-            </button>
+              <option value="newest">Sort: Newest</option>
+              <option value="oldest">Sort: Oldest</option>
+              <option value="name-asc">Sort: A-Z</option>
+              <option value="name-desc">Sort: Z-A</option>
+            </select>
+            <ArrowUpDown
+              size="0.625rem"
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+            />
+          </div>
+
+          {allTags.length > 0 && (
+            <div className="flex max-w-full flex-wrap items-center gap-1">
+              <button
+                onClick={() => setTagsExpanded((prev) => !prev)}
+                className={cn(
+                  "flex max-w-full items-center gap-1 rounded-lg px-1.5 py-1 text-[0.625rem] transition-colors",
+                  activeTag
+                    ? "bg-[var(--primary)]/15 text-[var(--primary)]"
+                    : "text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--foreground)]",
+                )}
+                title={tagsExpanded ? "Collapse tags" : "Expand tags"}
+              >
+                <Tag size="0.6875rem" className="shrink-0" />
+                <span className="max-w-full truncate">
+                  {activeTag ? `Tag: ${activeTag}` : `Tags (${allTags.length})`}
+                </span>
+                {tagsExpanded ? (
+                  <ChevronUp size="0.625rem" className="shrink-0" />
+                ) : (
+                  <ChevronDown size="0.625rem" className="shrink-0" />
+                )}
+              </button>
+              {activeTag && (
+                <button
+                  onClick={() => setActiveTag(null)}
+                  className="rounded-lg px-2 py-1 text-[0.625rem] text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/10"
+                >
+                  Clear
+                </button>
+              )}
+              {(tagsExpanded ? allTags : allTags.slice(0, 4)).map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => setActiveTag((prev) => (prev === tag ? null : tag))}
+                  className={cn(
+                    "max-w-full truncate rounded-lg px-2 py-1 text-[0.625rem] font-medium transition-all",
+                    activeTag === tag
+                      ? "bg-[var(--primary)]/15 text-[var(--primary)] ring-1 ring-[var(--primary)]/30"
+                      : "bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--foreground)]",
+                  )}
+                  title={tag}
+                >
+                  {tag}
+                </button>
+              ))}
+              {!tagsExpanded && allTags.length > 4 && (
+                <button
+                  onClick={() => setTagsExpanded(true)}
+                  className="rounded-lg px-2 py-1 text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--foreground)]"
+                >
+                  +{allTags.length - 4} more
+                </button>
+              )}
+            </div>
           )}
         </div>
+      </div>
 
-        {tagsExpanded && allTags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => setActiveTag((current) => (current === tag ? null : tag))}
-                className={cn(
-                  "max-w-full truncate rounded-full px-2 py-1 text-[0.625rem] transition-all",
-                  activeTag === tag
-                    ? "bg-[var(--primary)]/15 text-[var(--primary)]"
-                    : "bg-[var(--sidebar-accent)]/35 text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-                )}
-              >
-                {tag}
-              </button>
+      {/* Chat list */}
+      <div className="flex-1 overflow-y-auto px-2 py-1">
+        {isLoading && (
+          <div className="flex flex-col gap-2 px-2 py-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="shimmer h-10 rounded-lg" />
             ))}
           </div>
         )}
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {isLoading && (
-          <div className="px-4 py-8 text-center text-xs text-[var(--muted-foreground)]">Loading chats...</div>
-        )}
-
-        {chatsError && (
-          <div className="mx-1 rounded-xl border border-[var(--border)]/40 bg-[var(--card)]/65 px-3 py-4 text-center">
-            <MessageSquare className="mx-auto text-[var(--muted-foreground)]" size="1.25rem" />
-            <p className="mt-2 text-xs font-medium text-[var(--foreground)]">Chat backend not wired yet</p>
-            <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">
-              {getErrorMessage(chatsError)}
+        {chatsError && !isLoading && (
+          <div className="flex flex-col items-center gap-2 px-3 py-12 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--destructive)]/10">
+              <AlertTriangle size="1.25rem" className="text-[var(--destructive)]" />
+            </div>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Marinara is still waking up. Chats should appear in a moment.
             </p>
             <button
-              type="button"
-              onClick={() => void refetch()}
+              onClick={() => void refetchChats()}
               disabled={isFetching}
-              className="mt-3 rounded-lg bg-[var(--primary)]/15 px-3 py-1.5 text-[0.6875rem] font-medium text-[var(--primary)] transition-all hover:bg-[var(--primary)]/25 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 rounded-lg bg-[var(--primary)]/15 px-3 py-1.5 text-[0.6875rem] font-medium text-[var(--primary)] transition-all hover:bg-[var(--primary)]/25 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isFetching ? "Checking..." : "Try Again"}
             </button>
           </div>
         )}
 
-        {canShowEmpty && (
+        {displayChats.length === 0 && !isLoading && !chatsError && (
           <div className="flex flex-col items-center gap-2 px-3 py-12 text-center">
             <div className="animate-float flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--secondary)]">
               {activeTab === "conversation" ? (
@@ -383,183 +1018,368 @@ export function ChatSidebar() {
               )}
             </div>
             <p className="text-xs text-[var(--muted-foreground)]">
-              {searchQuery.trim() || activeTag ? `No ${activeTabLabel.toLowerCase()} chats match` : `No ${activeTabLabel.toLowerCase()} chats yet`}
+              {searchQuery.trim() || activeTag
+                ? `No ${activeTab === "conversation" ? "conversations" : activeTab === "game" ? "games" : "roleplays"} match the current filters`
+                : `No ${activeTab === "conversation" ? "conversations" : activeTab === "game" ? "games" : "roleplays"} yet`}
             </p>
             <button
-              type="button"
-              disabled
-              className="mt-1 rounded-lg bg-[var(--primary)]/15 px-3 py-1.5 text-[0.6875rem] font-medium text-[var(--primary)] opacity-50"
-              title="New chat waits for the Rust chats backend slice"
+              onClick={handleNewChatFromTab}
+              className="mt-1 rounded-lg bg-[var(--primary)]/15 px-3 py-1.5 text-[0.6875rem] font-medium text-[var(--primary)] transition-all hover:bg-[var(--primary)]/25"
             >
-              + New {activeTabLabel}
+              + New {activeTab === "conversation" ? "Conversation" : activeTab === "game" ? "Game" : "Roleplay"}
             </button>
           </div>
         )}
 
         <div className="stagger-children flex flex-col gap-0.5">
-          {modeFolders.map((folder) => (
-            <FolderSection
-              key={folder.id}
-              folder={folder}
-              entries={folderChatsMap.get(folder.id) ?? []}
-              renderChat={(entry) => (
-                <ChatRow
-                  key={entry.chat.id}
-                  chat={entry.chat}
-                  activeChatId={activeChatId}
-                  branchCount={entry.branchCount}
-                  characterLookup={characterLookup}
-                  unreadCount={unreadCounts.get(entry.chat.id) ?? 0}
-                  onSelect={() => selectChat(entry.chat)}
-                />
+          {/* New folder */}
+          {creatingFolder ? (
+            <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5">
+              <FolderPlus size="0.75rem" className="text-[var(--muted-foreground)]" />
+              <input
+                autoFocus
+                placeholder="Folder name..."
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateFolder();
+                  if (e.key === "Escape") {
+                    setCreatingFolder(false);
+                    setNewFolderName("");
+                  }
+                }}
+                onBlur={() => {
+                  if (newFolderName.trim()) handleCreateFolder();
+                  else {
+                    setCreatingFolder(false);
+                    setNewFolderName("");
+                  }
+                }}
+                className="flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCreatingFolder(true)}
+                className="flex flex-1 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[0.6875rem] text-[var(--muted-foreground)] transition-all hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--foreground)]"
+              >
+                <FolderPlus size="0.75rem" />
+                New Folder
+              </button>
+              {displayChats.length > 0 && (
+                <button
+                  onClick={() => (multiSelectMode ? exitMultiSelect() : setMultiSelectMode(true))}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[0.6875rem] transition-all",
+                    multiSelectMode
+                      ? "bg-[var(--primary)]/15 text-[var(--primary)]"
+                      : "text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)]/40 hover:text-[var(--foreground)]",
+                  )}
+                >
+                  <CheckSquare size="0.75rem" />
+                  {multiSelectMode ? "Cancel" : "Select"}
+                </button>
               )}
-            />
-          ))}
-          {unfiledChats.map((entry) => (
-            <ChatRow
-              key={entry.chat.id}
-              chat={entry.chat}
-              activeChatId={activeChatId}
-              branchCount={entry.branchCount}
-              characterLookup={characterLookup}
-              unreadCount={unreadCounts.get(entry.chat.id) ?? 0}
-              onSelect={() => selectChat(entry.chat)}
-            />
-          ))}
+            </div>
+          )}
+
+          {/* Folders (drag-to-reorder) */}
+          {localFolderOrder.length > 0 && (
+            <Reorder.Group
+              axis="y"
+              values={localFolderOrder}
+              onReorder={handleFolderReorder}
+              as="div"
+              className="flex flex-col gap-0.5 mt-1"
+            >
+              {localFolderOrder.map((folderId) => {
+                const folder = modeFolders.find((f) => f.id === folderId);
+                if (!folder) return null;
+                const folderEntries = folderChatsMap.get(folderId) ?? [];
+                return (
+                  <FolderRow
+                    key={folderId}
+                    folder={folder}
+                    entries={folderEntries}
+                    renderChatRow={renderChatRow}
+                    onToggleCollapse={handleToggleCollapse}
+                    onRename={handleRenameFolder}
+                    onDelete={handleDeleteFolder}
+                  />
+                );
+              })}
+            </Reorder.Group>
+          )}
+
+          {/* Unfiled chats */}
+          {unfiledChats.map(renderChatRow)}
         </div>
       </div>
 
+      {/* ── Multi-select action bar ── */}
+      {multiSelectMode && (
+        <div className="mari-sidebar-footer border-t border-[var(--border)]/30 bg-[var(--card)]/95 px-3 py-2.5 backdrop-blur-sm">
+          <div className="mb-2 text-center text-[0.6875rem] font-medium text-[var(--muted-foreground)]">
+            {selectedChatIds.size} selected
+          </div>
+          <div className="flex gap-2">
+            {modeFolders.length > 0 && (
+              <button
+                onClick={() => setBatchMovingFolder(true)}
+                disabled={selectedChatIds.size === 0}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs font-medium transition-all hover:bg-[var(--accent)] disabled:opacity-40"
+              >
+                <FolderOpen size="0.75rem" />
+                Move
+              </button>
+            )}
+            <button
+              onClick={handleBatchDelete}
+              disabled={selectedChatIds.size === 0}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-xs font-medium text-[var(--destructive)] transition-all hover:bg-[var(--destructive)]/20 disabled:opacity-40"
+            >
+              <Trash2 size="0.75rem" />
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── User Status Selector ── */}
       <UserStatusFooter />
+
+      {/* ── Delete Branch Modal ── */}
+      <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Delete Chat" width="max-w-sm">
+        {deleteTarget && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--destructive)]/10">
+                <AlertTriangle size="1.125rem" className="text-[var(--destructive)]" />
+              </div>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                This conversation has{" "}
+                <strong className="text-[var(--foreground)]">{deleteTarget.branchCount} branches</strong>. What would
+                you like to delete?
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  deleteChat.mutate(deleteTarget.chatId);
+                  if (activeChatId === deleteTarget.chatId) setActiveChatId(null);
+                  setDeleteTarget(null);
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-xs font-medium ring-1 ring-[var(--border)] transition-all hover:bg-[var(--accent)] active:scale-[0.98]"
+              >
+                <Trash2 size="0.8125rem" />
+                Delete This Branch Only
+              </button>
+              <button
+                onClick={() => {
+                  if (deleteTarget.groupId) {
+                    deleteChatGroup.mutate(deleteTarget.groupId);
+                    if (activeGroupId === deleteTarget.groupId) setActiveChatId(null);
+                  }
+                  setDeleteTarget(null);
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--destructive)]/10 px-3 py-2.5 text-xs font-medium text-[var(--destructive)] ring-1 ring-[var(--destructive)]/20 transition-all hover:bg-[var(--destructive)]/20 active:scale-[0.98]"
+              >
+                <Trash2 size="0.8125rem" />
+                Delete All {deleteTarget.branchCount} Branches
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Move to Folder Modal ── */}
+      <Modal open={movingChatId !== null} onClose={() => setMovingChatId(null)} title="Move to Folder" width="max-w-xs">
+        {movingChatId && (
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => handleMoveToFolder(movingChatId, null)}
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-all hover:bg-[var(--accent)]",
+                !chats?.find((c) => c.id === movingChatId)?.folderId && "bg-[var(--accent)] font-medium",
+              )}
+            >
+              <MessageSquare size="0.75rem" className="text-[var(--muted-foreground)]" />
+              Unfiled
+            </button>
+            {modeFolders.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => handleMoveToFolder(movingChatId, f.id)}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-all hover:bg-[var(--accent)]",
+                  chats?.find((c) => c.id === movingChatId)?.folderId === f.id && "bg-[var(--accent)] font-medium",
+                )}
+              >
+                <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: f.color || "#6b7280" }} />
+                {f.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Batch Move to Folder Modal ── */}
+      <Modal
+        open={batchMovingFolder}
+        onClose={() => setBatchMovingFolder(false)}
+        title={`Move ${selectedChatIds.size} Chat${selectedChatIds.size !== 1 ? "s" : ""} to Folder`}
+        width="max-w-xs"
+      >
+        <div className="flex flex-col gap-1">
+          <button
+            onClick={() => handleBatchMoveToFolder(null)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-all hover:bg-[var(--accent)]"
+          >
+            <MessageSquare size="0.75rem" className="text-[var(--muted-foreground)]" />
+            Unfiled
+          </button>
+          {modeFolders.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => handleBatchMoveToFolder(f.id)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-all hover:bg-[var(--accent)]"
+            >
+              <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: f.color || "#6b7280" }} />
+              {f.name}
+            </button>
+          ))}
+        </div>
+      </Modal>
     </nav>
   );
 }
 
-function FolderSection({
+// ── FolderRow (self-contained state for menu/rename) ──
+function FolderRow({
   folder,
   entries,
-  renderChat,
+  renderChatRow,
+  onToggleCollapse,
+  onRename,
+  onDelete,
 }: {
   folder: ChatFolder;
-  entries: Array<{ chat: Chat; branchCount: number }>;
-  renderChat: (entry: { chat: Chat; branchCount: number }) => React.ReactNode;
+  entries: { chat: any; branchCount: number }[];
+  renderChatRow: (entry: any) => React.ReactNode;
+  onToggleCollapse: (folder: ChatFolder) => void;
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(!folder.collapsed);
-
-  useEffect(() => setOpen(!folder.collapsed), [folder.collapsed]);
+  const dragControls = useDragControls();
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(folder.name);
 
   return (
-    <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-all hover:bg-[var(--sidebar-accent)]/40"
-      >
-        <ChevronRight
-          size="0.75rem"
-          className={cn("text-[var(--muted-foreground)] transition-transform", open && "rotate-90")}
-        />
-        <FolderOpen size="0.75rem" className="text-[var(--muted-foreground)]" />
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: folder.color || "#6b7280" }} />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--muted-foreground)]">
-          {folder.name}
-        </span>
-        {entries.length > 0 && <span className="text-[0.5625rem] text-[var(--muted-foreground)]">{entries.length}</span>}
-      </button>
-      {open && entries.length > 0 && (
-        <div className="ml-4 flex flex-col gap-0.5 border-l border-[var(--border)]/20 pl-1">
-          {entries.map(renderChat)}
+    <Reorder.Item value={folder.id} dragListener={false} dragControls={dragControls} as="div" className="flex flex-col">
+      {/* Folder header */}
+      <div className="group relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 hover:bg-[var(--sidebar-accent)]/40">
+        <div
+          onPointerDown={(e) => {
+            e.preventDefault();
+            dragControls.start(e);
+          }}
+          className="cursor-grab touch-none opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-100 max-md:opacity-100"
+        >
+          <GripVertical size="0.625rem" className="text-[var(--muted-foreground)]" />
         </div>
-      )}
-    </div>
-  );
-}
-
-function ChatRow({
-  chat,
-  activeChatId,
-  branchCount,
-  characterLookup,
-  unreadCount,
-  onSelect,
-}: {
-  chat: Chat;
-  activeChatId: string | null;
-  branchCount: number;
-  characterLookup: Map<
-    string,
-    {
-      name: string;
-      avatarUrl: string | null;
-      avatarCrop?: { zoom: number; offsetX: number; offsetY: number } | null;
-      conversationStatus?: string;
-    }
-  >;
-  unreadCount: number;
-  onSelect: () => void;
-}) {
-  const tags = getChatTags(chat);
-  const characterIds = normalizeChatCharacterIds(chat.characterIds);
-  const firstCharacter = characterIds.length > 0 ? characterLookup.get(characterIds[0]!) : undefined;
-  const isActive = activeChatId === chat.id;
-
-  return (
-    <button
-      type="button"
-      data-chat-id={chat.id}
-      onClick={onSelect}
-      className={cn(
-        "group flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-all",
-        isActive
-          ? "bg-[var(--primary)]/12 text-[var(--foreground)] ring-1 ring-[var(--primary)]/20"
-          : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]/45",
-      )}
-    >
-      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--secondary)]">
-        {firstCharacter?.avatarUrl ? (
-          <img
-            src={firstCharacter.avatarUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            style={getAvatarCropStyle(firstCharacter.avatarCrop)}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={!folder.collapsed}
+          aria-label={`${folder.collapsed ? "Expand" : "Collapse"} folder ${folder.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCollapse(folder);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleCollapse(folder);
+            }
+          }}
+          className="flex flex-1 items-center gap-1.5 min-w-0"
+        >
+          <ChevronRight
+            size="0.75rem"
+            className={cn("text-[var(--muted-foreground)] transition-transform shrink-0", !folder.collapsed && "rotate-90")}
           />
-        ) : (
-          <MessageSquare size="1rem" className="text-[var(--muted-foreground)]" />
-        )}
-        {unreadCount > 0 && <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-xs font-semibold">{chat.name || "Untitled chat"}</span>
-          {branchCount > 1 && (
-            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--secondary)] px-1.5 py-0.5 text-[0.5625rem] text-[var(--muted-foreground)]">
-              <GitBranch size="0.5625rem" />
-              {branchCount}
+          <div
+            className="h-2 w-2 rounded-full flex-shrink-0 cursor-pointer"
+            style={{ backgroundColor: folder.color || "#6b7280" }}
+            title={folder.name}
+          />
+          {renaming ? (
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  onRename(folder.id, renameValue);
+                  setRenaming(false);
+                }
+                if (e.key === "Escape") {
+                  setRenaming(false);
+                  setRenameValue(folder.name);
+                }
+              }}
+              onBlur={(e) => {
+                e.stopPropagation();
+                onRename(folder.id, renameValue);
+                setRenaming(false);
+              }}
+              className="flex-1 bg-transparent text-xs font-medium text-[var(--foreground)] outline-none min-w-0"
+            />
+          ) : (
+            <span className="flex-1 cursor-pointer truncate text-xs font-medium text-[var(--muted-foreground)] min-w-0">
+              {folder.name}
             </span>
           )}
         </div>
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.625rem] text-[var(--muted-foreground)]">
-          <span className="truncate">{firstCharacter?.name ?? MODE_TABS.find((tab) => tab.id === chat.mode)?.label ?? "Chat"}</span>
-          <span className="shrink-0">·</span>
-          <span className="shrink-0">{formatChatDate(chat.updatedAt)}</span>
-        </div>
-        {tags.length > 0 && (
-          <div className="mt-1 flex min-w-0 gap-1">
-            {tags.slice(0, 2).map((tag) => (
-              <span
-                key={tag}
-                className="max-w-20 truncate rounded-full bg-[var(--sidebar-accent)]/50 px-1.5 py-0.5 text-[0.5625rem] text-[var(--muted-foreground)]"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+        {entries.length > 0 && (
+          <span className="text-[0.5625rem] text-[var(--muted-foreground)] shrink-0">{entries.length}</span>
         )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setRenameValue(folder.name);
+            setRenaming(true);
+          }}
+          className="shrink-0 rounded-md p-1 opacity-0 transition-all hover:bg-[var(--accent)] group-hover:opacity-100 max-md:opacity-100"
+          title="Rename folder"
+        >
+          <Pencil size="0.75rem" className="text-[var(--muted-foreground)]" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(folder.id);
+          }}
+          className="shrink-0 rounded-md p-1 opacity-0 transition-all hover:bg-[var(--destructive)]/20 group-hover:opacity-100 max-md:opacity-100"
+        >
+          <Trash2 size="0.75rem" className="text-[var(--destructive)]" />
+        </button>
       </div>
-    </button>
+      {/* Folder contents */}
+      {!folder.collapsed && entries.length > 0 && (
+        <div className="ml-4 flex flex-col gap-0.5 border-l border-[var(--border)]/20 pl-1">
+          {entries.map(renderChatRow)}
+        </div>
+      )}
+    </Reorder.Item>
   );
 }
 
+// ── Status config ──
 const STATUS_OPTIONS: Array<{
   value: UserStatus;
   label: string;
@@ -598,10 +1418,11 @@ function UserStatusFooter() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // Close on click outside
   useEffect(() => {
     if (!open) return;
-    const handler = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -611,12 +1432,12 @@ function UserStatusFooter() {
 
   return (
     <div ref={ref} className="relative border-t border-[var(--border)]/30 px-3 py-2">
+      {/* Popup */}
       {open && (
         <div className="absolute bottom-full left-2 right-2 mb-1 rounded-xl bg-[var(--popover)] p-1.5 shadow-xl ring-1 ring-[var(--border)]/40">
           {STATUS_OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              type="button"
               onClick={() => {
                 setUserStatusManual(opt.value);
                 setOpen(false);
@@ -638,7 +1459,6 @@ function UserStatusFooter() {
 
       <div className="flex min-w-0 items-center gap-1.5">
         <button
-          type="button"
           onClick={() => setOpen((v) => !v)}
           className="flex min-w-0 shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 transition-all hover:bg-[var(--sidebar-accent)]/60"
           title="Change activity status"
