@@ -41,6 +41,8 @@ Use the remaining docs as references for specific implementation areas.
 - [Sync Server](./09-sync-server.md): optional sync module, implemented last.
 - [Research Notes](./10-research-notes.md): ecosystem notes and links.
 - [Mermaid Diagrams](./11-mermaid-diagrams.md): architecture diagrams.
+- [TypeScript/Rust Organization Plan](./13-typescript-rust-organization-plan.md): proposed TS engine + Rust capability split with file-by-file inventory.
+- [Layered Module Architecture](./14-layered-module-architecture.md): dependency layers, mode boundaries, and UI reorganization rules.
 
 ## Visual Guides
 
