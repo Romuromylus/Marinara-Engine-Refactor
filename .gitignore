@@ -22,6 +22,7 @@ src-tauri/gen/schemas/
 # Keep src-tauri/gen/android itself tracked; Tauri/plugin changes can require
 # edits to the Android manifest, Gradle files, and resources.
 src-tauri/gen/android/.gradle/
+src-tauri/gen/android/app/src/main/assets/
 src-tauri/gen/android/**/build/
 src-tauri/gen/android/**/.cxx/
 src-tauri/gen/android/**/.externalNativeBuild/
