@@ -93,6 +93,44 @@ function describeImportError(error: unknown, fallback: string): string {
   return error instanceof Error ? `${fallback}: ${error.message}` : fallback;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function normalizeImportResult(value: unknown): ImportResult | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const imported = asRecord(record.imported);
+  if (!imported) return null;
+  return {
+    success: record.success !== false,
+    error: typeof record.error === "string" ? record.error : undefined,
+    imported: {
+      characters: Number(imported.characters ?? 0),
+      chats: Number(imported.chats ?? 0),
+      groupChats: Number(imported.groupChats ?? 0),
+      presets: Number(imported.presets ?? 0),
+      lorebooks: Number(imported.lorebooks ?? 0),
+      backgrounds: Number(imported.backgrounds ?? 0),
+      personas: Number(imported.personas ?? 0),
+    },
+    errors: Array.isArray(record.errors) ? record.errors.map(String) : [],
+  };
+}
+
+function normalizeImportProgress(value: unknown): ImportProgress | null {
+  const record = asRecord(value);
+  const result = normalizeImportResult({ success: true, imported: record?.imported ?? {} });
+  if (!record || !result) return null;
+  return {
+    category: typeof record.category === "string" ? record.category : "Importing",
+    item: typeof record.item === "string" ? record.item : "",
+    current: Number(record.current ?? 0),
+    total: Number(record.total ?? 0),
+    imported: result.imported,
+  };
+}
+
 function buildInitialSelection(scan: ScanResult): SelectionState {
   return {
     characters: scan.characters.map((item) => item.id),
@@ -260,17 +298,34 @@ export function STBulkImportModal({ open, onClose }: Props) {
     setError("");
 
     try {
-      const data = await importApi.stBulkRun<ImportResult>({
+      const payload = {
         folderPath: folderPath.trim(),
         folderToken,
         options: { ...selection, characterTagImportMode },
-      });
-      if (data?.success) {
+      };
+      let data: ImportResult | null = null;
+      for await (const event of importApi.stBulkRunEvents(payload)) {
+        if (event.type === "progress") {
+          const nextProgress = normalizeImportProgress(event.data);
+          if (nextProgress) setProgress(nextProgress);
+          continue;
+        }
+        if (event.type === "done") {
+          data = normalizeImportResult(event.data);
+          continue;
+        }
+        if (event.type === "error") {
+          const errorData = asRecord(event.data);
+          throw new Error(typeof errorData?.error === "string" ? errorData.error : "Import failed");
+        }
+      }
+      data ??= await importApi.stBulkRun<ImportResult>(payload);
+      if (data.success) {
         setImportResult(data);
         setPhase("done");
         qc.invalidateQueries();
       } else {
-        setError(`Import failed${data?.error ? `: ${data.error}` : ""}`);
+        setError(`Import failed${data.error ? `: ${data.error}` : ""}`);
         setPhase("preview");
       }
     } catch (err) {

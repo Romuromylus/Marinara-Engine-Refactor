@@ -6,7 +6,7 @@ import { Modal } from "../../../shared/components/ui/Modal";
 import { useCreateConnection } from "../hooks/use-connections";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { Loader2, Link } from "lucide-react";
-import { MODEL_LISTS, PROVIDERS, type APIProvider } from "@marinara-engine/shared";
+import { MODEL_LISTS, PROVIDERS, isTauriRuntimeProvider, type APIProvider } from "@marinara-engine/shared";
 import { cn } from "../../../shared/lib/utils";
 import { toast } from "sonner";
 
@@ -79,21 +79,23 @@ export function CreateConnectionModal({ open, onClose }: Props) {
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-[var(--muted-foreground)]">Provider</span>
           <div className="grid grid-cols-2 gap-1.5">
-            {(Object.entries(PROVIDERS) as [APIProvider, (typeof PROVIDERS)[APIProvider]][]).map(([key, info]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setProvider(key)}
-                className={cn(
-                  "rounded-lg px-2.5 py-2 text-left text-[0.6875rem] font-medium transition-all",
-                  provider === key
-                    ? "bg-sky-400/15 text-sky-400 ring-1 ring-sky-400/30"
-                    : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
-                )}
-              >
-                {info.name}
-              </button>
-            ))}
+            {(Object.entries(PROVIDERS) as [APIProvider, (typeof PROVIDERS)[APIProvider]][])
+              .filter(([key]) => isTauriRuntimeProvider(key))
+              .map(([key, info]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setProvider(key)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-2 text-left text-[0.6875rem] font-medium transition-all",
+                    provider === key
+                      ? "bg-sky-400/15 text-sky-400 ring-1 ring-sky-400/30"
+                      : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                  )}
+                >
+                  {info.name}
+                </button>
+              ))}
           </div>
           <p className="text-[0.625rem] text-[var(--muted-foreground)]">
             {provider === "xai"

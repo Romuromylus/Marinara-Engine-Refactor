@@ -11,6 +11,7 @@ import type { AvatarCropValue } from "../../../shared/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { startGeneration } from "../../../engine/generation";
+import { recordAssistantActivity } from "../../../engine/modes/chat";
 import { llmApi } from "../../../shared/api/llm-api";
 import { storageApi } from "../../../shared/api/storage-api";
 import { api } from "../../../shared/lib/api-client";
@@ -204,11 +205,7 @@ export function useBackgroundAutonomousPolling() {
                 // generation failed — non-critical
               } finally {
                 if (!receivedTokens && shouldClearAutonomousFlag) {
-                  try {
-                    await api.post("/conversation/activity/assistant", { chatId: chat.id });
-                  } catch {
-                    /* non-critical */
-                  }
+                  recordAssistantActivity(chat.id);
                 }
                 generatingForRef.current.delete(chat.id);
               }

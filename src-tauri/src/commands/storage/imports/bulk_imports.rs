@@ -27,6 +27,81 @@ fn selected_ids(options: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn selected_import_total(options: &Value) -> usize {
+    [
+        "characters",
+        "chats",
+        "groupChats",
+        "presets",
+        "lorebooks",
+        "backgrounds",
+        "personas",
+    ]
+    .iter()
+    .map(|key| selected_ids(options, key).len())
+    .sum()
+}
+
+fn empty_import_counts() -> Value {
+    json!({
+        "characters": 0,
+        "chats": 0,
+        "groupChats": 0,
+        "presets": 0,
+        "lorebooks": 0,
+        "backgrounds": 0,
+        "personas": 0
+    })
+}
+
+fn imported_count(imported: &Value, key: &str) -> i64 {
+    imported.get(key).and_then(Value::as_i64).unwrap_or(0)
+}
+
+fn bump_imported(imported: &mut Value, key: &str) {
+    if let Some(value) = imported.get_mut(key) {
+        *value = json!(value.as_i64().unwrap_or(0) + 1);
+    }
+}
+
+struct BulkImportProgress<'a> {
+    events: Option<&'a mut Vec<Value>>,
+    current: usize,
+    total: usize,
+}
+
+impl<'a> BulkImportProgress<'a> {
+    fn new(events: Option<&'a mut Vec<Value>>, total: usize) -> Self {
+        Self {
+            events,
+            current: 0,
+            total,
+        }
+    }
+
+    fn emit_item(&mut self, category: &str, item: &Path, imported: &Value) {
+        self.current += 1;
+        if let Some(events) = self.events.as_deref_mut() {
+            events.push(json!({
+                "type": "progress",
+                "data": {
+                    "category": category,
+                    "item": item.to_string_lossy(),
+                    "current": self.current,
+                    "total": self.total,
+                    "imported": imported
+                }
+            }));
+        }
+    }
+
+    fn emit_done(&mut self, result: &Value) {
+        if let Some(events) = self.events.as_deref_mut() {
+            events.push(json!({ "type": "done", "data": result }));
+        }
+    }
+}
+
 fn resolve_st_data_dir(root: &Path) -> Option<PathBuf> {
     let default_user = root.join("data").join("default-user");
     if default_user.join("characters").is_dir() {
@@ -458,7 +533,11 @@ fn copy_background_file(state: &AppState, path: &Path) -> AppResult<Value> {
     Ok(json!({ "success": true, "path": final_target.to_string_lossy() }))
 }
 
-pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Value> {
+fn run_st_bulk_import_inner(
+    state: &AppState,
+    body: Value,
+    event_sink: Option<&mut Vec<Value>>,
+) -> AppResult<Value> {
     let root = body
         .get("folderPath")
         .and_then(Value::as_str)
@@ -468,15 +547,8 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
     let data_dir = resolve_st_data_dir(&root)
         .ok_or_else(|| AppError::invalid_input("Could not find SillyTavern data directory"))?;
     let options = body.get("options").cloned().unwrap_or_else(|| json!({}));
-    let mut imported = json!({
-        "characters": 0,
-        "chats": 0,
-        "groupChats": 0,
-        "presets": 0,
-        "lorebooks": 0,
-        "backgrounds": 0,
-        "personas": 0
-    });
+    let mut progress = BulkImportProgress::new(event_sink, selected_import_total(&options));
+    let mut imported = empty_import_counts();
     let mut errors: Vec<Value> = Vec::new();
     let tag_mode = options
         .get("characterTagImportMode")
@@ -484,14 +556,9 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
         .unwrap_or("all");
     let import_embedded = bool_option(options.get("importEmbeddedLorebook")).unwrap_or(true);
 
-    let bump = |imported: &mut Value, key: &str| {
-        if let Some(value) = imported.get_mut(key) {
-            *value = json!(value.as_i64().unwrap_or(0) + 1);
-        }
-    };
-
     for id in selected_ids(&options, "characters") {
         let path = path_from_id(&data_dir, "characters", &id)?;
+        progress.emit_item("Characters", &path, &imported);
         let filename = path
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
@@ -508,7 +575,7 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
                 )
             });
         match result {
-            Ok(_) => bump(&mut imported, "characters"),
+            Ok(_) => bump_imported(&mut imported, "characters"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
                 path.to_string_lossy(),
@@ -519,6 +586,7 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
 
     for id in selected_ids(&options, "lorebooks") {
         let path = path_from_id(&data_dir, "lorebooks", &id)?;
+        progress.emit_item("Lorebooks", &path, &imported);
         let result = fs::read(&path)
             .map_err(AppError::from)
             .and_then(|bytes| parse_object(&bytes))
@@ -526,7 +594,7 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
                 create_lorebook_from_payload(state, &payload, &file_stem(&path), None)
             });
         match result {
-            Ok(_) => bump(&mut imported, "lorebooks"),
+            Ok(_) => bump_imported(&mut imported, "lorebooks"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
                 path.to_string_lossy(),
@@ -537,6 +605,7 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
 
     for id in selected_ids(&options, "presets") {
         let path = path_from_id(&data_dir, "presets", &id)?;
+        progress.emit_item("Presets", &path, &imported);
         let result = fs::read(&path)
             .map_err(AppError::from)
             .and_then(|bytes| parse_object(&bytes))
@@ -546,7 +615,7 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
                     .create("prompts", with_entity_defaults("prompts", payload))
             });
         match result {
-            Ok(_) => bump(&mut imported, "presets"),
+            Ok(_) => bump_imported(&mut imported, "presets"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
                 path.to_string_lossy(),
@@ -557,8 +626,9 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
 
     for id in selected_ids(&options, "personas") {
         let path = path_from_id(&data_dir, "personas", &id)?;
+        progress.emit_item("Personas", &path, &imported);
         match import_persona_file(state, &path) {
-            Ok(_) => bump(&mut imported, "personas"),
+            Ok(_) => bump_imported(&mut imported, "personas"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
                 path.to_string_lossy(),
@@ -569,8 +639,9 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
 
     for id in selected_ids(&options, "backgrounds") {
         let path = path_from_id(&data_dir, "backgrounds", &id)?;
+        progress.emit_item("Backgrounds", &path, &imported);
         match copy_background_file(state, &path) {
-            Ok(_) => bump(&mut imported, "backgrounds"),
+            Ok(_) => bump_imported(&mut imported, "backgrounds"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
                 path.to_string_lossy(),
@@ -581,13 +652,14 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
 
     for id in selected_ids(&options, "chats") {
         let path = path_from_id(&data_dir, "chats", &id)?;
+        progress.emit_item("Chats", &path, &imported);
         let result = fs::read_to_string(&path)
             .map_err(AppError::from)
             .and_then(|text| {
                 import_st_chat_text(state, &text, file_stem(&path).replace('_', " "), None)
             });
         match result {
-            Ok(_) => bump(&mut imported, "chats"),
+            Ok(_) => bump_imported(&mut imported, "chats"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
                 path.to_string_lossy(),
@@ -598,13 +670,14 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
 
     for id in selected_ids(&options, "groupChats") {
         let path = path_from_id(&data_dir, "groupChats", &id)?;
+        progress.emit_item("Group chats", &path, &imported);
         let result = fs::read_to_string(&path)
             .map_err(AppError::from)
             .and_then(|text| {
                 import_st_chat_text(state, &text, file_stem(&path).replace('_', " "), None)
             });
         match result {
-            Ok(_) => bump(&mut imported, "groupChats"),
+            Ok(_) => bump_imported(&mut imported, "groupChats"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
                 path.to_string_lossy(),
@@ -613,13 +686,45 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
         }
     }
 
-    let imported_total = imported
-        .as_object()
-        .map(|object| object.values().filter_map(Value::as_i64).sum::<i64>())
-        .unwrap_or(0);
-    Ok(json!({
+    let imported_total = [
+        "characters",
+        "chats",
+        "groupChats",
+        "presets",
+        "lorebooks",
+        "backgrounds",
+        "personas",
+    ]
+    .iter()
+    .map(|key| imported_count(&imported, key))
+    .sum::<i64>();
+    let result = json!({
         "success": imported_total > 0 || errors.is_empty(),
         "imported": imported,
         "errors": errors
-    }))
+    });
+    progress.emit_done(&result);
+    Ok(result)
+}
+
+pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Value> {
+    run_st_bulk_import_inner(state, body, None)
+}
+
+pub(super) fn run_st_bulk_import_events(state: &AppState, body: Value) -> AppResult<Vec<Value>> {
+    let mut events = Vec::new();
+    let result = run_st_bulk_import_inner(state, body, Some(&mut events));
+    match result {
+        Ok(_) => Ok(events),
+        Err(error) => {
+            events.push(json!({
+                "type": "error",
+                "data": {
+                    "error": error.message,
+                    "code": error.code
+                }
+            }));
+            Ok(events)
+        }
+    }
 }

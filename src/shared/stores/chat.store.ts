@@ -7,7 +7,7 @@ import type { AvatarCropValue } from "../lib/utils";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { Chat, ChatMode, Message } from "@marinara-engine/shared";
 import { useAgentStore } from "./agent.store";
-import { useGameStateStore } from "../../features/game/stores/game-state.store";
+import { useGameStateStore } from "../../features/world-state/stores/world-state.store";
 
 const STORAGE_KEY = "marinara-active-chat-id";
 const DRAFTS_KEY = "marinara-input-drafts";

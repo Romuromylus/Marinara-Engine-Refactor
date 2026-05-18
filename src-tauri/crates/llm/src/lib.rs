@@ -31,6 +31,9 @@ pub async fn complete(request: LlmRequest) -> AppResult<String> {
     match request.connection.provider.as_str() {
         "anthropic" => complete_anthropic(request).await,
         "google" | "google_vertex" => complete_google(request).await,
+        "openai_chatgpt" | "claude_subscription" => Err(AppError::invalid_input(
+            "This local-session provider is not available in the native Tauri runtime. Use an API-backed provider connection.",
+        )),
         _ => complete_openai_compatible(request).await,
     }
 }

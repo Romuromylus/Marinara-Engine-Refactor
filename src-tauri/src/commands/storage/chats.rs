@@ -702,9 +702,8 @@ pub(crate) fn delete_chat_group(state: &AppState, group_id: &str) -> AppResult<V
     let mut deleted = 0;
     for chat in chats {
         if let Some(id) = chat.get("id").and_then(Value::as_str) {
-            if state.storage.delete("chats", id)? {
-                deleted += 1;
-            }
+            delete_chat_with_messages(state, id)?;
+            deleted += 1;
         }
     }
     Ok(json!({ "deleted": deleted }))

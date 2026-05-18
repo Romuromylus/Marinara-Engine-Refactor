@@ -57,6 +57,7 @@ import {
 import {
   PROVIDERS,
   MODEL_LISTS,
+  isTauriRuntimeProvider,
   IMAGE_GENERATION_SOURCES,
   inferImageSource,
   IMAGE_DEFAULTS_STORAGE_KEY,
@@ -630,6 +631,13 @@ export function ConnectionEditor() {
   }, [comfyWorkflowValidation]);
 
   const providerDef = PROVIDERS[localProvider];
+  const providerEntries = useMemo(
+    () =>
+      (Object.entries(PROVIDERS) as [APIProvider, (typeof PROVIDERS)[APIProvider]][]).filter(
+        ([key]) => isTauriRuntimeProvider(key) || key === localProvider,
+      ),
+    [localProvider],
+  );
   const isImageGenerationProvider = localProvider === "image_generation";
   const isClaudeSubscriptionProvider = localProvider === "claude_subscription";
   const isOpenAIChatGPTProvider = localProvider === "openai_chatgpt";
@@ -776,7 +784,7 @@ export function ConnectionEditor() {
             help="The AI service you want to connect to. Each provider has its own models, pricing, and features. OpenAI and Anthropic are the most popular."
           >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {(Object.entries(PROVIDERS) as [APIProvider, typeof providerDef][]).map(([key, info]) => (
+              {providerEntries.map(([key, info]) => (
                 <button
                   key={key}
                   onClick={() => {

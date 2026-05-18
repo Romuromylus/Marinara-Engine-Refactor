@@ -35,6 +35,7 @@ pub(crate) async fn stream_events(
     match parts.as_slice() {
         ["generate"] => generate_events(state, body.unwrap_or(Value::Null)).await,
         ["llm", "stream"] => llm_stream_events(state, body.unwrap_or(Value::Null)).await,
+        ["import", rest @ ..] => import_stream_events(state, rest, body.unwrap_or(Value::Null)),
         _ => Err(AppError::new(
             "stream_not_supported",
             format!("Streaming is not supported for {path}"),
@@ -215,15 +216,6 @@ pub(crate) async fn route_request(
         ["chats", chat_id, "metadata"] if method == "PATCH" => {
             patch_chat_object_field(state, chat_id, "metadata", body)
         }
-        ["chats", chat_id, "game-state"] if method == "GET" => {
-            Ok(get_required(state, "chats", chat_id)?
-                .get("gameState")
-                .cloned()
-                .unwrap_or_else(|| json!({})))
-        }
-        ["chats", chat_id, "game-state"] if method == "PATCH" => {
-            patch_chat_object_field(state, chat_id, "gameState", body)
-        }
         ["world-state", chat_id] if method == "GET" => {
             Ok(get_required(state, "chats", chat_id)?
                 .get("gameState")
@@ -288,6 +280,10 @@ pub(crate) async fn route_request(
             Ok(json!({ "disconnected": true }))
         }
         ["chats", chat_id, "peek-prompt"] if method == "POST" => peek_prompt(state, chat_id),
+        ["chats", chat_id] if method == "DELETE" => {
+            delete_chat_with_messages(state, chat_id)?;
+            Ok(json!({ "deleted": true }))
+        }
         ["chats", chat_id] => {
             collection_item_or_action(state, method, "chats", chat_id, None, body)
         }
@@ -570,7 +566,6 @@ pub(crate) async fn route_request(
             autonomous_check(state, body)
         }
         ["conversation", "busy-delay"] if method == "POST" => busy_delay(state, body),
-        ["conversation", "activity", _kind] if method == "POST" => Ok(json!({ "ok": true })),
         ["custom-tools", "capabilities"] if method == "GET" => {
             Ok(json!({ "scriptExecutionEnabled": false }))
         }

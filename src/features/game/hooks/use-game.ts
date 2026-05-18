@@ -4,7 +4,7 @@
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api, isJsonRepairApiError } from "../../../shared/api/api-client";
+import { isJsonRepairApiError } from "../../../shared/api/api-client";
 import { chatKeys } from "../../chats/hooks/use-chats";
 import { lorebookKeys } from "../../lorebooks/hooks/use-lorebooks";
 import {
@@ -15,14 +15,12 @@ import {
 import { useGameStateStore } from "../../world-state/stores/world-state.store";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
+import { gameApi } from "../api/game-api";
 import type {
   GameActiveState,
   GameMap,
   GameSetupConfig,
-  DiceRollResult,
-  SessionSummary,
   Combatant,
-  CombatRoundResult,
   CombatPlayerAction,
   HudWidget,
   GameBlueprint,
@@ -35,102 +33,6 @@ export const gameKeys = {
   all: ["game"] as const,
   sessions: (gameId: string) => [...gameKeys.all, "sessions", gameId] as const,
 };
-
-// ── Types ──
-
-interface CreateGameResponse {
-  sessionChat: Chat;
-  gameId: string;
-}
-
-interface SetupResponse {
-  setup: Record<string, unknown>;
-  worldOverview: string | null;
-}
-
-interface StartGameResponse {
-  status: string;
-  /**
-   * True when the server detected that a GM turn already exists for this chat
-   * (race recovery — see #821). Callers must skip generating another initial
-   * turn in this case; the existing intro is already saved.
-   */
-  alreadyStarted?: boolean;
-}
-
-interface StartSessionResponse {
-  sessionChat: Chat;
-  sessionNumber: number;
-  recap: string;
-}
-
-interface ConcludeSessionResponse {
-  summary: SessionSummary;
-}
-
-interface RegenerateSessionConclusionResponse {
-  summary: SessionSummary;
-}
-
-interface RegenerateSessionLorebookResponse {
-  sessionNumber: number;
-  lorebookId: string;
-  entryCount: number;
-}
-
-interface UpdateCampaignProgressionResponse {
-  sessionChat: Chat;
-  gameId: string;
-  campaignProgression: {
-    storyArc: string | null;
-    plotTwists: string[];
-    partyArcs: unknown[];
-  };
-}
-
-interface RecruitPartyMemberResponse {
-  sessionChat: Chat;
-  added: boolean;
-  characterName: string;
-  cardCreated: boolean;
-}
-
-interface RegeneratePartyCardResponse {
-  sessionChat: Chat;
-  characterName: string;
-  gameCard: unknown;
-}
-
-interface RemovePartyMemberResponse {
-  sessionChat: Chat;
-  removed: boolean;
-  characterName: string;
-}
-
-interface DiceRollResponse {
-  result: DiceRollResult;
-}
-
-interface StateTransitionResponse {
-  previousState: GameActiveState;
-  newState: GameActiveState;
-}
-
-interface MapGenerateResponse {
-  map: GameMap;
-  maps?: GameMap[];
-  activeGameMapId?: string | null;
-}
-
-interface MapMoveResponse {
-  map: GameMap;
-  maps?: GameMap[];
-  activeGameMapId?: string | null;
-}
-
-interface UpdateGameWidgetsResponse {
-  ok: boolean;
-}
 
 export function patchChatMetadata(chat: Chat | null | undefined, patch: Record<string, unknown>): Chat | null {
   if (!chat) return null;
@@ -173,7 +75,7 @@ export function useCreateGame() {
       characterConnectionId?: string;
       promptPresetId?: string;
       chatId?: string;
-    }) => api.post<CreateGameResponse>("/game/create", data),
+    }) => gameApi.createGame(data),
     onSuccess: (res) => {
       store.getState().setActiveGame(res.gameId, res.sessionChat.id, null);
       store.getState().setSetupActive(true);
@@ -193,11 +95,7 @@ export function useGameSetup() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; connectionId?: string; preferences: string }) =>
-      api.post<SetupResponse>("/game/setup", {
-        ...data,
-        streaming: useUIStore.getState().enableStreaming,
-        debugMode: useUIStore.getState().debugMode,
-      }),
+      gameApi.setupGame(data),
     onSuccess: () => {
       store.getState().setSetupActive(false);
       const sessionChatId = store.getState().activeSessionChatId;
@@ -222,7 +120,7 @@ export function useStartGame() {
   const store = useGameModeStore;
 
   return useMutation({
-    mutationFn: (data: { chatId: string }) => api.post<StartGameResponse>("/game/start", data),
+    mutationFn: (data: { chatId: string }) => gameApi.startGame(data),
     onSuccess: () => {
       const sessionChatId = store.getState().activeSessionChatId;
       if (sessionChatId) {
@@ -249,7 +147,7 @@ export function useStartSession() {
 
   return useMutation({
     mutationFn: (data: { gameId: string; connectionId?: string }) =>
-      api.post<StartSessionResponse>("/game/session/start", data),
+      gameApi.startSession(data),
     onMutate: (variables) => {
       toast.loading("Starting the next session and generating recap...", {
         id: `game-session-start:${variables.gameId}`,
@@ -283,10 +181,7 @@ export function useConcludeSession() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; connectionId?: string; nextSessionRequest?: string }) =>
-      api.post<ConcludeSessionResponse>("/game/session/conclude", {
-        ...data,
-        streaming: useUIStore.getState().enableStreaming,
-      }),
+      gameApi.concludeSession(data),
     onMutate: (variables) => {
       console.info("[game/session/conclude] Starting conclude request", variables);
       toast.loading("Ending session and generating summary...", {
@@ -322,7 +217,7 @@ export function useRegenerateSessionConclusion() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; sessionNumber: number; connectionId?: string }) =>
-      api.post<RegenerateSessionConclusionResponse>("/game/session/regenerate-conclusion", data),
+      gameApi.concludeSession(data),
     onMutate: (variables) => {
       toast.loading(`Regenerating session ${variables.sessionNumber} conclusion...`, {
         id: `game-session-regenerate:${variables.chatId}:${variables.sessionNumber}`,
@@ -356,10 +251,7 @@ export function useRegenerateSessionLorebook() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; sessionNumber: number; connectionId?: string }) =>
-      api.post<RegenerateSessionLorebookResponse>("/game/session/regenerate-lorebook", {
-        ...data,
-        streaming: useUIStore.getState().enableStreaming,
-      }),
+      gameApi.regenerateSessionLorebook(data),
     onMutate: (variables) => {
       toast.loading(`Regenerating session ${variables.sessionNumber} lorebook...`, {
         id: `game-session-lorebook:${variables.chatId}:${variables.sessionNumber}`,
@@ -390,7 +282,7 @@ export function useUpdateCampaignProgression() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; sessionNumber: number; connectionId?: string }) =>
-      api.post<UpdateCampaignProgressionResponse>("/game/session/update-campaign-progression", data),
+      gameApi.updateCampaignProgression(data),
     onMutate: (variables) => {
       toast.loading(`Updating plot arcs from session ${variables.sessionNumber}...`, {
         id: `game-campaign-progression:${variables.chatId}:${variables.sessionNumber}`,
@@ -426,7 +318,7 @@ export function useRecruitPartyMember() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; characterName: string; connectionId?: string }) =>
-      api.post<RecruitPartyMemberResponse>("/game/party/recruit", data),
+      gameApi.upsertPartyCard({ ...data, added: true }),
     onSuccess: (res, variables) => {
       qc.setQueryData(chatKeys.detail(variables.chatId), res.sessionChat);
       qc.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
@@ -449,7 +341,7 @@ export function useRegeneratePartyCard() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; characterName: string; characterId?: string; connectionId?: string }) =>
-      api.post<RegeneratePartyCardResponse>("/game/party/card/regenerate", data),
+      gameApi.upsertPartyCard(data),
     onSuccess: (res, variables) => {
       qc.setQueryData(chatKeys.detail(variables.chatId), res.sessionChat);
       qc.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
@@ -468,7 +360,7 @@ export function useRemovePartyMember() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; characterName: string }) =>
-      api.post<RemovePartyMemberResponse>("/game/party/remove", data),
+      gameApi.removePartyMember(data),
     onSuccess: (res, variables) => {
       qc.setQueryData(chatKeys.detail(variables.chatId), res.sessionChat);
       qc.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
@@ -489,7 +381,7 @@ export function useRollDice() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; notation: string; context?: string }) =>
-      api.post<DiceRollResponse>("/game/dice/roll", data),
+      gameApi.rollDice(data),
     onSuccess: (res) => {
       store.getState().setDiceRollResult(res.result);
     },
@@ -509,10 +401,7 @@ export function useSkillCheck() {
       preRolledD20?: number;
       messageId?: string;
     }) =>
-      api.post<{ result: import("@marinara-engine/shared").SkillCheckResult; updatedContent?: string }>(
-        "/game/skill-check",
-        data,
-      ),
+      gameApi.skillCheck(data),
     onSuccess: (res, variables) => {
       if (res.updatedContent) {
         qc.invalidateQueries({ queryKey: chatKeys.messages(variables.chatId) });
@@ -528,7 +417,7 @@ export function useTransitionGameState() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; newState: GameActiveState }) =>
-      api.post<StateTransitionResponse>("/game/state/transition", data),
+      gameApi.transitionGameState(data),
     onSuccess: (res, variables) => {
       store.getState().setGameState(res.newState);
       qc.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
@@ -542,7 +431,7 @@ export function useGenerateMap() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; locationType: string; context: string; connectionId?: string }) =>
-      api.post<MapGenerateResponse>("/game/map/generate", data),
+      gameApi.generateMap(data),
     onSuccess: (res, variables) => {
       if (res.maps?.length) {
         store.getState().setMaps(res.maps, res.activeGameMapId);
@@ -560,7 +449,7 @@ export function useMoveOnMap() {
 
   return useMutation({
     mutationFn: (data: { chatId: string; position: { x: number; y: number } | string; mapId?: string | null }) =>
-      api.post<MapMoveResponse>("/game/map/move", data),
+      gameApi.moveOnMap(data),
     onSuccess: (res, variables) => {
       if (res.maps?.length) {
         store.getState().setMaps(res.maps, res.activeGameMapId);
@@ -578,7 +467,7 @@ export function useUpdateGameWidgets() {
 
   return useMutation({
     mutationFn: ({ chatId, widgets }: { chatId: string; widgets: HudWidget[] }) =>
-      api.put<UpdateGameWidgetsResponse>(`/game/${chatId}/widgets`, { widgets }),
+      gameApi.updateWidgets({ chatId, widgets }),
     onSuccess: (_, variables) => {
       useGameModeStore.getState().setHudWidgets(variables.widgets);
       const queryKey = chatKeys.detail(variables.chatId);
@@ -602,7 +491,7 @@ export function useUpdateGameWidgets() {
 export function useGameSessions(gameId: string | null) {
   return useQuery({
     queryKey: gameKeys.sessions(gameId ?? ""),
-    queryFn: () => api.get<Chat[]>(`/game/${gameId}/sessions`),
+    queryFn: () => gameApi.gameSessions(gameId!),
     enabled: !!gameId,
     staleTime: 2 * 60_000,
   });
@@ -718,16 +607,14 @@ export function useCombatRound() {
       round: number;
       playerAction?: CombatPlayerAction;
       mechanics?: import("@marinara-engine/shared").CombatMechanic[];
-    }) => api.post<{ result: CombatRoundResult; combatants: Combatant[] }>("/game/combat/round", data),
+    }) => gameApi.combatRound(data),
   });
 }
 
 export function useCombatLoot() {
   return useMutation({
     mutationFn: async (data: { chatId: string; enemyCount: number }) => {
-      const res = await api.post<{
-        drops: Array<{ item?: { name?: string | null } | null; quantity?: number | null } | null>;
-      }>("/game/combat/loot", data);
+      const res = await gameApi.combatLoot(data);
 
       return {
         drops: (res.drops ?? [])
@@ -741,7 +628,7 @@ export function useCombatLoot() {
 export function useLootGenerate() {
   return useMutation({
     mutationFn: (data: { chatId: string; count?: number }) =>
-      api.post<{ drops: unknown[] }>("/game/loot/generate", data),
+      gameApi.lootGenerate(data),
   });
 }
 
@@ -749,7 +636,7 @@ export function useAdvanceTime() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { chatId: string; action: string }) =>
-      api.post<{ time: unknown; formatted: string }>("/game/time/advance", data),
+      gameApi.advanceTime(data),
     onSuccess: (res, variables) => {
       qc.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
       // Sync time into the game state snapshot so WeatherEffects updates immediately
@@ -770,7 +657,7 @@ export function useUpdateWeather() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { chatId: string; action: string; location?: string; season?: string; type?: string }) =>
-      api.post<{ changed: boolean; weather: { type: string; temperature: number } }>("/game/weather/update", data),
+      gameApi.updateWeather(data),
     onSuccess: (res, variables) => {
       qc.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
       // Sync weather into the game state snapshot store so WeatherEffects updates immediately
@@ -791,10 +678,7 @@ export function useUpdateWeather() {
 export function useRollEncounter() {
   return useMutation({
     mutationFn: (data: { chatId: string; action: string; location?: string }) =>
-      api.post<{ encounter: { triggered: boolean; type: string | null; hint: string }; enemyCount: number }>(
-        "/game/encounter/roll",
-        data,
-      ),
+      gameApi.rollEncounter(data),
   });
 }
 
@@ -803,7 +687,7 @@ export function useUpdateReputation() {
   const store = useGameModeStore;
   return useMutation({
     mutationFn: (data: { chatId: string; actions: Array<{ npcId: string; action: string; modifier?: number }> }) =>
-      api.post<{ npcs: unknown[]; changes: unknown[] }>("/game/reputation/update", data),
+      gameApi.updateReputation(data),
     onSuccess: (res, variables) => {
       store.getState().setNpcs(res.npcs as any[]);
       qc.invalidateQueries({ queryKey: chatKeys.detail(variables.chatId) });
@@ -816,7 +700,7 @@ export function useJournalEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { chatId: string; type: string; data: Record<string, unknown> }) =>
-      api.post<{ journal: unknown }>("/game/journal/entry", data),
+      gameApi.addJournalEntry(data),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: [...gameKeys.all, "journal", variables.chatId] });
     },
@@ -826,7 +710,7 @@ export function useJournalEntry() {
 export function useGameJournal(chatId: string | null) {
   return useQuery({
     queryKey: [...gameKeys.all, "journal", chatId],
-    queryFn: () => api.get<{ journal: unknown; recap: string }>(`/game/${chatId}/journal`),
+    queryFn: () => gameApi.getJournal(chatId!),
     enabled: !!chatId,
     staleTime: 30_000,
   });
@@ -837,7 +721,7 @@ export function useGameJournal(chatId: string | null) {
 export function useGameCheckpoints(chatId: string | null) {
   return useQuery({
     queryKey: [...gameKeys.all, "checkpoints", chatId],
-    queryFn: () => api.get<import("@marinara-engine/shared").GameCheckpoint[]>(`/game/${chatId}/checkpoints`),
+    queryFn: () => gameApi.listCheckpoints(chatId!),
     enabled: !!chatId,
     staleTime: 30_000,
   });
@@ -846,19 +730,19 @@ export function useGameCheckpoints(chatId: string | null) {
 export function useCreateCheckpoint() {
   return useMutation({
     mutationFn: (data: { chatId: string; label: string; triggerType: string }) =>
-      api.post<{ id: string }>("/game/checkpoint", data),
+      gameApi.createCheckpoint(data),
   });
 }
 
 export function useLoadCheckpoint() {
   return useMutation({
     mutationFn: (data: { chatId: string; checkpointId: string }) =>
-      api.post<{ ok: boolean; messageId: string }>("/game/checkpoint/load", data),
+      gameApi.loadCheckpoint(data),
   });
 }
 
 export function useDeleteCheckpoint() {
   return useMutation({
-    mutationFn: (id: string) => api.delete<{ ok: boolean }>(`/game/checkpoint/${id}`),
+    mutationFn: (id: string) => gameApi.deleteCheckpoint(id),
   });
 }

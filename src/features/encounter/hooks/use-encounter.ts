@@ -3,14 +3,13 @@
 // ──────────────────────────────────────────────
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../shared/lib/api-client";
+import { initRoleplayEncounter, resolveRoleplayEncounterAction, summarizeRoleplayEncounter } from "../../../engine/modes/roleplay/encounter";
+import { llmApi } from "../../../shared/api/llm-api";
+import { storageApi } from "../../../shared/api/storage-api";
 import { useEncounterStore } from "../../../shared/stores/encounter.store";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { chatKeys } from "../../chats/hooks/use-chats";
 import type {
-  EncounterInitResponse,
-  EncounterActionResponse,
-  EncounterSummaryResponse,
   EncounterSettings,
   CombatPartyMember,
   CombatEnemy,
@@ -74,7 +73,7 @@ export function useEncounter() {
       const spellbookId = useEncounterStore.getState().spellbookId;
 
       try {
-        const res = await api.post<EncounterInitResponse>("/encounter/init", {
+        const res = await initRoleplayEncounter({ storage: storageApi, llm: llmApi }, {
           chatId: activeChatId,
           connectionId: null,
           settings,
@@ -99,14 +98,13 @@ export function useEncounter() {
       store.setSummaryStatus("generating");
 
       try {
-        const _res = await api.post<EncounterSummaryResponse>("/encounter/summary", {
+        await summarizeRoleplayEncounter({ storage: storageApi, llm: llmApi }, {
           chatId: activeChatId,
           connectionId: null,
           encounterLog,
           result,
           settings,
         });
-        void _res;
 
         store.setSummaryStatus("done");
 
@@ -133,7 +131,7 @@ export function useEncounter() {
       store.setError(null);
 
       try {
-        const res = await api.post<EncounterActionResponse>("/encounter/action", {
+        const res = await resolveRoleplayEncounterAction({ storage: storageApi, llm: llmApi }, {
           chatId: activeChatId,
           connectionId: null,
           action: actionText,

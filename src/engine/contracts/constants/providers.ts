@@ -139,3 +139,21 @@ export const PROVIDERS: Record<APIProvider, ProviderDefinition> = {
     apiKeyHeader: null,
   },
 };
+
+export const TAURI_RUNTIME_PROVIDERS: readonly APIProvider[] = [
+  "openai",
+  "anthropic",
+  "google",
+  "google_vertex",
+  "mistral",
+  "cohere",
+  "openrouter",
+  "nanogpt",
+  "xai",
+  "custom",
+  "image_generation",
+] as const;
+
+export function isTauriRuntimeProvider(provider: APIProvider): boolean {
+  return TAURI_RUNTIME_PROVIDERS.includes(provider);
+}
