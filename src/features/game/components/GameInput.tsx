@@ -55,12 +55,6 @@ function readGameInputDraft(storageKey: string | null): string {
   try {
     const stored = localStorage.getItem(storageKey);
     if (stored !== null) return stored;
-    const legacy = sessionStorage.getItem(storageKey);
-    if (legacy !== null) {
-      localStorage.setItem(storageKey, legacy);
-      sessionStorage.removeItem(storageKey);
-      return legacy;
-    }
   } catch {
     /* ignore */
   }
@@ -71,7 +65,6 @@ function writeGameInputDraft(storageKey: string | null, value: string): void {
   if (!storageKey) return;
   try {
     localStorage.setItem(storageKey, value);
-    sessionStorage.removeItem(storageKey);
   } catch {
     /* ignore */
   }
@@ -81,7 +74,6 @@ function clearGameInputDraft(storageKey: string | null): void {
   if (!storageKey) return;
   try {
     localStorage.removeItem(storageKey);
-    sessionStorage.removeItem(storageKey);
   } catch {
     /* ignore */
   }

@@ -65,6 +65,7 @@ import { SpriteWandCleanupEditor } from "../../../shared/components/ui/SpriteWan
 import { ExportFormatDialog, type ExportFormatChoice } from "../../../shared/components/ui/ExportFormatDialog";
 import { Modal } from "../../../shared/components/ui/Modal";
 import type { TrackerCardColorConfig } from "@marinara-engine/shared";
+import { downloadBlob, fetchUrlBlob } from "../../../shared/lib/url-blob";
 
 // ── Tabs ──
 const TABS = [
@@ -808,20 +809,8 @@ function PersonaSpritesTab({
   }, [deleteSprite, personaId, visibleSprites]);
 
   const downloadSpriteFile = useCallback(async (sprite: SpriteInfo) => {
-    const response = await fetch(sprite.url);
-    if (!response.ok) {
-      throw new Error(`Failed to download ${sprite.expression}`);
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = sprite.filename || `${sprite.expression}.png`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(objectUrl);
+    const blob = await fetchUrlBlob(sprite.url, { errorMessage: `Failed to download ${sprite.expression}` });
+    downloadBlob(blob, sprite.filename || `${sprite.expression}.png`);
   }, []);
 
   const handleExportSprites = useCallback(

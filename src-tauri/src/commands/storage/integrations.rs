@@ -3,6 +3,7 @@ use super::*;
 
 mod haptic;
 mod spotify;
+mod spotify_callback;
 mod tts;
 
 pub(crate) async fn tts_call(

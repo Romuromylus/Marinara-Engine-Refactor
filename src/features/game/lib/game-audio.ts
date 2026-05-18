@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────
 
 import { gameAssetFileUrlFromPath } from "../../../shared/api/local-file-api";
+import { fetchUrlArrayBuffer } from "../../../shared/lib/url-blob";
 
 const CROSSFADE_MS = 2000;
 const SFX_POOL_SIZE = 8;
@@ -340,9 +341,9 @@ class GameAudioManager {
       }
 
       try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Audio fetch failed (${response.status})`);
-        const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+        const buffer = await ctx.decodeAudioData(
+          await fetchUrlArrayBuffer(url, { errorMessage: "Audio fetch failed" }),
+        );
         if (stopped) return;
         if (!(await this.resumeAudioContext(ctx))) {
           throw new Error("Audio context is not running");
@@ -474,9 +475,9 @@ class GameAudioManager {
       }
 
       try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Audio fetch failed (${response.status})`);
-        const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+        const buffer = await ctx.decodeAudioData(
+          await fetchUrlArrayBuffer(url, { errorMessage: "Audio fetch failed" }),
+        );
         if (stopped) return;
         if (!(await this.resumeAudioContext(ctx))) {
           throw new Error("Audio context is not running");

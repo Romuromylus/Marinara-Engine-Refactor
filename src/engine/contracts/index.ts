@@ -22,7 +22,6 @@ export * from "./types/theme.js";
 export * from "./types/extension.js";
 export * from "./types/chat-preset.js";
 export * from "./types/game.js";
-export * from "./types/sidecar.js";
 export * from "./types/image-generation-defaults.js";
 
 // Schemas

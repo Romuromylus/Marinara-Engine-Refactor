@@ -3409,7 +3409,7 @@ export function GameSurface({
       ? (chatMeta.gameSceneConnectionId as string) || (setupConfig?.sceneConnectionId as string) || null
       : null;
 
-    // Inline directions can come from the GM model; sidecar scene analysis can
+    // Inline directions can come from the GM model; scene analysis can
     // also return cinematic directions for the fully generated turn.
     if (tags.directions.length > 0) {
       playDirections(tags.directions);
@@ -3496,13 +3496,13 @@ export function GameSurface({
     }
 
     // Choice tags always from the main model (must be set before scene branching
-    // so they appear regardless of sidecar / connection / inline path)
+    // so they appear regardless of connection or inline path)
     if (!suppressInteractiveCommands && tags.choices) {
       setActiveChoices(tags.choices);
     }
 
     // Scene wrap-up: handle bg, music, sfx, ambient, widgets, state changes
-    // Widget updates always come from the GM model (not sidecar), apply them immediately
+    // Widget updates always come from the GM model; apply them immediately.
     let nextWidgetState: HudWidget[] | null = null;
     for (const wu of tags.widgetUpdates) {
       nextWidgetState = applyWidgetUpdate(wu);

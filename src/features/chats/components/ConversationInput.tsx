@@ -38,6 +38,7 @@ import {
 import { createInputMacroResolverForChat, isPromptPreviewMacro } from "../../../shared/lib/chat-macros";
 import { parseChatMetadata } from "../../../shared/lib/chat-display";
 import { cn, getAvatarCropStyle, type AvatarCropValue } from "../../../shared/lib/utils";
+import { fetchUrlBlob } from "../../../shared/lib/url-blob";
 import { translateDraftText } from "../../../shared/lib/draft-translation";
 import { QuickConnectionSwitcher } from "./QuickConnectionSwitcher";
 import { QuickPersonaSwitcher } from "./QuickPersonaSwitcher";
@@ -1260,8 +1261,7 @@ export function ConversationInput({
       // Fetch the GIF and convert to PNG so all providers can handle it
       let gifAttachments: Array<{ type: string; data: string }> | undefined;
       try {
-        const resp = await fetch(gifUrl);
-        const blob = await resp.blob();
+        const blob = await fetchUrlBlob(gifUrl);
         const { dataUrl } = await convertToPng(blob);
         gifAttachments = [{ type: "image/png", data: dataUrl }];
       } catch {

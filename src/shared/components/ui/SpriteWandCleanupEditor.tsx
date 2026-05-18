@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { Eraser, Loader2, RotateCcw, Undo2, Wand2 } from "lucide-react";
+import { fetchUrlBlob } from "../../lib/url-blob";
 import { Modal } from "./Modal";
 
 interface SpriteWandCleanupEditorProps {
@@ -87,10 +88,10 @@ function removeConnectedColor(imageData: ImageData, startX: number, startY: numb
 }
 
 async function loadImageToCanvas(imageUrl: string, canvas: HTMLCanvasElement): Promise<ImageData> {
-  const response = await fetch(imageUrl, { cache: "no-store" });
-  if (!response.ok) throw new Error("Sprite image could not be loaded");
-
-  const blob = await response.blob();
+  const blob = await fetchUrlBlob(imageUrl, {
+    init: { cache: "no-store" },
+    errorMessage: "Sprite image could not be loaded",
+  });
   const objectUrl = URL.createObjectURL(blob);
 
   try {

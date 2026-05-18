@@ -115,7 +115,7 @@ function normalizePhase(agent: JsonRecord): string {
   return phase.replace(/-/g, "_");
 }
 
-function isDeferredSidecarConnectionId(value: string): boolean {
+function isRemovedLocalRuntimeConnectionId(value: string): boolean {
   return value === "__local_sidecar__" || value === "sidecar:local" || value.startsWith("sidecar");
 }
 
@@ -238,7 +238,7 @@ function parseMaybeJson(value: string): unknown {
 async function resolveAgents(deps: AgentDeps, input: GenerationAgentRuntimeInput): Promise<ResolvedAgent[]> {
   const rows = (await deps.storage.list<JsonRecord>("agents"))
     .filter((agent) => boolish(agent.enabled, false))
-    .filter((agent) => !isDeferredSidecarConnectionId(readString(agent.connectionId)))
+    .filter((agent) => !isRemovedLocalRuntimeConnectionId(readString(agent.connectionId)))
     .filter((agent) => {
       if (!input.agentTypes || input.agentTypes.size === 0) return true;
       const type = readString(agent.type || agent.agentType);

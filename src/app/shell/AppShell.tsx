@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { ChatSidebar } from "./ChatSidebar";
 import { TopBar } from "./TopBar";
+import { WindowTitleBar } from "./WindowTitleBar";
 import { SpotifyMobileWidget } from "../../features/spotify/components/SpotifyMiniPlayer";
 import { ChatNotificationBubbles } from "../../features/chats/components/ChatNotificationBubbles";
 import {
@@ -747,7 +748,7 @@ export function AppShell() {
     <div
       data-component="AppShell"
       className={cn(
-        "mari-app fixed inset-0 flex overflow-hidden bg-[var(--background)] max-md:pt-[env(safe-area-inset-top)]",
+        "mari-app fixed inset-0 flex flex-col overflow-hidden bg-[var(--background)] max-md:pt-[env(safe-area-inset-top)]",
         showAmbientDecor && "retro-scanlines noise-bg geometric-grid",
       )}
     >
@@ -762,6 +763,9 @@ export function AppShell() {
         </>
       )}
 
+      <WindowTitleBar />
+
+      <div data-component="AppShellBody" className="relative flex min-h-0 flex-1 overflow-hidden">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -946,6 +950,7 @@ export function AppShell() {
         </Suspense>
       )}
       <SpotifyMobileWidget />
+      </div>
     </div>
   );
 }

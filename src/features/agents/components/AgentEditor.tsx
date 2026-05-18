@@ -86,19 +86,15 @@ function createCustomAgentType(name: string): string {
   return `custom-${slug}-${suffix}`;
 }
 
-function isDeferredLocalModelConnectionId(value: string | null | undefined): boolean {
+function isRemovedLocalRuntimeConnectionId(value: string | null | undefined): boolean {
   return value === "__local_sidecar__" || value === "sidecar:local" || value?.startsWith("sidecar:") === true;
 }
 
-// Mirrors the native Spotify redirect rule: Spotify only accepts
-// https:// or http://127.0.0.1, so fall back to loopback whenever the page
-// is served over plain HTTP from a non-loopback host.
+const SPOTIFY_NATIVE_REDIRECT_URI = "http://127.0.0.1:7860/api/spotify/callback";
+
+// Mirrors the native Spotify redirect rule used by the Rust callback listener.
 function getDisplayedSpotifyRedirectUri(): string {
-  if (typeof window === "undefined") return "http://127.0.0.1:7860/api/spotify/callback";
-  const { protocol, hostname, origin, port } = window.location;
-  const isLoopback = hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
-  if (protocol === "https:" || isLoopback) return `${origin}/api/spotify/callback`;
-  return `http://127.0.0.1:${port || "7860"}/api/spotify/callback`;
+  return SPOTIFY_NATIVE_REDIRECT_URI;
 }
 
 // ═══════════════════════════════════════════════
@@ -466,7 +462,7 @@ export function AgentEditor() {
       description: localDescription,
       phase: savedPhase,
       enabled: true,
-      connectionId: isDeferredLocalModelConnectionId(localConnectionId) ? null : localConnectionId || null,
+      connectionId: isRemovedLocalRuntimeConnectionId(localConnectionId) ? null : localConnectionId || null,
       promptTemplate: localPrompt,
       settings: {
         ...preservedSpotifyFields,
@@ -816,7 +812,7 @@ export function AgentEditor() {
               ))}
             </select>
             <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
-              {isDeferredLocalModelConnectionId(localConnectionId)
+              {isRemovedLocalRuntimeConnectionId(localConnectionId)
                 ? "This agent was using a deferred local model option. Choose a configured connection before saving."
                 : "When empty, uses the agent default connection if one is set, otherwise falls back to the chat's active connection."}
             </p>

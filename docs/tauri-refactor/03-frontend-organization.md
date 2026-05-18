@@ -362,15 +362,7 @@ gallery/
 ### `features/sidecar`
 
 ```text
-sidecar/
-  components/
-    ModelDownloadModal.tsx
-    SidecarStatusPanel.tsx
-    RuntimeInstallPanel.tsx
-  hooks/
-    useSidecar.ts
-  stores/
-    sidecar.store.ts
+Sidecar is deferred by scope and has no active frontend feature surface in the Tauri app.
 ```
 
 ### `features/sync`
@@ -481,8 +473,6 @@ settings/
     ChatSettingsDrawer.tsx
     GenerationParametersEditor.tsx
     ExportFormatDialog.tsx
-  hooks/
-    useSettingsSync.ts
 ```
 
 Split settings by section as the migration progresses. Do not keep all settings in one huge component.

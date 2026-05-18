@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Sidecar — Scene Post-Processing
+// Scene Post-Processing
 //
 // Fuzzy-matches the raw model output (which may
 // contain prose descriptions instead of exact
@@ -423,12 +423,12 @@ export function postProcessSceneResult(raw: SceneAnalysis, ctx: PostProcessConte
     }
   }
 
-  // ── Top-level widget updates — now handled by the GM model, not sidecar ──
-  // Clear any stale widgetUpdates the sidecar might still produce
+  // ── Top-level widget updates — handled by the GM model ──
+  // Clear stale widgetUpdates from older scene analyzers.
   const resultWithWidgets = result as SceneAnalysis & { widgetUpdates?: unknown[] };
   if (resultWithWidgets.widgetUpdates?.length) {
     logger.debug(
-      `[postprocess] Ignoring ${resultWithWidgets.widgetUpdates.length} sidecar widgetUpdates (GM handles widgets now)`,
+      `[postprocess] Ignoring ${resultWithWidgets.widgetUpdates.length} widgetUpdates (GM handles widgets now)`,
     );
     resultWithWidgets.widgetUpdates = [];
   }

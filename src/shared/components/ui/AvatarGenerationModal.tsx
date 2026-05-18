@@ -5,6 +5,7 @@ import { useConnections } from "../../../features/connections/hooks/use-connecti
 import { useUIStore } from "../../stores/ui.store";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
+import { urlToDataUrl } from "../../lib/url-blob";
 import { Modal } from "./Modal";
 import { ImagePromptReviewModal, type ImagePromptOverride, type ImagePromptReviewItem } from "./ImagePromptReviewModal";
 
@@ -23,21 +24,7 @@ type AvatarGenerationResponse = {
   prompt: string;
 };
 
-async function imageUrlToDataUrl(src: string): Promise<string> {
-  if (src.startsWith("data:")) return src;
-  const response = await fetch(src);
-  if (!response.ok) throw new Error("Failed to read the current avatar reference.");
-  const blob = await response.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("Failed to convert the current avatar reference."));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to convert the current avatar reference."));
-    reader.readAsDataURL(blob);
-  });
-}
+const imageUrlToDataUrl = (src: string) => urlToDataUrl(src, "Failed to read the current avatar reference.");
 
 export function AvatarGenerationModal({
   open,

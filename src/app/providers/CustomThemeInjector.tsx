@@ -2,11 +2,10 @@
 // CustomThemeInjector: Injects active custom theme
 // CSS and enabled extension CSS/JS into the DOM
 // ──────────────────────────────────────────────
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useThemes } from "../../features/settings/hooks/use-themes";
 import { useExtensions } from "../../features/settings/hooks/use-extensions";
 import { api } from "../../shared/api/api-client";
-import { useUIStore } from "../../shared/stores/ui.store";
 
 type ExtensionGlobal = typeof globalThis & {
   __marinaraExtensionApis?: Map<string, unknown>;
@@ -43,16 +42,7 @@ function buildExtensionModuleSource(apiKey: string, extensionName: string, js: s
 }
 
 export function CustomThemeInjector() {
-  const { data: storedExtensions = [] } = useExtensions();
-  const legacyExtensions = useUIStore((s) => s.installedExtensions);
-  const hasMigrated = useUIStore((s) => s.hasMigratedExtensionsToServer);
-  // Until the legacy localStorage list has been migrated, fall back to it so
-  // users with pre-PR extensions don't see them vanish during the brief window
-  // between app boot and `useLegacyExtensionMigration` finishing.
-  const installedExtensions = useMemo(
-    () => (hasMigrated ? storedExtensions : legacyExtensions),
-    [hasMigrated, storedExtensions, legacyExtensions],
-  );
+  const { data: installedExtensions = [] } = useExtensions();
   const { data: customThemes = [] } = useThemes();
   const activeTheme = customThemes.find((theme) => theme.isActive) ?? null;
 

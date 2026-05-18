@@ -89,6 +89,7 @@ import { SpriteWandCleanupEditor } from "../../../shared/components/ui/SpriteWan
 import { ExportFormatDialog, type ExportFormatChoice } from "../../../shared/components/ui/ExportFormatDialog";
 import type { CharacterCardVersion, CharacterData, RPGStatsConfig } from "@marinara-engine/shared";
 import { parseTrackerCardColorConfig, serializeTrackerCardColorConfig } from "../../../shared/lib/tracker-card-colors";
+import { downloadBlob, fetchUrlBlob, urlToDataUrl } from "../../../shared/lib/url-blob";
 
 // ── Tabs ──
 const TABS = [
@@ -441,26 +442,7 @@ export function CharacterEditor() {
   };
 
   const getAvatarDataUrl = useCallback(async (src: string) => {
-    if (src.startsWith("data:")) return src;
-
-    const response = await fetch(src);
-    if (!response.ok) {
-      throw new Error("Failed to read character avatar");
-    }
-
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          resolve(reader.result);
-          return;
-        }
-        reject(new Error("Failed to convert avatar"));
-      };
-      reader.onerror = () => reject(reader.error ?? new Error("Failed to convert avatar"));
-      reader.readAsDataURL(blob);
-    });
+    return urlToDataUrl(src, "Failed to read character avatar");
   }, []);
 
   const handleImportAsPersona = useCallback(async () => {
@@ -2262,20 +2244,8 @@ function SpritesTab({
   }, [characterId, deleteSprite, visibleSprites]);
 
   const downloadSpriteFile = useCallback(async (sprite: SpriteInfo) => {
-    const response = await fetch(sprite.url);
-    if (!response.ok) {
-      throw new Error(`Failed to download ${sprite.expression}`);
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = sprite.filename || `${sprite.expression}.png`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(objectUrl);
+    const blob = await fetchUrlBlob(sprite.url, { errorMessage: `Failed to download ${sprite.expression}` });
+    downloadBlob(blob, sprite.filename || `${sprite.expression}.png`);
   }, []);
 
   const handleExportSprites = useCallback(

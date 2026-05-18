@@ -6,9 +6,6 @@ import type { GenerationParameters } from "../types/prompt.js";
 /** App version — single source of truth. */
 export const APP_VERSION = "1.6.0";
 
-/** Stable synthetic connection id for the built-in local llama sidecar. */
-export const LOCAL_SIDECAR_CONNECTION_ID = "__local_sidecar__";
-
 /** Stable ID for the built-in Professor Mari assistant character. */
 export const PROFESSOR_MARI_ID = "__professor_mari__";
 

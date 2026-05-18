@@ -21,7 +21,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       await navigator.clipboard.writeText(text);
       return true;
     } catch {
-      // Fall through to legacy approach
+      // Fall through to the textarea fallback.
     }
   }
   try {

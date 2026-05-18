@@ -8,6 +8,9 @@
 // returns to the conversation.
 // ──────────────────────────────────────────────
 
+import type { DirectionCommand } from "./game.js";
+import type { LocationKind, MusicGenre, MusicIntensity } from "../../shared/scoring/music-score.js";
+
 /** Metadata stored on the scene's roleplay chat. */
 export interface SceneMeta {
   /** The conversation chat that spawned this scene. */
@@ -150,4 +153,112 @@ export interface ScenePlanResponse {
   plan: SceneFullPlan | null;
   /** Set when planning failed (e.g. model didn't return valid JSON). */
   error?: string;
+}
+
+/** A single segment-tied effect batch. Applied when the user reaches this segment. */
+export interface SceneSegmentEffect {
+  /** 0-based index of the narration segment this effect triggers on. */
+  segment: number;
+  background?: string | null;
+  music?: string | null;
+  sfx?: string[];
+  ambient?: string | null;
+  /** Rare cinematic overlays/visual effects to fire when this narration segment appears. */
+  directions?: DirectionCommand[];
+}
+
+/** Rare request for a VN CG-style illustration background. */
+export interface SceneIllustrationRequest {
+  /** 0-based narration segment where the illustration should replace the background. */
+  segment?: number;
+  /** Image-generation prompt describing the important moment. */
+  prompt: string;
+  /** Names of visible referenced characters, if known. */
+  characters?: string[];
+  /** Why this scene is important enough to spend an image generation. */
+  reason?: string;
+  /** Optional stable filename hint. */
+  slug?: string;
+}
+
+export interface GeneratedSceneIllustration {
+  tag: string;
+  segment?: number;
+}
+
+/** Spotify track candidate offered to scene analysis for Game Mode music selection. */
+export interface SceneSpotifyTrackCandidate {
+  uri: string;
+  name: string;
+  artist: string;
+  album?: string | null;
+  position?: number | null;
+  score?: number | null;
+}
+
+/** Spotify track selected by scene analysis from the provided candidates. */
+export interface SceneSpotifyTrackSelection {
+  uri: string;
+  name?: string | null;
+  artist?: string | null;
+  album?: string | null;
+}
+
+/** Scene analysis result generated after the main model's narration is complete. */
+export interface SceneAnalysis {
+  /** Background tag from the asset manifest to display. */
+  background: string | null;
+  /** Music tag to play, populated by deterministic scoring after analysis. */
+  music: string | null;
+  /** Ambient loop tag, populated by deterministic scoring after analysis. */
+  ambient: string | null;
+  /** Weather description update, applied immediately. */
+  weather: string | null;
+  /** Time of day update, applied immediately. */
+  timeOfDay: string | null;
+  /** Compact scene-genre hint for deterministic music scoring. */
+  musicGenre?: MusicGenre | null;
+  /** Compact scene-intensity hint for deterministic music scoring. */
+  musicIntensity?: MusicIntensity | null;
+  /** Compact physical-location hint for deterministic ambient scoring. */
+  locationKind?: LocationKind | null;
+  /** Spotify track to play when Game Mode is configured to use Spotify music. */
+  spotifyTrack?: SceneSpotifyTrackSelection | null;
+  /** NPC reputation changes, applied immediately. */
+  reputationChanges: SceneReputationChange[];
+  /** Segment-indexed effects. Each entry fires when the user reaches that segment. */
+  segmentEffects?: SceneSegmentEffect[];
+  /** Cinematic overlay directions to play for this turn. */
+  directions?: DirectionCommand[];
+  /** Rare important-scene illustration request. Generated only when image generation is enabled. */
+  illustration?: SceneIllustrationRequest | null;
+  /** Generated illustration background tag, populated when available. */
+  generatedIllustration?: GeneratedSceneIllustration | null;
+  /** NPC avatars generated during this scene wrap. */
+  generatedNpcAvatars?: Array<{ name: string; avatarUrl: string }>;
+}
+
+/** A single widget update from scene analysis. */
+export interface SceneWidgetUpdate {
+  widgetId: string;
+  /** For progress_bar/gauge/relationship_meter: new value. */
+  value?: number | string;
+  /** For counter: new count. */
+  count?: number;
+  /** For list/inventory: item to add. */
+  add?: string;
+  /** For list/inventory: item to remove. */
+  remove?: string;
+  /** For timer: start/stop. */
+  running?: boolean;
+  /** For timer: set seconds. */
+  seconds?: number;
+  /** For stat_block: which stat to update by name. */
+  statName?: string;
+}
+
+/** A reputation change from scene analysis. */
+export interface SceneReputationChange {
+  npcName: string;
+  action: string;
 }

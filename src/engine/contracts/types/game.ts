@@ -173,8 +173,7 @@ export interface GameSetupConfig {
   partyCharacterIds: string[];
   /** User's persona ID */
   personaId?: string;
-  /** Connection to use for the scene wrap-up turn (backgrounds, music, widgets, etc.).
-   *  When omitted, falls back to sidecar (if available) or skips the wrap-up. */
+  /** Connection to use for the scene wrap-up turn (backgrounds, music, widgets, etc.). */
   sceneConnectionId?: string;
   /** Enable automatic sprite generation for characters using image model */
   enableSpriteGeneration?: boolean;

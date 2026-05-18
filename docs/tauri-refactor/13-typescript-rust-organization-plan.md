@@ -2895,7 +2895,6 @@ Generated from 2887 files in the current refactor repository, excluding node_mod
 | src/features/lorebooks/components/LorebooksPanel.tsx | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/lorebooks/hooks/use-lorebooks.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/lorebooks/types.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
-| src/features/models/components/ModelDownloadModal.tsx | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/onboarding/components/OnboardingTutorial.tsx | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/personas/api/personas-api.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/personas/components/CreatePersonaModal.tsx | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
@@ -3005,7 +3004,6 @@ Generated from 2887 files in the current refactor repository, excluding node_mod
 | src/shared/legacy-shared/types/prompt.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
 | src/shared/legacy-shared/types/regex.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
 | src/shared/legacy-shared/types/scene.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/sidecar.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
 | src/shared/legacy-shared/types/theme.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
 | src/shared/legacy-shared/types/tts.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
 | src/shared/legacy-shared/types/vn.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
@@ -3222,7 +3220,7 @@ Generated from 562 TypeScript/TSX files under original packages/shared/src, pack
 | packages/client/src/components/modals/ImportPersonaModal.tsx | Already moved / keep TS | src/features/*/components | Feature-owned modal UI. |
 | packages/client/src/components/modals/ImportPresetModal.tsx | Already moved / keep TS | src/features/*/components | Feature-owned modal UI. |
 | packages/client/src/components/modals/LorebookMakerModal.tsx | Already moved / keep TS | src/features/*/components | Feature-owned modal UI. |
-| packages/client/src/components/modals/ModelDownloadModal.tsx | Already moved / keep TS | src/features/*/components | Feature-owned modal UI. |
+| packages/client/src/components/modals/ModelDownloadModal.tsx | Deferred by scope | none | Sidecar model download UI is not part of the active Tauri migration. |
 | packages/client/src/components/modals/PersonaMakerModal.tsx | Already moved / keep TS | src/features/*/components | Feature-owned modal UI. |
 | packages/client/src/components/modals/STBulkImportModal.tsx | Already moved / keep TS | src/features/*/components | Feature-owned modal UI. |
 | packages/client/src/components/onboarding/OnboardingTutorial.tsx | Already moved / keep TS | src/features or src/shared/components | React UI component; keep UI-only. |
@@ -3617,7 +3615,7 @@ Generated from 562 TypeScript/TSX files under original packages/shared/src, pack
 | packages/shared/src/types/prompt.ts | Copy directly | src/engine/contracts/types | Type-only domain contracts; keep TS as source of truth for TS engine. |
 | packages/shared/src/types/regex.ts | Copy directly | src/engine/contracts/types | Type-only domain contracts; keep TS as source of truth for TS engine. |
 | packages/shared/src/types/scene.ts | Copy directly | src/engine/contracts/types | Type-only domain contracts; keep TS as source of truth for TS engine. |
-| packages/shared/src/types/sidecar.ts | Copy directly | src/engine/contracts/types | Type-only domain contracts; keep TS as source of truth for TS engine. |
+| packages/shared/src/types/sidecar.ts | Deferred by scope | none | Sidecar is outside the active Tauri migration scope; do not copy sidecar-only contracts into active engine contracts. |
 | packages/shared/src/types/theme.ts | Copy directly | src/engine/contracts/types | Type-only domain contracts; keep TS as source of truth for TS engine. |
 | packages/shared/src/types/tts.ts | Copy directly | src/engine/contracts/types | Type-only domain contracts; keep TS as source of truth for TS engine. |
 | packages/shared/src/types/vn.ts | Copy directly | src/engine/contracts/types | Type-only domain contracts; keep TS as source of truth for TS engine. |

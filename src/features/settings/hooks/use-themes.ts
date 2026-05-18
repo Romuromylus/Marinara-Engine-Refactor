@@ -1,10 +1,8 @@
 // ──────────────────────────────────────────────
 // Hooks: Custom Themes
 // ──────────────────────────────────────────────
-import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../shared/lib/api-client";
-import { useUIStore } from "../../../shared/stores/ui.store";
 import type { CreateThemeInput, Theme, UpdateThemeInput } from "@marinara-engine/shared";
 
 export const themeKeys = {
@@ -65,67 +63,4 @@ export function useSetActiveTheme() {
       qc.invalidateQueries({ queryKey: themeKeys.all });
     },
   });
-}
-
-export function useLegacyThemeMigration() {
-  const legacyThemes = useUIStore((s) => s.customThemes);
-  const legacyActiveCustomTheme = useUIStore((s) => s.activeCustomTheme);
-  const hasMigratedCustomThemesToServer = useUIStore((s) => s.hasMigratedCustomThemesToServer);
-  const clearLegacyCustomThemes = useUIStore((s) => s.clearLegacyCustomThemes);
-  const setHasMigratedCustomThemesToServer = useUIStore((s) => s.setHasMigratedCustomThemesToServer);
-  const qc = useQueryClient();
-  const inFlightRef = useRef(false);
-  const { isSuccess } = useThemes();
-
-  useEffect(() => {
-    if (hasMigratedCustomThemesToServer || !isSuccess || inFlightRef.current) {
-      return;
-    }
-
-    inFlightRef.current = true;
-    void (async () => {
-      try {
-        const latestThemes = await api.get<Theme[]>("/themes");
-        const storedAlreadyHasActiveTheme = latestThemes.some((theme) => theme.isActive);
-        let workingThemes = [...latestThemes];
-        let migratedActiveThemeId: string | null = null;
-
-        for (const legacyTheme of legacyThemes) {
-          let storedTheme = findDuplicateTheme(workingThemes, legacyTheme.name, legacyTheme.css);
-          if (!storedTheme) {
-            storedTheme = await api.post<Theme>("/themes", {
-              name: legacyTheme.name,
-              css: legacyTheme.css,
-              installedAt: legacyTheme.installedAt,
-            });
-            workingThemes = [storedTheme, ...workingThemes];
-          }
-
-          if (!storedAlreadyHasActiveTheme && legacyActiveCustomTheme === legacyTheme.id) {
-            migratedActiveThemeId = storedTheme.id;
-          }
-        }
-
-        if (migratedActiveThemeId) {
-          await api.put<Theme | null>("/themes/active", { id: migratedActiveThemeId });
-        }
-
-        clearLegacyCustomThemes();
-        setHasMigratedCustomThemesToServer(true);
-        await qc.invalidateQueries({ queryKey: themeKeys.all });
-      } catch {
-        // Leave migration flag untouched so the next app start can retry.
-      } finally {
-        inFlightRef.current = false;
-      }
-    })();
-  }, [
-    clearLegacyCustomThemes,
-    hasMigratedCustomThemesToServer,
-    isSuccess,
-    legacyActiveCustomTheme,
-    legacyThemes,
-    qc,
-    setHasMigratedCustomThemesToServer,
-  ]);
 }

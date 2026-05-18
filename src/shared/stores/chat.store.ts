@@ -19,12 +19,6 @@ function loadDrafts(): Map<string, string> {
   try {
     const raw = localStorage.getItem(DRAFTS_KEY);
     if (raw) return new Map(JSON.parse(raw));
-    const legacyRaw = sessionStorage.getItem(DRAFTS_KEY);
-    if (legacyRaw) {
-      localStorage.setItem(DRAFTS_KEY, legacyRaw);
-      sessionStorage.removeItem(DRAFTS_KEY);
-      return new Map(JSON.parse(legacyRaw));
-    }
   } catch {
     /* ignore */
   }
@@ -36,7 +30,6 @@ function saveDrafts(m: Map<string, string>) {
   try {
     if (m.size === 0) localStorage.removeItem(DRAFTS_KEY);
     else localStorage.setItem(DRAFTS_KEY, JSON.stringify([...m]));
-    sessionStorage.removeItem(DRAFTS_KEY);
   } catch {
     /* ignore */
   }
@@ -588,7 +581,6 @@ export const useChatStore = create<ChatState>()(
       try {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(DRAFTS_KEY);
-        sessionStorage.removeItem(DRAFTS_KEY);
       } catch {
         /* ignore */
       }

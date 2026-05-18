@@ -31,13 +31,13 @@ export function TopBar() {
   return (
     <header
       data-component="TopBar"
-      className="mari-topbar relative z-10 flex h-12 flex-shrink-0 items-center justify-between bg-[var(--card)]/80 px-3 backdrop-blur-sm"
+      className="mari-topbar relative z-10 flex h-12 flex-shrink-0 items-center justify-between bg-[var(--card)]/80 px-2 backdrop-blur-sm"
     >
-      {/* Subtle bottom border only */}
+      {/* Bottom edge: separates window chrome from the workspace, not the title row. */}
       <div className="absolute inset-x-0 bottom-0 h-px bg-[var(--border)]/30" />
 
-      {/* Left section: window controls + chat info */}
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+      {/* Left section: chat info */}
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5">
         <button
           onClick={toggleSidebar}
           data-tour="sidebar-toggle"
@@ -64,7 +64,7 @@ export function TopBar() {
       <nav
         data-tour="panel-buttons"
         aria-label="Panel navigation"
-        className="flex items-center gap-0.5 rounded-xl p-1 max-sm:gap-0 max-sm:p-0.5"
+        className="flex shrink-0 items-center gap-0.5 rounded-xl p-1 max-sm:gap-0 max-sm:p-0.5"
       >
         {/* Browser */}
         <button

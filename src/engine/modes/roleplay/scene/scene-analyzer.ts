@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
-// Sidecar — Scene Analyzer Prompt
+// Scene Analyzer Prompt
 //
-// System prompt for the local Gemma model to
+// System prompt for the configured scene model to
 // analyze a completed narration turn and produce
 // structured scene updates (backgrounds, music,
 // widgets, expressions, weather, etc.).

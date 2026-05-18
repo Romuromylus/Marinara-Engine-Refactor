@@ -20,7 +20,7 @@ Last updated: 2026-05-18.
 - [x] Replace server-stub frontend API with Tauri-backed API adapter.
 - [~] Build Rust capability commands for storage, assets/imports, LLM transport, integrations, and updates.
 - [x] Removed direct browser `fetch('/api/...')` calls for local Fastify routes; local app calls now go through Tauri API adapters or local TypeScript helpers.
-- [x] Removed sidecar from active onboarding, agent, connection, and game scene UI while preserving deferred sidecar code for later reintroduction.
+- [x] Removed sidecar from active onboarding, agent, connection, and game scene UI; sidecar and sync remain deferred scope only.
 
 ## TypeScript Engine Layers
 
@@ -128,6 +128,9 @@ Last updated: 2026-05-18.
 - [~] Expanded native image-provider parity: NovelAI native ZIP/image responses, RunPod Serverless ComfyUI, ComfyUI default/custom workflows, OpenRouter/Gemini chat image parsing, xAI aspect-ratio payloads, Automatic1111 defaults, and selected image connection use for sprite generation are wired. Remaining image work is edge parity for reference-image/provider-specific request surfaces and live-provider QA.
 - [x] Removed active settings copy that presented theme/extension data as server-synced runtime behavior; sync remains deferred scope.
 - [x] Removed runtime legacy asset URL compatibility and added the no-legacy-runtime rule to `AGENTS.md`; old data conversion will be a separate migration script.
+- [x] Removed browser-era custom theme/extension migration hooks, stale settings-sync/CSRF files, and sessionStorage draft migration fallbacks.
+- [x] Replaced the historical UI-store `migrate` chain with a fresh Tauri persistence key, and split `ui.store.ts` into focused store, model/helper, and persistence modules.
+- [x] Deleted sidecar-only frontend store/modal/contracts from the active TypeScript app and moved active scene-analysis contracts into neutral scene types.
 
 ## Current Blockers Before Migration Can Be Called Complete
 
@@ -156,3 +159,7 @@ Last updated: 2026-05-18.
 - [x] `cargo check --manifest-path src-tauri/Cargo.toml` passed on 2026-05-18 after image-provider parity expansion.
 - [x] `pnpm typecheck` passed on 2026-05-18 after conversation-data split.
 - [x] `pnpm build` passed on 2026-05-18 after conversation-data split and active sync-copy cleanup.
+- [x] `pnpm typecheck` passed on 2026-05-18 after no-legacy-runtime/UI-store cleanup.
+- [x] `cargo check --manifest-path src-tauri/Cargo.toml` passed on 2026-05-18 after no-legacy-runtime/UI-store cleanup.
+- [x] `pnpm check:docs` passed on 2026-05-18 after no-legacy-runtime/UI-store cleanup.
+- [x] `pnpm build` passed on 2026-05-18 after no-legacy-runtime/UI-store cleanup, with Vite large-chunk warnings only.
