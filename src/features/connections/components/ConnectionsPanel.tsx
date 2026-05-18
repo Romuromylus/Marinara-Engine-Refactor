@@ -70,6 +70,7 @@ const PROVIDER_COLORS: Record<string, { from: string; to: string; ring: string; 
   },
 };
 const DEFAULT_COLOR = { from: "from-sky-400", to: "to-blue-500", ring: "ring-sky-400/40", badge: "bg-sky-400" };
+const SHOW_DEFERRED_SIDECAR_SURFACE = false;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
@@ -665,8 +666,7 @@ export function ConnectionsPanel() {
 
   return (
     <div className="flex flex-col gap-2 p-3">
-      {/* ── Local Model (Sidecar) ── */}
-      {import.meta.env.VITE_MARINARA_LITE !== "true" && <SidecarCard />}
+      {SHOW_DEFERRED_SIDECAR_SURFACE && import.meta.env.VITE_MARINARA_LITE !== "true" && <SidecarCard />}
 
       {/* ── Text to Speech ── */}
       <TTSConfigCard />

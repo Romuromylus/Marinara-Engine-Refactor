@@ -44,7 +44,18 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+marinara-core = { path = "crates/core" }
+marinara-security = { path = "crates/security" }
+marinara-storage = { path = "crates/storage" }
+marinara-assets = { path = "crates/assets" }
+marinara-import = { path = "crates/import" }
+marinara-integrations = { path = "crates/integrations" }
+marinara-llm = { path = "crates/llm" }
+marinara-updates = { path = "crates/updates" }

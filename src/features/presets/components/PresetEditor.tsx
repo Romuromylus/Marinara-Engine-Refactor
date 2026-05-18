@@ -61,6 +61,7 @@ import { cn } from "../../../shared/lib/utils";
 import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
 import { DraftNumberInput } from "../../../shared/components/ui/DraftNumberInput";
 import { api } from "../../../shared/lib/api-client";
+import { connectionsUtilityApi, promptReviewerApi } from "../../../shared/api/integration-utility-api";
 import { useAgentConfigs, type AgentConfigRow } from "../../agents/hooks/use-agents";
 import { SUPPORTED_MACROS, type WrapFormat, type MarkerType } from "@marinara-engine/shared";
 
@@ -2344,39 +2345,16 @@ function ReviewTab({ presetId }: { presetId: string }) {
     setError(null);
 
     try {
-      const res = await fetch("/api/prompt-reviewer/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          presetId,
-          connectionId,
-          streaming: enableStreaming,
-          focusAreas: ["clarity", "consistency", "coverage", "token_efficiency"],
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to start review");
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        const lines = text.split("\n");
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.type === "token") {
-              setReviewOutput((prev) => prev + event.data);
-            } else if (event.type === "error") {
-              setError(event.data);
-            }
-          } catch {
-            /* skip */
-          }
+      for await (const event of promptReviewerApi.reviewEvents({
+        presetId,
+        connectionId,
+        streaming: enableStreaming,
+        focusAreas: ["clarity", "consistency", "coverage", "token_efficiency"],
+      })) {
+        if (event.type === "token") {
+          setReviewOutput((prev) => prev + String(event.data ?? ""));
+        } else if (event.type === "error") {
+          setError(String(event.data ?? "Review failed"));
         }
       }
     } catch (err) {
@@ -2450,11 +2428,11 @@ function ConnectionSelector({
 }) {
   const [connId, setConnId] = useState("");
 
-  // Quick inline fetch of connections
+  // Quick inline read of connections
   const [connections, setConnections] = useState<Array<{ id: string; name: string }>>([]);
   useEffect(() => {
-    fetch("/api/connections")
-      .then((r) => r.json())
+    connectionsUtilityApi
+      .list<Array<{ id: string; name: string }>>()
       .then((data) => setConnections(data))
       .catch(() => {});
   }, []);

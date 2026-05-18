@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "../../../shared/lib/utils";
-import { getAdminSecretHeader } from "../../../shared/lib/api-client";
+import { ApiError } from "../../../shared/lib/api-client";
+import { importApi } from "../../../shared/api/import-api";
 
 interface Props {
   open: boolean;
@@ -85,28 +86,11 @@ const TAG_IMPORT_OPTIONS: Array<{ value: TagImportMode; label: string; descripti
   { value: "existing", label: "Existing only", description: "Keep tags already in Marinara." },
 ];
 
-type ApiErrorPayload = {
-  error?: unknown;
-  message?: unknown;
-};
-
-async function readJsonResponse<T>(res: Response): Promise<{ data: T | null; raw: string }> {
-  const raw = await res.text().catch(() => "");
-  if (!raw.trim()) return { data: null, raw };
-
-  try {
-    return { data: JSON.parse(raw) as T, raw };
-  } catch {
-    return { data: null, raw };
+function describeImportError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return `${fallback}: ${error.message}`;
   }
-}
-
-function describeResponseError(res: Response, data: ApiErrorPayload | null, raw: string, fallback: string): string {
-  const status = [res.status, res.statusText].filter(Boolean).join(" ");
-  const detail =
-    typeof data?.error === "string" ? data.error : typeof data?.message === "string" ? data.message : raw.trim();
-
-  return `${fallback}${status ? ` (${status})` : ""}${detail ? `: ${detail.slice(0, 500)}` : ""}`;
+  return error instanceof Error ? `${fallback}: ${error.message}` : fallback;
 }
 
 function buildInitialSelection(scan: ScanResult): SelectionState {
@@ -182,25 +166,17 @@ export function STBulkImportModal({ open, onClose }: Props) {
     setError("");
 
     try {
-      const res = await fetch("/api/import/st-bulk/scan", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAdminSecretHeader(),
-        },
-        body: JSON.stringify({ folderPath: folderPath.trim(), folderToken }),
-      });
-      const { data, raw } = await readJsonResponse<ScanResult>(res);
-      if (res.ok && data?.success) {
+      const data = await importApi.stBulkScan<ScanResult>({ folderPath: folderPath.trim(), folderToken });
+      if (data?.success) {
         setScanResult(data);
         setSelection(buildInitialSelection(data));
         setPhase("preview");
       } else {
-        setError(describeResponseError(res, data, raw, "Scan failed"));
+        setError(`Scan failed${data?.error ? `: ${data.error}` : ""}`);
         setPhase("input");
       }
     } catch (err) {
-      setError(err instanceof Error ? `Failed to connect to server: ${err.message}` : "Failed to connect to server");
+      setError(describeImportError(err, "Scan failed"));
       setPhase("input");
     }
   }, [folderPath, folderToken]);
@@ -214,25 +190,17 @@ export function STBulkImportModal({ open, onClose }: Props) {
   const loadDirectory = useCallback(async (dirPath?: string) => {
     setBrowserLoading(true);
     try {
-      const res = await fetch("/api/import/list-directory", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAdminSecretHeader(),
-        },
-        body: JSON.stringify({ path: dirPath || "" }),
-      });
-      const { data, raw } = await readJsonResponse<{
+      const data = await importApi.listDirectory<{
         success: boolean;
         path?: string;
         folderToken?: string;
         folders?: string[];
         error?: string;
-      }>(res);
-      if (!res.ok || !data?.success || !data.path) {
+      }>(dirPath || "");
+      if (!data?.success || !data.path) {
         setBrowserFolders([]);
         setFolderToken(null);
-        setError(describeResponseError(res, data, raw, "Unable to list directories"));
+        setError(`Unable to list directories${data?.error ? `: ${data.error}` : ""}`);
         return;
       }
       setBrowserPath(data.path);
@@ -241,7 +209,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
     } catch (err) {
       setBrowserFolders([]);
       setFolderToken(null);
-      setError(err instanceof Error ? err.message : "Unable to list directories");
+      setError(describeImportError(err, "Unable to list directories"));
     } finally {
       setBrowserLoading(false);
     }
@@ -251,27 +219,19 @@ export function STBulkImportModal({ open, onClose }: Props) {
     setPicking(true);
     setError("");
     try {
-      const res = await fetch("/api/import/pick-folder", {
-        method: "POST",
-        headers: getAdminSecretHeader(),
-      });
-      const { data, raw } = await readJsonResponse<{
+      const data = await importApi.pickFolder<{
         success: boolean;
         path?: string;
         folderToken?: string;
         error?: string;
-      }>(res);
-      if (!res.ok) {
-        setError(describeResponseError(res, data, raw, "Unable to open folder picker"));
-        setPicking(false);
-        return;
-      }
+      }>();
       if (data?.success && data.path) {
         setFolderPath(data.path);
         setFolderToken(data.folderToken ?? null);
         setPicking(false);
         return;
       }
+      if (data?.error) setError(`Unable to open folder picker: ${data.error}`);
     } catch {
       // Native picker failed — fall back to browser below
     }
@@ -300,69 +260,21 @@ export function STBulkImportModal({ open, onClose }: Props) {
     setError("");
 
     try {
-      const res = await fetch("/api/import/st-bulk/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAdminSecretHeader(),
-        },
-        body: JSON.stringify({
-          folderPath: folderPath.trim(),
-          folderToken,
-          options: { ...selection, characterTagImportMode },
-        }),
+      const data = await importApi.stBulkRun<ImportResult>({
+        folderPath: folderPath.trim(),
+        folderToken,
+        options: { ...selection, characterTagImportMode },
       });
-
-      if (!res.ok) {
-        const { data, raw } = await readJsonResponse<ApiErrorPayload>(res);
-        setError(describeResponseError(res, data, raw, "Import failed"));
+      if (data?.success) {
+        setImportResult(data);
+        setPhase("done");
+        qc.invalidateQueries();
+      } else {
+        setError(`Import failed${data?.error ? `: ${data.error}` : ""}`);
         setPhase("preview");
-        return;
-      }
-
-      if (!res.body) {
-        setError("Import failed: server returned no response stream");
-        setPhase("preview");
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-
-        for (const part of parts) {
-          const lines = part.split("\n");
-          let eventType = "";
-          let dataStr = "";
-          for (const line of lines) {
-            if (line.startsWith("event: ")) eventType = line.slice(7);
-            if (line.startsWith("data: ")) dataStr = line.slice(6);
-          }
-          if (!dataStr) continue;
-          try {
-            const parsed = JSON.parse(dataStr);
-            if (eventType === "progress") {
-              setProgress(parsed as ImportProgress);
-            } else if (eventType === "done") {
-              setImportResult(parsed as ImportResult);
-              setPhase("done");
-              qc.invalidateQueries();
-            }
-          } catch {
-            // Ignore malformed SSE chunks
-          }
-        }
       }
     } catch (err) {
-      setError(err instanceof Error ? `Import failed: ${err.message}` : "Import failed — server error");
+      setError(describeImportError(err, "Import failed"));
       setPhase("preview");
     }
   }, [characterTagImportMode, folderPath, folderToken, qc, selection]);

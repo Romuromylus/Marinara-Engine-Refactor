@@ -6,6 +6,7 @@ import { Modal } from "../../../shared/components/ui/Modal";
 import { useCreatePersona } from "../../characters/hooks/use-characters";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { Loader2, User } from "lucide-react";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -32,8 +33,8 @@ export function CreatePersonaModal({ open, onClose }: Props) {
       onClose();
       reset();
       if (personaId) openPersonaDetail(personaId);
-    } catch {
-      // stay in modal on failure
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create persona");
     }
   };
 

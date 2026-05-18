@@ -6,12 +6,14 @@
 // for smooth transitions.
 // ──────────────────────────────────────────────
 
+import { gameAssetFileUrlFromPath } from "../../../shared/api/local-file-api";
+
 const CROSSFADE_MS = 2000;
 const SFX_POOL_SIZE = 8;
 const SILENT_AUDIO_DATA_URI =
   "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
 
-type AssetMap = Record<string, { path: string }>;
+type AssetMap = Record<string, { path: string; absolutePath?: string }>;
 type AudioSessionType = "auto" | "ambient" | "playback" | "transient" | "transient-solo" | "play-and-record";
 type NavigatorWithAudioSession = Navigator & {
   audioSession?: {
@@ -172,7 +174,7 @@ class GameAudioManager {
     // Tag format: "category:subcategory:name" → path: "category/subcategory/name.*"
     // The manifest stores the full relative path with extension
     const path = assetTagToPath(tag);
-    return `/api/game-assets/file/${path}`;
+    return gameAssetFileUrlFromPath(path);
   }
 
   /** Try to find the full path from manifest, falling back to tag-based URL. */
@@ -180,7 +182,7 @@ class GameAudioManager {
     const normalizedTag = normalizeAssetTag(tag);
     const manifestEntry = manifest?.[tag] ?? manifest?.[normalizedTag];
     if (manifestEntry) {
-      return `/api/game-assets/file/${manifestEntry.path}`;
+      return gameAssetFileUrlFromPath(manifestEntry.path, manifestEntry.absolutePath);
     }
     return this.resolveUrl(tag);
   }

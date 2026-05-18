@@ -1,4 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../../shared/api/api-client";
 
 export interface ChatImage {
   id: string;
@@ -12,29 +13,46 @@ export interface ChatImage {
   createdAt?: string;
 }
 
-async function unavailable(): Promise<never> {
-  throw new Error("Gallery backend is deferred until the imports/assets/gallery/media slice.");
-}
-
 export function useGalleryImages(chatId: string | null) {
   return useQuery({
     queryKey: ["gallery", "images", chatId],
-    queryFn: () => unavailable() as Promise<ChatImage[]>,
+    queryFn: () => api.get<ChatImage[]>(`/chats/${chatId}/gallery`),
     enabled: !!chatId,
     retry: false,
   });
 }
 
 export function useUploadGalleryImage(chatId: string | null) {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (_files: File[]) => unavailable(),
+    mutationFn: async (files: File[]) => {
+      if (!chatId) return [];
+      const uploaded: ChatImage[] = [];
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+        uploaded.push(await api.upload<ChatImage>(`/chats/${chatId}/gallery/upload`, formData));
+      }
+      return uploaded;
+    },
+    onSuccess: () => {
+      if (chatId) {
+        queryClient.invalidateQueries({ queryKey: ["gallery", "images", chatId] });
+      }
+    },
     meta: { chatId },
   });
 }
 
 export function useDeleteGalleryImage(chatId: string | null) {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (_imageId: string) => unavailable(),
+    mutationFn: (imageId: string) => api.delete(`/chats/${chatId}/gallery/${imageId}`),
+    onSuccess: () => {
+      if (chatId) {
+        queryClient.invalidateQueries({ queryKey: ["gallery", "images", chatId] });
+      }
+    },
     meta: { chatId },
   });
 }

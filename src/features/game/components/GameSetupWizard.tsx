@@ -33,7 +33,6 @@ import {
 } from "../../../shared/components/ui/GenerationParametersEditor";
 import { useConnections } from "../../connections/hooks/use-connections";
 import { usePersonas } from "../../characters/hooks/use-characters";
-import { useSidecarStore } from "../../../shared/stores/sidecar.store";
 import { useLorebooks } from "../../lorebooks/hooks/use-lorebooks";
 import { useGameAssetStore } from "../stores/game-asset.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
@@ -295,7 +294,6 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
     useState<EditableGenerationParameters>(ROLEPLAY_PARAMETER_DEFAULTS);
   const [personaSearch, setPersonaSearch] = useState("");
   const [rating, setRating] = useState<"sfw" | "nsfw">("sfw");
-  const [useLocalScene, setUseLocalScene] = useState(true);
   const [enableSpriteGeneration, setEnableSpriteGeneration] = useState(false);
   const [enableSpotifyDj, setEnableSpotifyDj] = useState(false);
   const [gameSpotifySourceType, setGameSpotifySourceType] = useState<GameSpotifySourceType>("liked");
@@ -318,27 +316,9 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
     preferences: false,
   });
 
-  const sidecarStatus = useSidecarStore((s) => s.status);
-  const sidecarConfig = useSidecarStore((s) => s.config);
   const learnedGameSetupOptions = useUIStore((s) => s.learnedGameSetupOptions);
   const rememberGameSetupOptions = useUIStore((s) => s.rememberGameSetupOptions);
   const forgetGameSetupOption = useUIStore((s) => s.forgetGameSetupOption);
-  const sidecarAvailable = !!sidecarConfig.modelPath && sidecarStatus !== "not_downloaded";
-
-  // Fetch sidecar status on mount so the dropdown is populated without visiting Connections first
-  useEffect(() => {
-    useSidecarStore.getState().fetchStatus();
-  }, []);
-
-  // Once status loads, sync the local toggle with the persisted config
-  useEffect(() => {
-    if (sidecarAvailable) {
-      setUseLocalScene(sidecarConfig.useForGameScene);
-    }
-  }, [sidecarAvailable, sidecarConfig.useForGameScene]);
-
-  // "local" = sidecar, a connection id = API connection, null = skip
-  const sceneModelValue = useLocalScene && sidecarAvailable ? "local" : sceneConnectionId;
 
   const { data: connectionsList } = useConnections();
   const { data: personasList } = usePersonas();
@@ -514,10 +494,6 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
     if (startMuted) {
       useGameAssetStore.getState().setAudioMuted(true);
     }
-    // Sync the wizard's local-scene toggle to the global sidecar config
-    if (sidecarAvailable) {
-      useSidecarStore.getState().updateConfig({ useForGameScene: sceneModelValue === "local" });
-    }
     rememberGameSetupOptions(
       {
         genres: filterCustomLearnedValues(genres, GENRES),
@@ -543,7 +519,7 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
         partyCharacterIds,
         playerGoals: playerGoals || "Have an adventure",
         personaId: personaId ?? undefined,
-        sceneConnectionId: sceneModelValue && sceneModelValue !== "local" ? sceneModelValue : undefined,
+        sceneConnectionId: sceneConnectionId ?? undefined,
         enableSpriteGeneration: enableSpriteGeneration || undefined,
         imageConnectionId: enableSpriteGeneration && imageConnectionId ? imageConnectionId : undefined,
         activeLorebookIds: activeLorebookIds.length > 0 ? activeLorebookIds : undefined,
@@ -1202,21 +1178,14 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
                 <span className="ml-1 text-[0.575rem] text-[var(--muted-foreground)]">(optional)</span>
               </label>
               <select
-                value={sceneModelValue ?? ""}
+                value={sceneConnectionId ?? ""}
                 onChange={(e) => {
                   const v = e.target.value;
-                  if (v === "local") {
-                    setUseLocalScene(true);
-                    setSceneConnectionId(null);
-                  } else {
-                    setUseLocalScene(false);
-                    setSceneConnectionId(v || null);
-                  }
+                  setSceneConnectionId(v || null);
                 }}
                 className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs text-[var(--foreground)] outline-none ring-1 ring-transparent transition-all focus:ring-[var(--primary)]/40"
               >
                 <option value="">Skip — use inline tags from GM</option>
-                {sidecarAvailable && <option value="local">Local Model (Gemma)</option>}
                 {connections.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -1225,9 +1194,8 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
                 ))}
               </select>
               <p className="mt-1 text-[0.575rem] text-[var(--muted-foreground)]">
-                {sceneModelValue === "local"
-                  ? "Gemma handles backgrounds, music, weather, and cinematic effects. The GM handles narration, widgets, and expressions."
-                  : "Handles backgrounds, music, weather, and cinematic effects after each GM turn. If skipped, the GM model handles scene tags inline."}
+                Handles backgrounds, music, weather, and cinematic effects after each GM turn. If skipped, the GM
+                model handles scene tags inline.
               </p>
             </div>
 

@@ -6,6 +6,7 @@
 // ──────────────────────────────────────────────
 import { create } from "zustand";
 import { api } from "../../../shared/api/api-client";
+import { gameAssetFileUrlFromPath } from "../../../shared/api/local-file-api";
 
 interface AssetEntry {
   tag: string;
@@ -13,6 +14,7 @@ interface AssetEntry {
   subcategory: string;
   name: string;
   path: string;
+  absolutePath?: string;
   ext: string;
 }
 
@@ -89,7 +91,8 @@ export const useGameAssetStore = create<GameAssetStore>((set, get) => ({
   resolveAssetUrl: (tag: string) => {
     const { manifest } = get();
     if (!manifest?.assets[tag]) return null;
-    return `/api/game-assets/file/${manifest.assets[tag]!.path}`;
+    const asset = manifest.assets[tag]!;
+    return gameAssetFileUrlFromPath(asset.path, asset.absolutePath);
   },
 
   resetPlaybackState: () =>

@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 // TTS Service — Server-proxied audio playback
 // ──────────────────────────────────────────────
+import { ttsApi } from "../api/integration-utility-api";
 
 export type TTSState = "idle" | "loading" | "playing" | "paused" | "error";
 
@@ -50,22 +51,6 @@ class TTSService {
     this.listeners.forEach((fn) => fn(this.state, this.activeId));
   }
 
-  private async readError(res: Response): Promise<string> {
-    const fallback = `TTS request failed (${res.status})`;
-    const raw = await res.text().catch(() => "");
-    if (!raw.trim()) return fallback;
-
-    try {
-      const data = JSON.parse(raw) as Record<string, unknown>;
-      const error = typeof data.error === "string" ? data.error : "";
-      const detail = typeof data.detail === "string" ? data.detail : "";
-      const message = typeof data.message === "string" ? data.message : "";
-      return [error || message || fallback, detail].filter(Boolean).join(": ");
-    } catch {
-      return `${fallback}: ${raw.slice(0, 500)}`;
-    }
-  }
-
   private isCurrentSequence(sequence: number): boolean {
     return this.sequence === sequence;
   }
@@ -73,23 +58,15 @@ class TTSService {
   // ── Playback ──────────────────────────────────
 
   async generateAudio(text: string, options: TTSSpeakOptions = {}): Promise<Blob> {
-    const res = await fetch("/api/tts/speak", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    return ttsApi.speak(
+      {
         text,
         ...(options.speaker ? { speaker: options.speaker } : {}),
         ...(options.tone ? { tone: options.tone } : {}),
         ...(options.voice ? { voice: options.voice } : {}),
-      }),
-      signal: options.signal,
-    });
-
-    if (!res.ok) {
-      throw new Error(await this.readError(res));
-    }
-
-    return res.blob();
+      },
+      options.signal,
+    );
   }
 
   /** Speak the given text. `id` is an optional caller-supplied key (e.g. message id) so callers can track which item is active. */

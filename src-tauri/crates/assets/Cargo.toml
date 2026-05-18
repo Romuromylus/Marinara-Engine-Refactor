@@ -5,3 +5,10 @@ edition = "2021"
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+base64 = "0.22"
+marinara-core = { path = "../core" }
+marinara-security = { path = "../security" }
+marinara-storage = { path = "../storage" }
+serde_json = "1"

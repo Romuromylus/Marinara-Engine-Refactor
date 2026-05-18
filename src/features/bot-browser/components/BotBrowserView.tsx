@@ -35,6 +35,15 @@ import { useUIStore } from "../../../shared/stores/ui.store";
 import { toast } from "sonner";
 import { cn } from "../../../shared/lib/utils";
 import { confirmEmbeddedLorebookImport, readEmbeddedLorebookFromCharacterPayload } from "../../../shared/lib/character-import";
+import {
+  botBrowserAssetUrl,
+  botBrowserBlob,
+  botBrowserGet,
+  botBrowserPost,
+  fetchBotBrowserAssetBlob,
+  importStCharacter,
+  resolveBotBrowserAssetUrl,
+} from "../api/bot-browser-api";
 
 // ════════════════════════════════════════════════
 // Types
@@ -353,7 +362,7 @@ const chubProvider: ProviderConfig = {
   extraToggles: [],
   nsfwAvailable: true,
   nsfwMode: "free",
-  getAvatarUrl: (card) => `/api/bot-browser/chub/avatar/${card.id}`,
+  getAvatarUrl: (card) => botBrowserAssetUrl(`chub/avatar/${card.id}`),
   getExternalUrl: (card) => `https://chub.ai/characters/${card.id}`,
   search: async (p) => {
     const preset = CHUB_SORT_PRESETS.find((pr) => pr.value === p.sort) ?? CHUB_SORT_PRESETS[0];
@@ -375,9 +384,7 @@ const chubProvider: ProviderConfig = {
     if (p.features.lore) params.set("require_lore", "true");
     if (p.features.expressions) params.set("require_expressions", "true");
     if (p.features.greetings) params.set("require_alternate_greetings", "true");
-    const res = await fetch(`/api/bot-browser/chub/search?${params}`);
-    if (!res.ok) throw new Error("Search failed");
-    const raw = await res.json();
+    const raw = await botBrowserGet<any>(`chub/search?${params}`);
     const data = raw?.data ?? raw;
     const nodes = data?.nodes ?? [];
     // Chub API "count" = items on this page, not total. Use cursor to detect more pages.
@@ -391,7 +398,7 @@ const chubProvider: ProviderConfig = {
         creator: (n.fullPath || "").split("/")[0] || "",
         tagline: n.tagline || "",
         tags: n.topics || [],
-        avatarUrl: `/api/bot-browser/chub/avatar/${n.fullPath}`,
+        avatarUrl: botBrowserAssetUrl(`chub/avatar/${n.fullPath}`),
         stat1: n.starCount || 0,
         stat1Label: "Downloads",
         stat1Icon: "download" as const,
@@ -409,9 +416,8 @@ const chubProvider: ProviderConfig = {
     };
   },
   fetchDetail: async (card) => {
-    const res = await fetch(`/api/bot-browser/chub/character/${card.id}`);
-    if (!res.ok) return null;
-    const raw = await res.json();
+    const raw = await botBrowserGet<any>(`chub/character/${card.id}`).catch(() => null);
+    if (!raw) return null;
     const node = raw?.data?.node ?? raw?.node;
     if (!node) return null;
     const def = node.definition || {};
@@ -454,7 +460,7 @@ const jannyProvider: ProviderConfig = {
   extraToggles: [{ key: "showLowQuality", label: "Show Low Quality", icon: "🚫" }],
   nsfwAvailable: true,
   nsfwMode: "free",
-  getAvatarUrl: (card) => `/api/bot-browser/janny/avatar/${(card._raw as any)?.avatar || ""}`,
+  getAvatarUrl: (card) => botBrowserAssetUrl(`janny/avatar/${(card._raw as any)?.avatar || ""}`),
   getExternalUrl: (card) => {
     const raw = card._raw as any;
     const slug = card.name
@@ -468,9 +474,11 @@ const jannyProvider: ProviderConfig = {
     // public Astro bundle). The actual MeiliSearch POST runs from the BROWSER so that
     // Cloudflare sees a real browser TLS fingerprint + the user's cf_clearance cookie.
     const fetchToken = async (force = false): Promise<string> => {
-      const tokenRes = await fetch(`/api/bot-browser/janny/token${force ? "?force=1" : ""}`);
-      if (!tokenRes.ok) throw new Error("Could not obtain JannyAI token");
-      const { token: t } = await tokenRes.json();
+      const { token: t } = await botBrowserGet<{ token?: string }>(`janny/token${force ? "?force=1" : ""}`).catch(
+        () => {
+          throw new Error("Could not obtain JannyAI token");
+        },
+      );
       if (!t) throw new Error("JannyAI token unavailable");
       return t;
     };
@@ -595,7 +603,7 @@ const jannyProvider: ProviderConfig = {
         creator: h.creatorUsername || "",
         tagline: (h.description || "").replace(/<[^>]*>/g, "").slice(0, 200),
         tags: jannyTagNames(h.tagIds),
-        avatarUrl: h.avatar ? `/api/bot-browser/janny/avatar/${h.avatar}` : "",
+        avatarUrl: h.avatar ? botBrowserAssetUrl(`janny/avatar/${h.avatar}`) : "",
         stat1: h.totalToken || 0,
         stat1Label: "Tokens",
         stat1Icon: "hash" as const,
@@ -689,9 +697,8 @@ const jannyProvider: ProviderConfig = {
 
     // Strategy 2: server-side proxy (likely fails due to Cloudflare, but try anyway)
     try {
-      const res = await fetch(`/api/bot-browser/janny/character/${charId}?slug=character-${slug}`);
-      if (res.ok) {
-        const data = await res.json();
+      const data = await botBrowserGet<any>(`janny/character/${charId}?slug=character-${slug}`).catch(() => null);
+      if (data) {
         const char = data?.character;
         if (char && (char.personality || char.firstMessage)) {
           return {
@@ -747,7 +754,7 @@ const chartavernProvider: ProviderConfig = {
   extraToggles: [{ key: "isOC", label: "Original Character", icon: "⭐" }],
   nsfwAvailable: false,
   nsfwMode: "login",
-  getAvatarUrl: (card) => `/api/bot-browser/chartavern/avatar/${card.id}`,
+  getAvatarUrl: (card) => botBrowserAssetUrl(`chartavern/avatar/${card.id}`),
   getExternalUrl: (card) => `https://character-tavern.com/character/${card.id}`,
   search: async (p) => {
     const params = new URLSearchParams({
@@ -763,9 +770,7 @@ const chartavernProvider: ProviderConfig = {
     if (p.maxTokens && p.maxTokens !== "0") params.set("max_tokens", p.maxTokens);
     if (p.features.lore) params.set("hasLorebook", "true");
     if (p.extraToggles.isOC) params.set("isOC", "true");
-    const res = await fetch(`/api/bot-browser/chartavern/search?${params}`);
-    if (!res.ok) throw new Error("Search failed");
-    const data = await res.json();
+    const data = await botBrowserGet<any>(`chartavern/search?${params}`);
     const hits = data?.hits || [];
     return {
       cards: hits.map((h: any) => ({
@@ -774,7 +779,7 @@ const chartavernProvider: ProviderConfig = {
         creator: h.author || (h.path || "").split("/")[0] || "",
         tagline: h.tagline || "",
         tags: Array.isArray(h.tags) ? h.tags : [],
-        avatarUrl: h.path ? `/api/bot-browser/chartavern/avatar/${h.path}` : "",
+        avatarUrl: h.path ? botBrowserAssetUrl(`chartavern/avatar/${h.path}`) : "",
         stat1: h.downloads || 0,
         stat1Label: "Downloads",
         stat1Icon: "download" as const,
@@ -794,9 +799,8 @@ const chartavernProvider: ProviderConfig = {
   fetchDetail: async (card) => {
     const parts = card.id.split("/");
     if (parts.length < 2) return null;
-    const res = await fetch(`/api/bot-browser/chartavern/character/${parts[0]}/${parts[1]}`);
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await botBrowserGet<any>(`chartavern/character/${parts[0]}/${parts[1]}`).catch(() => null);
+    if (!data) return null;
     const c = data?.card;
     if (!c) return null;
     return {
@@ -841,8 +845,8 @@ const pygmalionProvider: ProviderConfig = {
     const raw = card._raw as any;
     const av = raw?.avatarUrl;
     if (!av) return "";
-    if (av.startsWith("http")) return `/api/bot-browser/pygmalion/avatar/${encodeURIComponent(av)}`;
-    return `/api/bot-browser/pygmalion/avatar/${av}`;
+    if (av.startsWith("http")) return botBrowserAssetUrl(`pygmalion/avatar/${encodeURIComponent(av)}`);
+    return botBrowserAssetUrl(`pygmalion/avatar/${av}`);
   },
   getExternalUrl: (card) => `https://pygmalion.chat/character/${card.id}`,
   search: async (p) => {
@@ -856,9 +860,7 @@ const pygmalionProvider: ProviderConfig = {
     if (p.includeTags.length > 0) params.set("tagsInclude", p.includeTags.join(","));
     if (p.excludeTags.length > 0) params.set("tagsExclude", p.excludeTags.join(","));
     if (p.nsfw) params.set("includeSensitive", "true");
-    const res = await fetch(`/api/bot-browser/pygmalion/search?${params}`);
-    if (!res.ok) throw new Error("Search failed");
-    const data = await res.json();
+    const data = await botBrowserGet<any>(`pygmalion/search?${params}`);
     const chars = data?.characters || [];
     const totalItems = parseInt(data?.totalItems || "0", 10);
     return {
@@ -868,8 +870,8 @@ const pygmalionProvider: ProviderConfig = {
         let avatarProxyUrl = "";
         if (av) {
           avatarProxyUrl = av.startsWith("http")
-            ? `/api/bot-browser/pygmalion/avatar/${encodeURIComponent(av)}`
-            : `/api/bot-browser/pygmalion/avatar/${av}`;
+            ? botBrowserAssetUrl(`pygmalion/avatar/${encodeURIComponent(av)}`)
+            : botBrowserAssetUrl(`pygmalion/avatar/${av}`);
         }
         return {
           id: c.id || "",
@@ -896,9 +898,8 @@ const pygmalionProvider: ProviderConfig = {
     };
   },
   fetchDetail: async (card) => {
-    const res = await fetch(`/api/bot-browser/pygmalion/character?id=${card.id}`);
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await botBrowserGet<any>(`pygmalion/character?id=${card.id}`).catch(() => null);
+    if (!data) return null;
     const char = data?.character;
     if (!char) return null;
     const p = char.personality || {};
@@ -945,8 +946,8 @@ const wyvernProvider: ProviderConfig = {
     const raw = card._raw as any;
     const src = raw?.avatar_url || raw?.avatar;
     if (!src) return "";
-    if (src.startsWith("http")) return `/api/bot-browser/wyvern/avatar/${encodeURIComponent(src)}`;
-    return `/api/bot-browser/wyvern/avatar/${src}/public`;
+    if (src.startsWith("http")) return botBrowserAssetUrl(`wyvern/avatar/${encodeURIComponent(src)}`);
+    return botBrowserAssetUrl(`wyvern/avatar/${src}/public`);
   },
   getExternalUrl: (card) => `https://app.wyvern.chat/characters/${card.id}`,
   search: async (p) => {
@@ -954,9 +955,7 @@ const wyvernProvider: ProviderConfig = {
     if (p.query) params.set("q", p.query);
     if (p.includeTags.length > 0) params.set("tags", p.includeTags.join(","));
     if (!p.nsfw && p.sort !== "nsfw-popular") params.set("rating", "none");
-    const res = await fetch(`/api/bot-browser/wyvern/search?${params}`);
-    if (!res.ok) throw new Error("Search failed");
-    const data = await res.json();
+    const data = await botBrowserGet<any>(`wyvern/search?${params}`);
     let results = data?.results || [];
     // Client-side exclude tag filtering (Wyvern API doesn't support server-side exclude)
     if (p.excludeTags.length > 0) {
@@ -974,8 +973,8 @@ const wyvernProvider: ProviderConfig = {
         let avatarProxyUrl = "";
         if (src) {
           avatarProxyUrl = src.startsWith("http")
-            ? `/api/bot-browser/wyvern/avatar/${encodeURIComponent(src)}`
-            : `/api/bot-browser/wyvern/avatar/${src}/public`;
+            ? botBrowserAssetUrl(`wyvern/avatar/${encodeURIComponent(src)}`)
+            : botBrowserAssetUrl(`wyvern/avatar/${src}/public`);
         }
         return {
           id: c.id || "",
@@ -1002,9 +1001,8 @@ const wyvernProvider: ProviderConfig = {
     };
   },
   fetchDetail: async (card) => {
-    const res = await fetch(`/api/bot-browser/wyvern/character/${card.id}`);
-    if (!res.ok) return null;
-    const c = await res.json();
+    const c = await botBrowserGet<any>(`wyvern/character/${card.id}`).catch(() => null);
+    if (!c) return null;
     if (!c) return null;
     return {
       description: c.description || undefined,
@@ -1045,9 +1043,8 @@ async function loadDatacatTags(): Promise<void> {
   if (datacatTagsLoading) return datacatTagsLoading;
   datacatTagsLoading = (async () => {
     try {
-      const res = await fetch("/api/bot-browser/datacat/tags");
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await botBrowserGet<any>("datacat/tags").catch(() => null);
+      if (!data) return;
       const list: any[] = data?.tags || data?.facets || data || [];
       const sortable: { id: number; name: string; count: number }[] = [];
       for (const t of list) {
@@ -1096,8 +1093,8 @@ const datacatProvider: ProviderConfig = {
     const raw = card._raw as any;
     const av = raw?.avatar || "";
     if (!av) return "";
-    if (av.startsWith("http")) return `/api/bot-browser/datacat/avatar/${encodeURIComponent(av)}`;
-    return `/api/bot-browser/datacat/avatar/${av}`;
+    if (av.startsWith("http")) return botBrowserAssetUrl(`datacat/avatar/${encodeURIComponent(av)}`);
+    return botBrowserAssetUrl(`datacat/avatar/${av}`);
   },
   getExternalUrl: (card) => {
     const raw = card._raw as any;
@@ -1124,9 +1121,7 @@ const datacatProvider: ProviderConfig = {
         limit24: "80",
         limitWeek: "0",
       });
-      const res = await fetch(`/api/bot-browser/datacat/fresh?${params}`);
-      if (!res.ok) throw new Error("Search failed");
-      const data = await res.json();
+      const data = await botBrowserGet<any>(`datacat/fresh?${params}`);
       // Response shape: { success, sortBy, windows: { last24h: { count, characters: [...] }, thisWeek: {...} } }
       const last24h = data?.windows?.last24h || data?.last24h;
       list = Array.isArray(last24h) ? last24h : last24h?.characters || [];
@@ -1141,9 +1136,7 @@ const datacatProvider: ProviderConfig = {
       const params = new URLSearchParams({ limit: "80", offset: String(offset) });
       if (tagIds.length > 0) params.set("tagIds", tagIds.join(","));
       if (trimmedQuery) params.set("q", trimmedQuery);
-      const res = await fetch(`/api/bot-browser/datacat/recent?${params}`);
-      if (!res.ok) throw new Error("Search failed");
-      const data = await res.json();
+      const data = await botBrowserGet<any>(`datacat/recent?${params}`);
       list = data?.characters || [];
       totalCount = data?.totalCount || list.length;
     }
@@ -1176,8 +1169,8 @@ const datacatProvider: ProviderConfig = {
         const av = c.avatar || "";
         const avatarProxyUrl = av
           ? av.startsWith("http")
-            ? `/api/bot-browser/datacat/avatar/${encodeURIComponent(av)}`
-            : `/api/bot-browser/datacat/avatar/${av}`
+            ? botBrowserAssetUrl(`datacat/avatar/${encodeURIComponent(av)}`)
+            : botBrowserAssetUrl(`datacat/avatar/${av}`)
           : "";
         const charId = c.characterId || c.character_id || c.id || "";
         return {
@@ -1209,9 +1202,8 @@ const datacatProvider: ProviderConfig = {
     if (!id) return null;
     // Prefer the download endpoint for V2-shaped data, fall back to character endpoint
     try {
-      const dlRes = await fetch(`/api/bot-browser/datacat/download/${encodeURIComponent(id)}`);
-      if (dlRes.ok) {
-        const dl = await dlRes.json();
+      const dl = await botBrowserGet<any>(`datacat/download/${encodeURIComponent(id)}`).catch(() => null);
+      if (dl) {
         const d = dl?.data;
         if (d) {
           return {
@@ -1229,9 +1221,8 @@ const datacatProvider: ProviderConfig = {
       /* fall through */
     }
     try {
-      const res = await fetch(`/api/bot-browser/datacat/character/${encodeURIComponent(id)}`);
-      if (!res.ok) return null;
-      const data = await res.json();
+      const data = await botBrowserGet<any>(`datacat/character/${encodeURIComponent(id)}`).catch(() => null);
+      if (!data) return null;
       const c = data?.character || data;
       if (!c) return null;
       const rawDesc = c.description || "";
@@ -1331,8 +1322,7 @@ export function BotBrowserView() {
 
   // ── Check auth sessions on mount — sync persisted state with server ──
   useEffect(() => {
-    fetch("/api/bot-browser/pygmalion/session")
-      .then((r) => r.json())
+    botBrowserGet<{ active?: boolean }>("pygmalion/session")
       .then((d) => {
         if (!d?.active && pygLoggedIn) {
           setPygLoggedIn(false);
@@ -1340,8 +1330,7 @@ export function BotBrowserView() {
         } else if (d?.active) setPygLoggedIn(true);
       })
       .catch(() => {});
-    fetch("/api/bot-browser/chartavern/session")
-      .then((r) => r.json())
+    botBrowserGet<{ active?: boolean }>("chartavern/session")
       .then((d) => {
         if (!d?.active && ctLoggedIn) {
           setCtLoggedIn(false);
@@ -1504,13 +1493,13 @@ export function BotBrowserView() {
     setImporting(true);
     try {
       let downloadUrl = "";
-      if (sourceId === "chub") downloadUrl = `/api/bot-browser/chub/download/${card.id}`;
-      else if (sourceId === "chartavern") downloadUrl = `/api/bot-browser/chartavern/download/${card.id}`;
+      if (sourceId === "chub") downloadUrl = `chub/download/${card.id}`;
+      else if (sourceId === "chartavern") downloadUrl = `chartavern/download/${card.id}`;
 
       if (downloadUrl) {
-        const res = await fetch(downloadUrl);
-        if (!res.ok) throw new Error("Failed to download character card");
-        const blob = await res.blob();
+        const blob = await botBrowserBlob(downloadUrl).catch(() => {
+          throw new Error("Failed to download character card");
+        });
         const file = new File([blob], "character.png", { type: "image/png" });
         const { json, imageDataUrl } = await parsePngCharacterCard(file);
         const cardDetail = sourceId === "chub" ? (detail ?? (await provider.fetchDetail(card))) : detail;
@@ -1522,18 +1511,13 @@ export function BotBrowserView() {
           card.name,
           cardDetail?.embeddedLorebook ?? readEmbeddedLorebookFromCharacterPayload(importJson),
         );
-        const importRes = await fetch("/api/import/st-character", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...importJson,
-            _avatarDataUrl: imageDataUrl,
-            _botBrowserSource: `${sourceId}:${card.id}`,
-            importEmbeddedLorebook,
-            tagImportMode,
-          }),
+        const data = await importStCharacter({
+          ...importJson,
+          _avatarDataUrl: imageDataUrl,
+          _botBrowserSource: `${sourceId}:${card.id}`,
+          importEmbeddedLorebook,
+          tagImportMode,
         });
-        const data = await importRes.json();
         if (data.success) {
           toast.success(`Imported "${data.name ?? "character"}" successfully!`);
           qc.invalidateQueries({ queryKey: characterKeys.list() });
@@ -1568,26 +1552,18 @@ export function BotBrowserView() {
         const avatarSrc = card.avatarUrl;
         if (avatarSrc) {
           try {
-            const avatarRes = await fetch(avatarSrc);
-            if (avatarRes.ok) {
-              const avatarBlob = await avatarRes.blob();
-              const reader = new FileReader();
-              const dataUrl = await new Promise<string>((resolve) => {
-                reader.onload = () => resolve(reader.result as string);
-                reader.readAsDataURL(avatarBlob);
-              });
-              v2._avatarDataUrl = dataUrl;
-            }
+            const avatarBlob = await fetchBotBrowserAssetBlob(avatarSrc);
+            const reader = new FileReader();
+            const dataUrl = await new Promise<string>((resolve) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(avatarBlob);
+            });
+            v2._avatarDataUrl = dataUrl;
           } catch {
             /* ignore */
           }
         }
-        const importRes = await fetch("/api/import/st-character", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(v2),
-        });
-        const data = await importRes.json();
+        const data = await importStCharacter(v2);
         if (data.success) {
           toast.success(`Imported "${data.name ?? card.name}" successfully!`);
           qc.invalidateQueries({ queryKey: characterKeys.list() });
@@ -1678,17 +1654,11 @@ export function BotBrowserView() {
   const handlePygmalionSetToken = async (token: string) => {
     setLoginLoading(true);
     try {
-      const res = await fetch("/api/bot-browser/pygmalion/set-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Failed to save token");
+      const data = await botBrowserPost<{ ok?: boolean; error?: string }>("pygmalion/set-token", { token });
+      if (!data.ok) throw new Error(data.error || "Failed to save token");
 
       // Validate
-      const valRes = await fetch("/api/bot-browser/pygmalion/validate");
-      const valData = await valRes.json();
+      const valData = await botBrowserGet<{ valid?: boolean; reason?: string }>("pygmalion/validate");
       if (!valData.valid) throw new Error(valData.reason || "Token validation failed");
 
       setPygLoggedIn(true);
@@ -1704,7 +1674,7 @@ export function BotBrowserView() {
   };
 
   const handlePygmalionLogout = async () => {
-    await fetch("/api/bot-browser/pygmalion/logout", { method: "POST" });
+    await botBrowserPost("pygmalion/logout");
     setPygLoggedIn(false);
     setNsfw(false);
     setPage(1);
@@ -1714,17 +1684,13 @@ export function BotBrowserView() {
   const handleCtSetCookie = async (cookie: string) => {
     setLoginLoading(true);
     try {
-      const res = await fetch("/api/bot-browser/chartavern/set-cookie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cookie }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Failed to save cookie");
+      const data = await botBrowserPost<{ ok?: boolean; error?: string }>("chartavern/set-cookie", { cookie });
+      if (!data.ok) throw new Error(data.error || "Failed to save cookie");
 
       // Validate
-      const valRes = await fetch("/api/bot-browser/chartavern/validate");
-      const valData = await valRes.json();
+      const valData = await botBrowserGet<{ valid?: boolean; reason?: string; hasNsfw?: boolean }>(
+        "chartavern/validate",
+      );
       if (!valData.valid) throw new Error(valData.reason || "Cookie validation failed");
 
       setCtLoggedIn(true);
@@ -1742,7 +1708,7 @@ export function BotBrowserView() {
   };
 
   const handleCtLogout = async () => {
-    await fetch("/api/bot-browser/chartavern/logout", { method: "POST" });
+    await botBrowserPost("chartavern/logout");
     setCtLoggedIn(false);
     setNsfw(false);
     setPage(1);
@@ -2599,6 +2565,48 @@ function LoginModal({
 // Card Tile
 // ════════════════════════════════════════════════
 
+function BotBrowserAssetImage({
+  src,
+  alt,
+  className,
+  loading,
+  onError,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  loading?: "eager" | "lazy";
+  onError: () => void;
+}) {
+  const [resolvedSrc, setResolvedSrc] = useState(() => (src.startsWith("tauri-api:") ? "" : src));
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    resolveBotBrowserAssetUrl(src)
+      .then((url) => {
+        if (cancelled) {
+          if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url.startsWith("blob:") ? url : null;
+        setResolvedSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) onError();
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src, onError]);
+
+  if (!resolvedSrc) return null;
+  return <img src={resolvedSrc} alt={alt} loading={loading} className={className} onError={onError} />;
+}
+
 function CardTile({ card, onClick }: { card: BrowseCard; onClick: () => void }) {
   const [imgError, setImgError] = useState(false);
   const Stat1Icon = STAT_ICONS[card.stat1Icon];
@@ -2616,7 +2624,7 @@ function CardTile({ card, onClick }: { card: BrowseCard; onClick: () => void }) 
             <Hash size="2rem" />
           </div>
         ) : (
-          <img
+          <BotBrowserAssetImage
             src={card.avatarUrl}
             alt={card.name}
             loading="lazy"
@@ -2761,7 +2769,7 @@ function DetailView({
                   <Hash size="2.5rem" />
                 </div>
               ) : (
-                <img
+                <BotBrowserAssetImage
                   src={card.avatarUrl}
                   alt={card.name}
                   className="h-full w-full object-cover"
@@ -2931,12 +2939,13 @@ function DetailView({
 /** Build a SillyTavern-compatible PNG character card with embedded V2 JSON in a tEXt chunk. */
 async function buildCharacterCardPng(avatarUrl: string, charData: Record<string, unknown>): Promise<Blob> {
   // Step 1: Fetch avatar and draw to canvas to get raw PNG bytes
+  const resolvedAvatarUrl = await resolveBotBrowserAssetUrl(avatarUrl);
   const img = new Image();
   img.crossOrigin = "anonymous";
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
     img.onerror = () => reject(new Error("Failed to load avatar image"));
-    img.src = avatarUrl;
+    img.src = resolvedAvatarUrl;
   });
   const canvas = document.createElement("canvas");
   canvas.width = img.naturalWidth;
@@ -2946,6 +2955,7 @@ async function buildCharacterCardPng(avatarUrl: string, charData: Record<string,
   const pngBlob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Canvas toBlob failed"))), "image/png");
   });
+  if (resolvedAvatarUrl.startsWith("blob:")) URL.revokeObjectURL(resolvedAvatarUrl);
   const pngBuf = new Uint8Array(await pngBlob.arrayBuffer());
 
   // Step 2: Build the V2 character card JSON

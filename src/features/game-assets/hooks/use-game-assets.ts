@@ -23,6 +23,8 @@ export interface TreeNode {
   description?: string;
   /** File size in bytes */
   size?: number;
+  /** Absolute file path returned by the Tauri asset capability. */
+  absolutePath?: string;
   /** ISO 8601 modification timestamp */
   modified?: string;
   /** True if this folder was created by the seed script (bundled default assets) */

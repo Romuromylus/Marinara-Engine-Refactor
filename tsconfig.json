@@ -17,7 +17,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@marinara-engine/shared": ["src/shared/legacy-shared/index.ts"]
+      "@marinara-engine/shared": ["src/engine/contracts/index.ts"]
     },
 
     /* Linting */

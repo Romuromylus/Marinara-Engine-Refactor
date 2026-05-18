@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { AppShell } from "./shell/AppShell";
+import { ModalRenderer } from "./shell/ModalRenderer";
 import { CustomThemeInjector } from "./providers/CustomThemeInjector";
 import { AppDialogRenderer } from "../shared/components/ui/AppDialogRenderer";
 import { useUIStore } from "../shared/stores/ui.store";
@@ -66,6 +67,7 @@ export function App() {
     <>
       <CustomThemeInjector />
       <AppShell />
+      <ModalRenderer />
       <AppDialogRenderer />
       <Toaster
         position="bottom-right"

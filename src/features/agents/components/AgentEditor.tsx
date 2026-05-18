@@ -57,6 +57,7 @@ import {
   stepCadenceValue,
 } from "../../../shared/lib/agent-cadence";
 import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
+import { spotifyApi } from "../../../shared/api/integration-utility-api";
 import {
   BUILT_IN_AGENTS,
   BUILT_IN_TOOLS,
@@ -383,11 +384,15 @@ export function AgentEditor() {
       return;
     }
     let cancelled = false;
-    fetch(`/api/spotify/status?agentId=${encodeURIComponent(dbConfig.id)}`)
-      .then((r) => r.json())
+    spotifyApi
+      .status(dbConfig.id)
       .then((data) => {
         if (!cancelled)
-          setSpotifyStatus({ connected: data.connected, expired: data.expired, redirectUri: data.redirectUri ?? null });
+          setSpotifyStatus({
+            connected: data.connected,
+            expired: data.expired ?? false,
+            redirectUri: data.redirectUri ?? null,
+          });
       })
       .catch(() => {
         if (!cancelled) setSpotifyStatus(null);
@@ -801,7 +806,7 @@ export function AgentEditor() {
               <option value="">
                 {defaultAgentConn ? `Agent default (${defaultAgentConn.name})` : "Use chat connection"}
               </option>
-              {import.meta.env.VITE_MARINARA_LITE !== "true" && (
+              {false && import.meta.env.VITE_MARINARA_LITE !== "true" && (
                 <option value={LOCAL_SIDECAR_CONNECTION_ID}>Local Model (sidecar)</option>
               )}
               {llmConnections.map((conn) => (
@@ -1300,11 +1305,7 @@ export function AgentEditor() {
                       type="button"
                       onClick={async () => {
                         if (!dbConfig?.id) return;
-                        await fetch("/api/spotify/disconnect", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ agentId: dbConfig.id }),
-                        });
+                        await spotifyApi.disconnect(dbConfig.id);
                         setSpotifyStatus({
                           connected: false,
                           expired: false,
@@ -1360,15 +1361,12 @@ export function AgentEditor() {
                             },
                           });
                         }
-                        const res = await fetch(
-                          `/api/spotify/authorize?${new URLSearchParams({
-                            clientId: localSpotifyClientId,
-                            agentId: dbConfig.id,
-                          })}`,
-                        );
-                        const data = await res.json().catch(() => ({}));
-                        if (!res.ok || !data.authUrl) {
-                          throw new Error(data.error ?? `Authorize request failed (${res.status})`);
+                        const data = await spotifyApi.authorize({
+                          clientId: localSpotifyClientId,
+                          agentId: dbConfig.id,
+                        });
+                        if (!data.authUrl) {
+                          throw new Error(data.error ?? "Authorize request did not return an auth URL");
                         }
                         window.open(data.authUrl, "_blank", "width=500,height=700");
                         // Clear any existing poll before starting a new one
@@ -1377,10 +1375,7 @@ export function AgentEditor() {
                         // Poll for connection status
                         spotifyPollRef.current = setInterval(async () => {
                           try {
-                            const statusRes = await fetch(
-                              `/api/spotify/status?agentId=${encodeURIComponent(dbConfig.id)}`,
-                            );
-                            const status = await statusRes.json();
+                            const status = await spotifyApi.status(dbConfig.id);
                             if (status.connected) {
                               clearInterval(spotifyPollRef.current!);
                               spotifyPollRef.current = null;
@@ -1471,14 +1466,9 @@ export function AgentEditor() {
                             setSpotifyPasteSubmitting(true);
                             setSpotifyPasteError(null);
                             try {
-                              const res = await fetch("/api/spotify/exchange", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ callbackUrl: spotifyPasteValue.trim() }),
-                              });
-                              const data = await res.json().catch(() => ({}));
-                              if (!res.ok || !data.success) {
-                                setSpotifyPasteError(data.error ?? `Request failed (${res.status})`);
+                              const data = await spotifyApi.exchange(spotifyPasteValue.trim());
+                              if (!data.success) {
+                                setSpotifyPasteError(data.error ?? "Spotify exchange did not complete");
                               } else {
                                 if (spotifyPollRef.current) {
                                   clearInterval(spotifyPollRef.current);
@@ -1488,10 +1478,7 @@ export function AgentEditor() {
                                   clearTimeout(spotifyTimeoutRef.current);
                                   spotifyTimeoutRef.current = null;
                                 }
-                                const statusRes = await fetch(
-                                  `/api/spotify/status?agentId=${encodeURIComponent(dbConfig.id)}`,
-                                );
-                                const status = await statusRes.json().catch(() => null);
+                                const status = await spotifyApi.status(dbConfig.id).catch(() => null);
                                 setSpotifyStatus({
                                   connected: status?.connected ?? true,
                                   expired: status?.expired ?? false,

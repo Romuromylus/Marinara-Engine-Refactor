@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../../shared/lib/utils";
 import { getConnectedChatDisplayName } from "../../../shared/lib/chat-display";
+import { resolveManagedLocalAssetUrl } from "../../../shared/api/local-file-api";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useGameStateStore } from "../../game/stores/game-state.store";
@@ -100,32 +101,31 @@ function WeatherEffectsConnected() {
 }
 
 function CrossfadeBackground({ url, className }: { url: string | null; className?: string }) {
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(url);
   const [bgA, setBgA] = useState<string | null>(url);
   const [bgB, setBgB] = useState<string | null>(null);
   const [aActive, setAActive] = useState(true);
   const activeSlot = useRef<"a" | "b">("a");
 
   useEffect(() => {
+    let cancelled = false;
+    resolveManagedLocalAssetUrl(url)
+      .then((nextUrl) => {
+        if (!cancelled) setResolvedUrl(nextUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  useEffect(() => {
     const currentUrl = activeSlot.current === "a" ? bgA : bgB;
-    if (url === currentUrl) return;
+    if (resolvedUrl === currentUrl) return;
 
-    if (url && (url.startsWith("/api/backgrounds/") || url.startsWith("/api/game-assets/"))) {
-      fetch(url, { method: "HEAD" })
-        .then((res) => {
-          if (res.ok) {
-            applyUrl(url);
-          } else {
-            console.warn(`[Background] "${url}" not found — clearing`);
-            useUIStore.getState().setChatBackground(null);
-          }
-        })
-        .catch(() => {
-          applyUrl(url);
-        });
-      return;
-    }
-
-    applyUrl(url);
+    applyUrl(resolvedUrl);
 
     function applyUrl(nextUrl: string | null) {
       if (activeSlot.current === "a") {
@@ -138,7 +138,7 @@ function CrossfadeBackground({ url, className }: { url: string | null; className
         activeSlot.current = "a";
       }
     }
-  }, [bgA, bgB, url]);
+  }, [bgA, bgB, resolvedUrl]);
 
   return (
     <>

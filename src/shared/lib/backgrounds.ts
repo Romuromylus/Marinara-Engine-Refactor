@@ -2,17 +2,17 @@
 // Chat background URL <-> metadata helpers
 // ──────────────────────────────────────────────
 
-const USER_BACKGROUND_URL_PREFIX = "/api/backgrounds/file/";
-const GAME_ASSET_BACKGROUND_URL_PREFIX = "/api/game-assets/file/";
-const GAME_ASSET_BACKGROUND_META_PREFIX = "gameAsset:";
+import {
+  GAME_ASSET_URL_PREFIX,
+  USER_BACKGROUND_URL_PREFIX,
+  decodeLocalAssetPath,
+  gameAssetUrl,
+  userBackgroundUrl,
+} from "../api/local-file-api";
 
-function encodePathSegments(path: string): string {
-  return path
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-}
+const LEGACY_USER_BACKGROUND_URL_PREFIX = "/api/backgrounds/file/";
+const LEGACY_GAME_ASSET_BACKGROUND_URL_PREFIX = "/api/game-assets/file/";
+const GAME_ASSET_BACKGROUND_META_PREFIX = "gameAsset:";
 
 function safeDecode(value: string): string {
   try {
@@ -27,7 +27,12 @@ export function chatBackgroundMetadataToUrl(value: unknown): string | null {
   const background = value.trim();
   if (!background) return null;
 
-  if (background.startsWith(USER_BACKGROUND_URL_PREFIX) || background.startsWith(GAME_ASSET_BACKGROUND_URL_PREFIX)) {
+  if (
+    background.startsWith(USER_BACKGROUND_URL_PREFIX) ||
+    background.startsWith(GAME_ASSET_URL_PREFIX) ||
+    background.startsWith(LEGACY_USER_BACKGROUND_URL_PREFIX) ||
+    background.startsWith(LEGACY_GAME_ASSET_BACKGROUND_URL_PREFIX)
+  ) {
     return background;
   }
   if (/^(https?:|data:|blob:)/i.test(background) || background.startsWith("/")) {
@@ -36,21 +41,30 @@ export function chatBackgroundMetadataToUrl(value: unknown): string | null {
 
   if (background.startsWith(GAME_ASSET_BACKGROUND_META_PREFIX)) {
     const assetPath = background.slice(GAME_ASSET_BACKGROUND_META_PREFIX.length).replace(/^\/+/, "");
-    return assetPath ? `${GAME_ASSET_BACKGROUND_URL_PREFIX}${encodePathSegments(assetPath)}` : null;
+    return assetPath ? gameAssetUrl(assetPath) : null;
   }
 
-  return `${USER_BACKGROUND_URL_PREFIX}${encodeURIComponent(background)}`;
+  return userBackgroundUrl(background);
 }
 
 export function chatBackgroundUrlToMetadata(url: string | null): string | null {
   if (!url) return null;
 
   if (url.startsWith(USER_BACKGROUND_URL_PREFIX)) {
-    return safeDecode(url.slice(USER_BACKGROUND_URL_PREFIX.length));
+    return decodeLocalAssetPath(url.slice(USER_BACKGROUND_URL_PREFIX.length));
   }
 
-  if (url.startsWith(GAME_ASSET_BACKGROUND_URL_PREFIX)) {
-    const assetPath = safeDecode(url.slice(GAME_ASSET_BACKGROUND_URL_PREFIX.length)).replace(/^\/+/, "");
+  if (url.startsWith(GAME_ASSET_URL_PREFIX)) {
+    const assetPath = decodeLocalAssetPath(url.slice(GAME_ASSET_URL_PREFIX.length)).replace(/^\/+/, "");
+    return assetPath ? `${GAME_ASSET_BACKGROUND_META_PREFIX}${assetPath}` : null;
+  }
+
+  if (url.startsWith(LEGACY_USER_BACKGROUND_URL_PREFIX)) {
+    return safeDecode(url.slice(LEGACY_USER_BACKGROUND_URL_PREFIX.length));
+  }
+
+  if (url.startsWith(LEGACY_GAME_ASSET_BACKGROUND_URL_PREFIX)) {
+    const assetPath = safeDecode(url.slice(LEGACY_GAME_ASSET_BACKGROUND_URL_PREFIX.length)).replace(/^\/+/, "");
     return assetPath ? `${GAME_ASSET_BACKGROUND_META_PREFIX}${assetPath}` : null;
   }
 
@@ -58,5 +72,11 @@ export function chatBackgroundUrlToMetadata(url: string | null): string | null {
 }
 
 export function isManagedChatBackgroundUrl(url: string | null): boolean {
-  return !!url && (url.startsWith(USER_BACKGROUND_URL_PREFIX) || url.startsWith(GAME_ASSET_BACKGROUND_URL_PREFIX));
+  return (
+    !!url &&
+    (url.startsWith(USER_BACKGROUND_URL_PREFIX) ||
+      url.startsWith(GAME_ASSET_URL_PREFIX) ||
+      url.startsWith(LEGACY_USER_BACKGROUND_URL_PREFIX) ||
+      url.startsWith(LEGACY_GAME_ASSET_BACKGROUND_URL_PREFIX))
+  );
 }

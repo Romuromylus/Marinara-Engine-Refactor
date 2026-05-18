@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 import { useEffect, useState } from "react";
 import { AUDIO_MIME_MAP } from "@marinara-engine/shared";
-import { encodeAssetPath } from "./encode-asset-path";
+import { resolveGameAssetFileUrl } from "../../../shared/api/local-file-api";
 
 /**
  * Audio player modal with MIME type hinting and download fallback.
@@ -26,6 +26,7 @@ export function AudioPlayerModal({
   const ext = lastDot >= 0 ? name.slice(lastDot).toLowerCase() : "";
   const mime = AUDIO_MIME_MAP[ext] || "audio/mpeg";
   const [playError, setPlayError] = useState(false);
+  const [src, setSrc] = useState("");
 
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
@@ -35,7 +36,19 @@ export function AudioPlayerModal({
     return () => document.removeEventListener("keydown", handle);
   }, [onClose]);
 
-  const encodedPath = encodeAssetPath(path);
+  useEffect(() => {
+    let cancelled = false;
+    resolveGameAssetFileUrl(path)
+      .then((url) => {
+        if (!cancelled) setSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) setSrc("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [path]);
 
   return (
     <div
@@ -56,7 +69,7 @@ export function AudioPlayerModal({
           autoPlay
           onError={() => setPlayError(true)}
         >
-          <source src={`/api/game-assets/file/${encodedPath}`} type={mime} />
+          {src && <source src={src} type={mime} />}
           Your browser does not support the audio element.
         </audio>
         {playError && (
@@ -66,7 +79,7 @@ export function AudioPlayerModal({
         )}
         <div className="mt-4 flex justify-end gap-2">
           <a
-            href={`/api/game-assets/file/${encodedPath}`}
+            href={src || "#"}
             download={name}
             className="rounded-lg border border-(--border) bg-(--background) px-4 py-2 text-xs font-medium text-(--foreground) transition-colors hover:bg-(--accent)"
           >

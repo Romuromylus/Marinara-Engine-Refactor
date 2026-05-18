@@ -11,7 +11,7 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "@marinara-engine/shared": fileURLToPath(new URL("./src/shared/legacy-shared/index.ts", import.meta.url)),
+      "@marinara-engine/shared": fileURLToPath(new URL("./src/engine/contracts/index.ts", import.meta.url)),
     },
   },
 

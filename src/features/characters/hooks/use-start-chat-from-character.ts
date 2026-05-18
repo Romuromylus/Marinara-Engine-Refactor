@@ -1,4 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "../../../shared/lib/api-client";
+import { useChatStore } from "../../../shared/stores/chat.store";
+import { chatKeys, useCreateChat } from "../../chats/hooks/use-chats";
+import { useApplyChatPreset, useChatPresets } from "../../chat-presets/hooks/use-chat-presets";
 
 type ChatMode = "roleplay" | "conversation";
 
@@ -10,18 +15,75 @@ interface StartChatFromCharacterOptions {
   alternateGreetings?: string[];
 }
 
-async function deferredStartChat(_options: StartChatFromCharacterOptions): Promise<never> {
-  throw new Error("Starting chats from characters is waiting for the Rust chats backend slice.");
-}
-
 export function useStartChatFromCharacter() {
-  const mutation = useMutation({
-    mutationFn: deferredStartChat,
-  });
+  const createChat = useCreateChat();
+  const queryClient = useQueryClient();
+  const { data: chatPresetsData } = useChatPresets();
+  const applyChatPreset = useApplyChatPreset();
+
+  const startChatFromCharacter = useCallback(
+    ({ characterId, characterName, mode, firstMessage, alternateGreetings }: StartChatFromCharacterOptions) => {
+      const label = mode === "conversation" ? "Conversation" : "Roleplay";
+      const presetMode = mode === "conversation" ? "conversation" : "roleplay";
+      const starred = (chatPresetsData ?? []).find(
+        (preset) => preset.mode === presetMode && preset.isActive && !preset.isDefault,
+      );
+
+      createChat.mutate(
+        {
+          name: characterName ? `${characterName} - ${label}` : `New ${label}`,
+          mode,
+          characterIds: [characterId],
+        },
+        {
+          onSuccess: async (chat) => {
+            useChatStore.getState().setActiveChatId(chat.id);
+
+            if (starred) {
+              try {
+                await applyChatPreset.mutateAsync({ presetId: starred.id, chatId: chat.id });
+              } catch {
+                /* non-fatal: chat still opens with system defaults */
+              }
+            }
+
+            if (mode === "roleplay" && firstMessage?.trim()) {
+              try {
+                const msg = await api.post<{ id: string }>(`/chats/${chat.id}/messages`, {
+                  role: "assistant",
+                  content: firstMessage,
+                  characterId,
+                });
+
+                if (msg?.id && alternateGreetings?.length) {
+                  for (const greeting of alternateGreetings) {
+                    if (greeting.trim()) {
+                      await api.post(`/chats/${chat.id}/messages/${msg.id}/swipes`, {
+                        content: greeting,
+                        silent: true,
+                      });
+                    }
+                  }
+                }
+
+                queryClient.invalidateQueries({ queryKey: chatKeys.messages(chat.id) });
+              } catch {
+                /* non-fatal: do not block the new chat if greeting injection fails */
+              }
+            }
+
+            useChatStore.getState().setShouldOpenSettings(true);
+            useChatStore.getState().setShouldOpenWizard(true);
+            useChatStore.getState().setShouldOpenWizardInShortcutMode(true);
+          },
+        },
+      );
+    },
+    [applyChatPreset, chatPresetsData, createChat, queryClient],
+  );
 
   return {
-    startChatFromCharacter: (options: StartChatFromCharacterOptions) => mutation.mutate(options),
-    isStartingChat: mutation.isPending,
+    startChatFromCharacter,
+    isStartingChat: createChat.isPending,
   };
 }
-

@@ -8,6 +8,7 @@ import { useUIStore } from "../../../shared/stores/ui.store";
 import { Loader2, Link } from "lucide-react";
 import { MODEL_LISTS, PROVIDERS, type APIProvider } from "@marinara-engine/shared";
 import { cn } from "../../../shared/lib/utils";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -42,8 +43,8 @@ export function CreateConnectionModal({ open, onClose }: Props) {
       onClose();
       reset();
       if (connId) openConnectionDetail(connId);
-    } catch {
-      // stay in modal on failure
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create connection");
     }
   };
 

@@ -6,6 +6,7 @@ import { Modal } from "../../../shared/components/ui/Modal";
 import { useCreateCharacter, useUploadAvatar } from "../hooks/use-characters";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { Loader2, Sparkles, User, Camera } from "lucide-react";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -78,8 +79,8 @@ export function CreateCharacterModal({ open, onClose }: Props) {
       if (charId) {
         openCharacterDetail(charId);
       }
-    } catch {
-      // creation failed — stay in modal
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create character");
     }
   };
 

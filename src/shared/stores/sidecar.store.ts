@@ -131,8 +131,7 @@ async function consumeDownloadStream(
   set: (partial: Partial<SidecarState>) => void,
   get: () => SidecarState,
 ): Promise<void> {
-  const apiPath = path.startsWith("/api/") ? path.slice(4) : path;
-  const response = await api.raw(apiPath, {
+  const response = await api.raw(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -292,7 +291,7 @@ export const useSidecarStore = create<SidecarState>((set, get) => ({
     });
 
     try {
-      await consumeDownloadStream("/api/sidecar/download", { quantization }, set, get);
+      await consumeDownloadStream("/sidecar/download", { quantization }, set, get);
     } catch (error) {
       set({
         downloadProgress: {
@@ -323,7 +322,7 @@ export const useSidecarStore = create<SidecarState>((set, get) => ({
     });
 
     try {
-      await consumeDownloadStream("/api/sidecar/download/custom", modelPath ? { repo, modelPath } : { repo }, set, get);
+      await consumeDownloadStream("/sidecar/download/custom", modelPath ? { repo, modelPath } : { repo }, set, get);
     } catch (error) {
       set({
         downloadProgress: {
@@ -433,7 +432,7 @@ export const useSidecarStore = create<SidecarState>((set, get) => ({
     });
 
     try {
-      await consumeDownloadStream("/api/sidecar/runtime/install", reinstall ? { reinstall: true } : {}, set, get);
+      await consumeDownloadStream("/sidecar/runtime/install", reinstall ? { reinstall: true } : {}, set, get);
     } catch (error) {
       set({
         downloadProgress: {

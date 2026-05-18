@@ -13,8 +13,11 @@ import {
 import { cn } from "../../../shared/lib/utils";
 import { useExtensions, useCreateExtension, useDeleteExtension, useUpdateExtension } from "../hooks/use-extensions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ADMIN_SECRET_STORAGE_KEY, ApiError, api, getAdminSecretHeader } from "../../../shared/lib/api-client";
-import { chatBackgroundUrlToMetadata } from "../../../shared/lib/backgrounds";
+import { ADMIN_SECRET_STORAGE_KEY, ApiError, api } from "../../../shared/lib/api-client";
+import { backupApi } from "../../../shared/api/backup-api";
+import { importApi } from "../../../shared/api/import-api";
+import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../../shared/lib/backgrounds";
+import { filePathToAssetUrl, resolveManagedLocalAssetUrl, userBackgroundUrl } from "../../../shared/api/local-file-api";
 import { forceRefreshSpa } from "../../../shared/lib/browser-runtime";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -126,23 +129,6 @@ const EXPUNGE_SCOPE_OPTIONS: Array<{ id: ExpungeScope; label: string; descriptio
     description: "Backgrounds, avatars, sprites, gallery items, fonts, and knowledge-source files.",
   },
 ];
-
-async function readSettingsResponseError(res: Response, fallback: string) {
-  const contentType = res.headers.get("content-type") ?? "";
-
-  try {
-    if (contentType.includes("application/json")) {
-      const payload = (await res.json()) as { error?: unknown; message?: unknown };
-      const message = typeof payload.message === "string" ? payload.message : payload.error;
-      return typeof message === "string" && message.trim() ? message : fallback;
-    }
-
-    const text = (await res.text()).trim();
-    return text ? text.slice(0, 500) : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 const ROLEPLAY_AVATAR_STYLE_OPTIONS: Array<{ id: RoleplayAvatarStyle; label: string; desc: string }> = [
   {
@@ -1702,6 +1688,8 @@ type BackgroundLibraryItem = {
   id?: string;
   filename: string;
   url: string;
+  absolutePath?: string;
+  path?: string;
   originalName: string | null;
   tags: string[];
   source?: "user" | "game_asset";
@@ -1719,6 +1707,30 @@ type BackgroundUploadResponse = {
   tags: string[];
 };
 
+function BackgroundThumbnail({ item }: { item: BackgroundLibraryItem }) {
+  const [src, setSrc] = useState(() => filePathToAssetUrl(item.absolutePath) || "");
+
+  useEffect(() => {
+    if (item.absolutePath) {
+      setSrc(filePathToAssetUrl(item.absolutePath));
+      return;
+    }
+    let cancelled = false;
+    resolveManagedLocalAssetUrl(item.url)
+      .then((url) => {
+        if (!cancelled) setSrc(url ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) setSrc("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.absolutePath, item.url]);
+
+  return <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />;
+}
+
 function BackgroundPicker({ selected, onSelect }: { selected: string | null; onSelect: (url: string | null) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -1731,7 +1743,25 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
 
   const { data: backgrounds } = useQuery({
     queryKey: ["backgrounds"],
-    queryFn: () => api.get<BackgroundLibraryItem[]>("/backgrounds"),
+    queryFn: async () => {
+      const rows = await api.get<Array<BackgroundLibraryItem & { name?: string; type?: string; isDirectory?: boolean }>>(
+        "/backgrounds",
+      );
+      return rows
+        .filter((row) => row.type !== "folder" && row.isDirectory !== true)
+        .map((row) => {
+          const filename = row.filename ?? row.name ?? row.path ?? "background";
+          return {
+            ...row,
+            id: row.id ?? filename,
+            filename,
+            url: row.url ?? userBackgroundUrl(filename),
+            originalName: row.originalName ?? filename,
+            tags: Array.isArray(row.tags) ? row.tags : [],
+            source: row.source ?? "user",
+          } satisfies BackgroundLibraryItem;
+        });
+    },
   });
 
   const { data: allTags } = useQuery({
@@ -1763,7 +1793,7 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
         { name },
       ),
     onSuccess: (data) => {
-      const oldUrl = `/api/backgrounds/file/${encodeURIComponent(data.oldFilename)}`;
+      const oldUrl = chatBackgroundMetadataToUrl(data.oldFilename);
       if (selected === oldUrl) {
         onSelect(data.url);
       }
@@ -1868,7 +1898,7 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
                         : "border-transparent hover:border-[var(--muted-foreground)]/30",
                     )}
                   >
-                    <img src={bg.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <BackgroundThumbnail item={bg} />
                     {isSelected && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                         <Check size="0.875rem" className="text-white" />
@@ -2563,14 +2593,6 @@ type ProfileImportStats = {
   files?: number;
 };
 
-type ProfileImportProgressData = {
-  phase: string;
-  label: string;
-  completedItems: number;
-  totalItems: number;
-  imported?: ProfileImportStats;
-};
-
 type ProfileImportProgressState = {
   status: "reading" | "starting" | "running" | "success" | "error";
   label: string;
@@ -2581,12 +2603,6 @@ type ProfileImportProgressState = {
   imported?: ProfileImportStats;
   error?: string;
 };
-
-type ProfileImportStreamEvent =
-  | { type: "started"; data?: { label?: string; totalItems?: number } }
-  | { type: "progress"; data?: ProfileImportProgressData }
-  | { type: "done"; data?: { success?: boolean; imported?: ProfileImportStats; error?: string; message?: string } }
-  | { type: "error"; data?: string | { error?: string; message?: string } };
 
 function formatProfileImportDuration(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds));
@@ -2631,40 +2647,6 @@ function formatProfileImportStats(stats?: ProfileImportStats) {
     .join(", ");
 }
 
-function getProfileImportErrorMessage(data: unknown) {
-  if (typeof data === "string") return data;
-  if (data && typeof data === "object") {
-    const record = data as { message?: unknown; error?: unknown };
-    if (typeof record.message === "string") return record.message;
-    if (typeof record.error === "string") return record.error;
-  }
-  return "Unknown error";
-}
-
-async function* readProfileImportStream(res: Response): AsyncGenerator<ProfileImportStreamEvent> {
-  if (!res.body) throw new Error("Import started but no progress stream was returned.");
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        yield JSON.parse(line.slice(6)) as ProfileImportStreamEvent;
-      } catch {
-        /* ignore malformed progress chunks */
-      }
-    }
-  }
-}
-
 function ImportSettings() {
   const openModal = useUIStore((s) => s.openModal);
   const qc = useQueryClient();
@@ -2693,11 +2675,14 @@ function ImportSettings() {
     try {
       const head = file.size >= 4 ? new Uint8Array(await file.slice(0, 4).arrayBuffer()) : new Uint8Array();
       const isZip = head.length >= 2 && head[0] === 0x50 && head[1] === 0x4b;
-      let res: Response;
+      let data: {
+        success?: boolean;
+        name?: string;
+        type?: string;
+        error?: string;
+      };
       if (isZip) {
-        const form = new FormData();
-        form.append("file", file, file.name);
-        res = await fetch("/api/import/marinara-package", { method: "POST", body: form });
+        data = await importApi.marinaraPackage(file);
       } else {
         let envelope: unknown;
         try {
@@ -2705,23 +2690,13 @@ function ImportSettings() {
         } catch {
           throw new Error("parse");
         }
-        res = await fetch("/api/import/marinara", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(envelope),
-        });
+        data = await importApi.marinara(envelope);
       }
-      const data = (await res.json().catch(() => ({}))) as {
-        success?: boolean;
-        name?: string;
-        type?: string;
-        error?: string;
-      };
-      if (res.ok && data.success) {
+      if (data.success) {
         qc.invalidateQueries();
         toast.success(`Imported ${data.name ?? data.type} successfully!`);
       } else {
-        toast.error(`Import failed: ${data.error ?? res.statusText ?? "Unknown error"}`);
+        toast.error(`Import failed: ${data.error ?? "Unknown error"}`);
       }
     } catch (err) {
       if (err instanceof Error && err.message === "parse") {
@@ -2771,66 +2746,40 @@ function ImportSettings() {
             }
           : current,
       );
-      const res = await fetch("/api/backup/import-profile", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          ...getAdminSecretHeader(),
-        },
-        body: text,
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-        throw new Error(data.message ?? data.error ?? res.statusText ?? "Unknown error");
-      }
-      for await (const event of readProfileImportStream(res)) {
-        if (event.type === "started") {
-          setProfileImportProgress((current) => ({
-            status: "running",
-            label: event.data?.label ?? "Profile import started",
-            completedItems: 0,
-            totalItems: Math.max(1, event.data?.totalItems ?? current?.totalItems ?? 1),
-            startedAt,
-            elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
-          }));
-          continue;
-        }
-        if (event.type === "progress" && event.data) {
-          setProfileImportProgress((current) => ({
-            status: "running",
-            label: event.data?.label ?? "Importing profile",
-            completedItems: event.data?.completedItems ?? current?.completedItems ?? 0,
-            totalItems: Math.max(1, event.data?.totalItems ?? current?.totalItems ?? 1),
-            startedAt,
-            elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
-            imported: event.data?.imported,
-          }));
-          continue;
-        }
-        if (event.type === "error") {
-          throw new Error(getProfileImportErrorMessage(event.data));
-        }
-        if (event.type === "done") {
-          if (event.data?.success === false) throw new Error(event.data.error ?? event.data.message ?? "Unknown error");
-          qc.invalidateQueries();
-          const imported = event.data?.imported;
-          const summary = formatProfileImportStats(imported);
-          setProfileImportProgress((current) => {
-            const totalItems = Math.max(1, current?.totalItems ?? 1);
-            return {
-              status: "success",
-              label: "Profile import complete",
-              completedItems: totalItems,
-              totalItems,
-              startedAt,
+      setProfileImportProgress((current) =>
+        current
+          ? {
+              ...current,
+              status: "running",
+              label: "Importing profile",
+              totalItems: Math.max(1, current.totalItems),
               elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
-              imported,
-            };
-          });
-          toast.success(summary ? `Imported: ${summary}` : "Profile imported.");
-        }
-      }
+            }
+          : current,
+      );
+      const data = await backupApi.importProfile<{
+        success?: boolean;
+        error?: string;
+        message?: string;
+        imported?: ProfileImportStats;
+      }>(envelope);
+      if (data?.success === false) throw new Error(data.error ?? data.message ?? "Unknown error");
+      qc.invalidateQueries();
+      const imported = data?.imported;
+      const summary = formatProfileImportStats(imported);
+      setProfileImportProgress((current) => {
+        const totalItems = Math.max(1, current?.totalItems ?? 1);
+        return {
+          status: "success",
+          label: "Profile import complete",
+          completedItems: totalItems,
+          totalItems,
+          startedAt,
+          elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+          imported,
+        };
+      });
+      toast.success(summary ? `Imported: ${summary}` : "Profile imported.");
     } catch (err) {
       const message =
         err instanceof SyntaxError
@@ -3015,7 +2964,7 @@ function ImportButton({
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      let res: Response;
+      let data: { success?: boolean; error?: string; chatId?: string };
       let importEmbeddedLorebook: boolean | undefined;
 
       // "auto" mode: send binary files (PNG) as multipart, JSON files as JSON body
@@ -3042,23 +2991,23 @@ function ImportButton({
         if (endpoint === "/import/st-character" && importEmbeddedLorebook !== undefined) {
           json.importEmbeddedLorebook = importEmbeddedLorebook;
         }
-        res = await fetch(`/api${endpoint}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(json),
-        });
+        data =
+          endpoint === "/import/st-preset"
+            ? await importApi.stPreset(json)
+            : endpoint === "/import/st-lorebook"
+              ? await importApi.stLorebook(json)
+              : endpoint === "/import/st-character"
+                ? await importApi.stCharacterJson(json)
+                : await importApi.marinara(json);
       } else {
-        const formData = new FormData();
-        if (endpoint === "/import/st-character" && importEmbeddedLorebook !== undefined) {
-          formData.append("importEmbeddedLorebook", String(importEmbeddedLorebook));
-        }
-        formData.append("file", file);
-        res = await fetch(`/api${endpoint}`, {
-          method: "POST",
-          body: formData,
-        });
+        const payload = { file, fields: { importEmbeddedLorebook } };
+        data =
+          endpoint === "/import/st-character"
+            ? await importApi.stCharacterFile(payload)
+            : endpoint === "/import/st-chat"
+              ? await importApi.stChat(file)
+              : await importApi.marinaraPackage(file);
       }
-      const data = await res.json();
       if (data.success) {
         if (onImported) {
           onImported(data);
@@ -3124,15 +3073,11 @@ function AdvancedSettings() {
     setExportingProfile(true);
     setExportProfileDialogOpen(false);
     try {
-      const res = await fetch(`/api/backup/export-profile?format=${format}`, {
-        headers: getAdminSecretHeader(),
-      });
-      if (!res.ok) throw new Error(await readSettingsResponseError(res, "Export failed"));
-      const blob = await res.blob();
+      const { blob, filename } = await backupApi.exportProfile(format);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = format === "compatible" ? "marinara-compatible-export.zip" : "marinara-profile.json";
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
       toast.success(format === "compatible" ? "Compatible export created!" : "Profile exported!");
@@ -3174,19 +3119,7 @@ function AdvancedSettings() {
   const handleCreateBackup = async () => {
     setCreatingBackup(true);
     try {
-      const res = await fetch("/api/backup/download", {
-        method: "POST",
-        headers: getAdminSecretHeader(),
-      });
-      if (!res.ok) throw new Error(await readSettingsResponseError(res, "Backup failed"));
-
-      // Pull the filename from Content-Disposition if provided
-      const disposition = res.headers.get("content-disposition") ?? "";
-      const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
-      const suggestedName = filenameMatch?.[1] ?? `marinara-backup-${timestamp}.zip`;
-
-      const blob = await res.blob();
+      const { blob, filename: suggestedName } = await backupApi.createBackupArchive();
 
       // Preferred path: native "Save As" dialog (Chromium desktop, some Android)
       const w = window as typeof window & {

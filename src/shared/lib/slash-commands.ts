@@ -2,6 +2,7 @@
 // Slash Commands — SillyTavern-style / commands
 // ──────────────────────────────────────────────
 import { api } from "./api-client";
+import { chatBackgroundMetadataToUrl } from "./backgrounds";
 import { useChatStore } from "../stores/chat.store";
 import { useUIStore } from "../stores/ui.store";
 import { toast } from "sonner";
@@ -592,7 +593,7 @@ const COMMANDS: SlashCommand[] = [
 
         // Apply background if the plan chose one
         if (res.background) {
-          useUIStore.getState().setChatBackground(`/api/backgrounds/file/${encodeURIComponent(res.background)}`);
+          useUIStore.getState().setChatBackground(chatBackgroundMetadataToUrl(res.background));
         }
 
         toast.success(`Scene created: ${res.chatName}`, { id: planToastId, icon: "🎬" });

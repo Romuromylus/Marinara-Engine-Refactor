@@ -35,7 +35,7 @@ import { FileEditorModal } from "./FileEditorModal";
 import { ActionDropdown } from "./ActionDropdown";
 import { DEFAULT_DESCRIPTIONS } from "./constants";
 import { isImage, isAudio, isEditableText, countItems } from "./utils";
-import { encodeAssetPath } from "./encode-asset-path";
+import { filePathToAssetUrl, resolveGameAssetFileUrl } from "../../../shared/api/local-file-api";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useChat, useUpdateChatMetadata } from "../../chats/hooks/use-chats";
@@ -435,9 +435,9 @@ export function GameAssetsBrowserView() {
     [copyAsset, selectedPath],
   );
 
-  const handleDownload = useCallback((node: TreeNode) => {
+  const handleDownload = useCallback(async (node: TreeNode) => {
     const a = document.createElement("a");
-    a.href = `/api/game-assets/file/${encodeAssetPath(node.path)}`;
+    a.href = filePathToAssetUrl(node.absolutePath) || (await resolveGameAssetFileUrl(node.path));
     a.download = node.name;
     document.body.appendChild(a);
     a.click();

@@ -653,6 +653,41 @@ function replaceCachedMessage(
   return changed ? { ...old, pages } : old;
 }
 
+function downloadTextFile(contents: string, filename: string, type: string) {
+  const blob = new Blob([contents], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function chatExportFilename(chat: Chat, format: "jsonl" | "text") {
+  const ext = format === "text" ? ".txt" : ".jsonl";
+  const sourceName = getChatNameForExport(chat) || chat.id;
+  const safeName = sourceName.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+  return `${safeName || `chat-${chat.id}`}${ext}`;
+}
+
+function getChatNameForExport(chat: Chat) {
+  const metadata = chat.metadata;
+  if (metadata && typeof metadata === "object" && "branchName" in metadata) {
+    const branchName = (metadata as { branchName?: unknown }).branchName;
+    if (typeof branchName === "string" && branchName.trim()) return branchName.trim();
+  }
+  return typeof chat.name === "string" ? chat.name.trim() : "";
+}
+
+function formatChatText(messages: Message[]) {
+  return messages
+    .map((message) => {
+      const role = message.role ? `${message.role}: ` : "";
+      return `${role}${message.content ?? ""}`;
+    })
+    .join("\n\n");
+}
+
 /** Peek at the assembled prompt for a chat */
 export function usePeekPrompt() {
   return useMutation({
@@ -684,19 +719,17 @@ export function usePeekPrompt() {
 export function useExportChat() {
   return useMutation({
     mutationFn: async ({ chatId, format = "jsonl" }: { chatId: string; format?: "jsonl" | "text" }) => {
-      const res = await fetch(`/api/chats/${chatId}/export?format=${format}`);
-      const blob = await res.blob();
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const match = disposition.match(/filename="(.+?)"/);
-      const ext = format === "text" ? ".txt" : ".jsonl";
-      const filename = match?.[1] ? decodeURIComponent(match[1]) : `chat-${chatId}${ext}`;
-      // Download via blob
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      const [chat, messages] = await Promise.all([
+        api.get<Chat>(`/chats/${chatId}`),
+        api.get<Message[]>(`/chats/${chatId}/messages`),
+      ]);
+      const filename = chatExportFilename(chat, format);
+      if (format === "text") {
+        downloadTextFile(formatChatText(messages), filename, "text/plain;charset=utf-8");
+      } else {
+        const jsonl = messages.map((message) => JSON.stringify(message)).join("\n");
+        downloadTextFile(jsonl ? `${jsonl}\n` : "", filename, "application/x-ndjson;charset=utf-8");
+      }
     },
   });
 }

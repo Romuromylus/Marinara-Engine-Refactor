@@ -21,6 +21,13 @@ import { lorebookKeys } from "../../lorebooks/hooks/use-lorebooks";
 import { parsePngCharacterCard } from "../../../shared/lib/png-parser";
 import { confirmEmbeddedLorebookImport, readEmbeddedLorebookFromCharacterPayload } from "../../../shared/lib/character-import";
 import { toast } from "sonner";
+import {
+  botBrowserAssetUrl,
+  botBrowserBlob,
+  botBrowserGet,
+  importStCharacter,
+  resolveBotBrowserAssetUrl,
+} from "../api/bot-browser-api";
 
 interface Props {
   open: boolean;
@@ -137,9 +144,7 @@ export function BotBrowserModal({ open, onClose }: Props) {
         sort: s,
         nsfw: String(n),
       });
-      const res = await fetch(`/api/bot-browser/chub/search?${params}`);
-      if (!res.ok) throw new Error("Search failed");
-      const raw = await res.json();
+      const raw = await botBrowserGet<any>(`chub/search?${params}`);
       // Chub wraps in { data: { nodes, count } } or sometimes { nodes, count }
       const data = raw?.data ?? raw;
       setResults(data?.nodes ?? []);
@@ -168,9 +173,9 @@ export function BotBrowserModal({ open, onClose }: Props) {
     setDetail(null);
     setDetailLoading(true);
     try {
-      const res = await fetch(`/api/bot-browser/chub/character/${card.fullPath}`);
-      if (!res.ok) throw new Error("Failed to load character");
-      const raw = await res.json();
+      const raw = await botBrowserGet<any>(`chub/character/${card.fullPath}`).catch(() => {
+        throw new Error("Failed to load character");
+      });
       const node = raw?.data?.node ?? raw?.node;
       if (!node) throw new Error("Invalid character data");
       setDetail(node);
@@ -186,19 +191,16 @@ export function BotBrowserModal({ open, onClose }: Props) {
   const handleImport = async (fullPath: string) => {
     setImporting(true);
     try {
-      const res = await fetch(`/api/bot-browser/chub/download/${fullPath}`);
-      if (!res.ok) throw new Error("Failed to download character card");
-      const blob = await res.blob();
+      const blob = await botBrowserBlob(`chub/download/${fullPath}`).catch(() => {
+        throw new Error("Failed to download character card");
+      });
       const file = new File([blob], "character.png", { type: "image/png" });
 
       const { json, imageDataUrl } = await parsePngCharacterCard(file);
       let cardDetail = detail?.fullPath === fullPath ? detail : null;
       if (!cardDetail) {
-        const detailRes = await fetch(`/api/bot-browser/chub/character/${fullPath}`);
-        if (detailRes.ok) {
-          const rawDetail = await detailRes.json();
-          cardDetail = rawDetail?.data?.node ?? rawDetail?.node ?? null;
-        }
+        const rawDetail = await botBrowserGet<any>(`chub/character/${fullPath}`).catch(() => null);
+        cardDetail = rawDetail?.data?.node ?? rawDetail?.node ?? null;
       }
       const importJson = attachEmbeddedLorebookToCharacterJson(
         json as Record<string, unknown>,
@@ -209,12 +211,12 @@ export function BotBrowserModal({ open, onClose }: Props) {
         cardDetail?.definition?.embedded_lorebook ?? readEmbeddedLorebookFromCharacterPayload(importJson),
       );
 
-      const importRes = await fetch("/api/import/st-character", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...importJson, _avatarDataUrl: imageDataUrl, importEmbeddedLorebook, tagImportMode }),
+      const data = await importStCharacter({
+        ...importJson,
+        _avatarDataUrl: imageDataUrl,
+        importEmbeddedLorebook,
+        tagImportMode,
       });
-      const data = await importRes.json();
 
       if (data.success) {
         toast.success(`Imported "${data.name ?? "character"}" successfully!`);
@@ -232,7 +234,7 @@ export function BotBrowserModal({ open, onClose }: Props) {
     }
   };
 
-  const avatarUrl = (fullPath: string) => `/api/bot-browser/chub/avatar/${fullPath}`;
+  const avatarUrl = (fullPath: string) => botBrowserAssetUrl(`chub/avatar/${fullPath}`);
 
   const totalPages = Math.ceil(totalCount / 48);
 
@@ -373,6 +375,48 @@ export function BotBrowserModal({ open, onClose }: Props) {
 
 // ── Card tile in the grid ──
 
+function BotBrowserAssetImage({
+  src,
+  alt,
+  className,
+  loading,
+  onError,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  loading?: "eager" | "lazy";
+  onError: () => void;
+}) {
+  const [resolvedSrc, setResolvedSrc] = useState(() => (src.startsWith("tauri-api:") ? "" : src));
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    resolveBotBrowserAssetUrl(src)
+      .then((url) => {
+        if (cancelled) {
+          if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url.startsWith("blob:") ? url : null;
+        setResolvedSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) onError();
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src, onError]);
+
+  if (!resolvedSrc) return null;
+  return <img src={resolvedSrc} alt={alt} loading={loading} className={className} onError={onError} />;
+}
+
 function CardTile({
   card,
   avatarUrl,
@@ -397,7 +441,7 @@ function CardTile({
             <Hash size="2rem" />
           </div>
         ) : (
-          <img
+          <BotBrowserAssetImage
             src={avatarUrl(card.fullPath)}
             alt={card.name}
             loading="lazy"
@@ -496,7 +540,7 @@ function DetailView({
                   <Hash size="2.5rem" />
                 </div>
               ) : (
-                <img
+                <BotBrowserAssetImage
                   src={avatarUrl(card.fullPath)}
                   alt={card.name}
                   className="h-full w-full object-cover"

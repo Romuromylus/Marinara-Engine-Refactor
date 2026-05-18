@@ -7,9 +7,11 @@
 // ──────────────────────────────────────────────
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import type { DirectionCommand } from "@marinara-engine/shared";
+import { resolveManagedLocalAssetUrl } from "../../../shared/api/local-file-api";
 
 /** Cross-fading background layer — renders two stacked layers and transitions between them. */
 function CrossfadeBackground({ url }: { url?: string }) {
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(url ?? null);
   const [layers, setLayers] = useState<{ front: string | null; back: string | null; fading: boolean }>({
     front: url ?? null,
     back: null,
@@ -18,7 +20,21 @@ function CrossfadeBackground({ url }: { url?: string }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    const incoming = url ?? null;
+    let cancelled = false;
+    resolveManagedLocalAssetUrl(url ?? null)
+      .then((nextUrl) => {
+        if (!cancelled) setResolvedUrl(nextUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  useEffect(() => {
+    const incoming = resolvedUrl ?? null;
     if (incoming === layers.front) return;
     clearTimeout(timerRef.current);
     // Push current front to back, set new url as front, start fading
@@ -28,7 +44,7 @@ function CrossfadeBackground({ url }: { url?: string }) {
     }, 750);
     return () => clearTimeout(timerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url]);
+  }, [resolvedUrl]);
 
   const isBlack = !layers.front || layers.front === "black";
 

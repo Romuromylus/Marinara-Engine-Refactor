@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../shared/lib/api-client";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { Loader2, FileText } from "lucide-react";
+import { toast } from "sonner";
 
 const DEFAULT_PARAMS = {
   temperature: 0.9,
@@ -51,8 +52,8 @@ export function CreatePresetModal({ open, onClose }: Props) {
       onClose();
       reset();
       if (presetId) openPresetDetail(presetId);
-    } catch {
-      // stay in modal on failure
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create preset");
     }
   };
 

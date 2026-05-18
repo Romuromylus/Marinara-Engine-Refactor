@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
 import { getChatDisplayName } from "../../../shared/lib/chat-display";
 import { cn } from "../../../shared/lib/utils";
+import { importApi } from "../../../shared/api/import-api";
 import {
   chatKeys,
   useChatGroup,
@@ -47,13 +48,15 @@ export function ChatFilesDrawer({ chat, open, onClose }: ChatFilesDrawerProps) {
 
     setIsImporting(true);
     try {
-      const formData = new FormData();
-      formData.append("chatId", chat.id);
-      formData.append("file", file);
-      const res = await fetch("/api/import/st-chat-into-group", { method: "POST", body: formData });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.success === false || data?.error) {
-        toast.error(`Import failed: ${data?.error ?? res.statusText ?? "Unknown error"}`);
+      const data = await importApi.stChatIntoGroup<{
+        success?: boolean;
+        error?: string;
+        messagesImported?: number;
+        groupId?: string | null;
+        chatId?: string;
+      }>(chat.id, file);
+      if (data?.success === false || data?.error) {
+        toast.error(`Import failed: ${data?.error ?? "Unknown error"}`);
         return;
       }
       toast.success(`Imported ${data.messagesImported ?? 0} messages as a new chat file`);

@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { Search, Loader2, ImageOff } from "lucide-react";
+import { gifsApi } from "../../api/integration-utility-api";
 
 interface GifResult {
   id: string;
@@ -91,15 +92,7 @@ export function GifPicker({ open, onClose, onSelect, anchorRef, containerRef }: 
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ limit: "20" });
-      if (q.trim()) params.set("q", q.trim());
-      if (pos) params.set("pos", pos);
-      const res = await fetch(`/api/gifs/search?${params}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Failed to fetch GIFs");
-      }
-      const data: { results: GifResult[]; next: string } = await res.json();
+      const data = await gifsApi.search({ q, limit: 20, pos });
       if (pos) {
         setResults((prev) => [...prev, ...data.results]);
       } else {

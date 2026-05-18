@@ -47,6 +47,7 @@ import { useGenerate } from "../../generation/hooks/use-generate";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { spriteKeys, type SpriteInfo } from "../../characters/hooks/use-characters";
 import { api, getJsonRepairRequest, type JsonRepairRequest } from "../../../shared/api/api-client";
+import { gameAssetFileUrlFromPath, userBackgroundUrl } from "../../../shared/api/local-file-api";
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
 import { cn, type AvatarCrop, type LegacyAvatarCrop, type AvatarCropValue } from "../../../shared/lib/utils";
 import { filterLanguageGenerationConnections } from "../../../shared/lib/connection-filters";
@@ -74,7 +75,6 @@ import { resolveCombatFullBodyPose, resolveDialogueFullBodyPose } from "../lib/g
 import { characterNamesMatch, findNamedEntry } from "../lib/game-character-name-match";
 import { normalizeGameSegmentEdit, serializeGameSegmentEdit, type GameSegmentEdit } from "../lib/game-segment-edits";
 import { useSceneAnalysis } from "../../roleplay/hooks/use-scene-analysis";
-import { useSidecarStore } from "../../../shared/stores/sidecar.store";
 import { parsePartyDialogue } from "../lib/party-dialogue-parser";
 import { dispatchSpotifySceneTrackChange } from "../../../shared/lib/spotify-playback-events";
 import { ActiveWorldInfoButton, ActiveWorldInfoModal } from "../../chats/components/ActiveWorldInfoButton";
@@ -1017,12 +1017,12 @@ function interactiveCommandKey(chatId: string, messageId: string): string {
   return `${chatId}:${messageId}`;
 }
 
-function backgroundAssetUrl(entry: { path: string }): string {
+function backgroundAssetUrl(entry: { path: string; absolutePath?: string }): string {
   if (entry.path.startsWith("__user_bg__/")) {
     const filename = entry.path.replace("__user_bg__/", "");
-    return `/api/backgrounds/file/${encodeURIComponent(filename)}`;
+    return userBackgroundUrl(filename);
   }
-  return `/api/game-assets/file/${entry.path}`;
+  return gameAssetFileUrlFromPath(entry.path, entry.absolutePath);
 }
 
 const BACKGROUND_FALLBACK_IGNORED_WORDS = new Set(["background", "backgrounds", "generated", "user"]);
@@ -2603,13 +2603,6 @@ export function GameSurface({
   void _journalEntry;
   const transitionGameState = useTransitionGameState();
   const sceneAnalysis = useSceneAnalysis();
-  const sidecarConfig = useSidecarStore((s) => s.config);
-  const sidecarReady = useSidecarStore((s) => s.inferenceReady);
-  const sidecarStatus = useSidecarStore((s) => s.status);
-  const sidecarStartupError = useSidecarStore((s) => s.startupError);
-  const sidecarFailedRuntimeVariant = useSidecarStore((s) => s.failedRuntimeVariant);
-  const openSidecarModal = useSidecarStore((s) => s.setShowDownloadModal);
-  const refreshSidecarStatus = useSidecarStore((s) => s.fetchStatus);
   const sceneAnalysisEnabled = chatMeta.enableAgents === true || chatMeta.enableAgents === "true";
 
   // Process GM tags from the latest assistant message
@@ -3306,20 +3299,13 @@ export function GameSurface({
 
   const restoredSegmentIndex = restoredNarrationState.index;
 
-  // Check if async scene preparation exists (sidecar or connection-based scene model)
+  // Check if async scene preparation exists through a connection-based scene model.
   const hasAsyncScenePrep = useMemo(() => {
     if (!sceneAnalysisEnabled) return false;
-    const useSidecar = sidecarConfig.useForGameScene && sidecarReady;
     const setupCfg = chatMeta.gameSetupConfig as Record<string, unknown> | null;
     const sceneConnId = (chatMeta.gameSceneConnectionId as string) || (setupCfg?.sceneConnectionId as string) || null;
-    return useSidecar || !!sceneConnId;
-  }, [
-    sceneAnalysisEnabled,
-    sidecarConfig.useForGameScene,
-    sidecarReady,
-    chatMeta.gameSetupConfig,
-    chatMeta.gameSceneConnectionId,
-  ]);
+    return !!sceneConnId;
+  }, [sceneAnalysisEnabled, chatMeta.gameSetupConfig, chatMeta.gameSceneConnectionId]);
 
   // True when latest message needs scene effects that haven't been applied yet
   const scenePreparing =
@@ -3429,7 +3415,6 @@ export function GameSurface({
         : tags.stateChange === "exploration" || tags.stateChange === "dialogue" || tags.stateChange === "travel_rest"
           ? tags.stateChange
           : gameState;
-    const useSidecar = sceneAnalysisEnabled && sidecarConfig.useForGameScene && sidecarReady;
     const setupConfig = chatMeta.gameSetupConfig as Record<string, unknown> | null;
     const sceneConnId = sceneAnalysisEnabled
       ? (chatMeta.gameSceneConnectionId as string) || (setupConfig?.sceneConnectionId as string) || null
@@ -3585,7 +3570,7 @@ export function GameSurface({
       return;
     }
 
-    console.warn("[scene-wrapup] path:", useSidecar ? "sidecar" : sceneConnId ? "connection" : "inline-only");
+    console.warn("[scene-wrapup] path:", sceneConnId ? "connection" : "inline-only");
     // Only send assets the LLM actually picks from: backgrounds (capped 50) and SFX (capped 50).
     // Music and ambient are handled by deterministic server-side scoring — not sent.
     const assetKeys = Object.keys(assets ?? {});
@@ -3634,29 +3619,7 @@ export function GameSurface({
         }
       };
 
-      if (useSidecar) {
-        sceneAnalysis.mutate(
-          {
-            narration: tags.cleanContent,
-            context: analysisContext,
-          },
-          {
-            onSuccess: (r) => {
-              onComplete();
-              applySceneResult(r, msg);
-            },
-            onError: () => {
-              onComplete();
-              setSceneAnalysisFailed(true);
-              applyInlineTags(tags, assets, msg);
-              if (sceneReadyMsgIdRef.current !== msg.id) {
-                sceneReadyMsgIdRef.current = msg.id;
-                setSceneReadyTick((t) => t + 1);
-              }
-            },
-          },
-        );
-      } else if (sceneConnId) {
+      if (sceneConnId) {
         sceneAnalysis.mutate(
           {
             chatId: activeChatId,
@@ -3715,7 +3678,7 @@ export function GameSurface({
       }, 120_000);
     };
 
-    if (useSpotifyGameMusic && (useSidecar || sceneConnId)) {
+    if (useSpotifyGameMusic && sceneConnId) {
       void fetchSpotifySceneCandidates(tags.cleanContent, sceneContext).then((availableSpotifyTracks) => {
         runSceneAnalysis({
           ...sceneContext,
@@ -4407,7 +4370,6 @@ export function GameSurface({
         : tags.stateChange === "exploration" || tags.stateChange === "dialogue" || tags.stateChange === "travel_rest"
           ? tags.stateChange
           : gameState;
-    const useSidecar = sidecarConfig.useForGameScene && sidecarReady;
     const setupConfig = chatMeta.gameSetupConfig as Record<string, unknown> | null;
     const sceneConnId =
       (chatMeta.gameSceneConnectionId as string) || (setupConfig?.sceneConnectionId as string) || null;
@@ -4449,13 +4411,7 @@ export function GameSurface({
       }
 
       let selectedTrack: SceneSpotifyTrackSelection | null = null;
-      if (useSidecar) {
-        const result = await sceneAnalysis.mutateAsync({
-          narration: tags.cleanContent,
-          context: { ...sceneContext, availableSpotifyTracks },
-        });
-        selectedTrack = result.spotifyTrack ?? null;
-      } else if (sceneConnId) {
+      if (sceneConnId) {
         const result = await sceneAnalysis.mutateAsync({
           chatId: activeChatId,
           connectionId: sceneConnId || undefined,
@@ -4502,8 +4458,6 @@ export function GameSurface({
     playSpotifySceneTrack,
     sceneAnalysis,
     sceneWrapCharacterNames,
-    sidecarConfig.useForGameScene,
-    sidecarReady,
     useSpotifyGameMusic,
   ]);
 
@@ -7338,13 +7292,12 @@ export function GameSurface({
 
   // World is built but the game hasn't started yet -- show "Start Game" screen.
   // Keep it visible until: (1) assistant content exists, (2) streaming is done,
-  // (3) scene preparation (sidecar / connection scene model) has finished,
+  // (3) scene preparation from the optional connection scene model has finished,
   // (4) any in-flight image / NPC portrait generation has completed.
   // Once ALL conditions are met for the first time the screen never returns.
   // sceneProcessed is computed above (near scenePreparing).
   const firstTurnFullyReady =
     hasEverHadPlayableContent && !isStreaming && sceneProcessed && !assetGenerationBlocksScene;
-  const sidecarStartupFailed = sidecarConfig.useForGameScene && sidecarStatus === "server_error" && !sidecarReady;
   // Don't auto-dismiss: wait for user to click Continue after typewriter finishes.
 
   const awaitingFirstTurn = sessionStatus === "active" && !introPresented;
@@ -8009,38 +7962,6 @@ export function GameSurface({
                       timeOfDay={gameSnapshot?.time ?? null}
                       showCelestial={false}
                     />
-                  </div>
-                )}
-
-                {sidecarStartupFailed && (
-                  <div className="pointer-events-auto absolute top-4 left-1/2 z-30 w-[min(92vw,42rem)] -translate-x-1/2">
-                    <div className="rounded-xl border border-amber-500/20 bg-black/80 px-4 py-3 shadow-lg backdrop-blur-sm">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-400" />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-medium text-amber-200">Local scene helper failed to start</div>
-                          <div className="mt-1 text-[0.6875rem] leading-relaxed text-white/70">
-                            Marinara will keep the game running without the local sidecar for now.
-                            {sidecarFailedRuntimeVariant &&
-                              ` Runtime: ${sidecarFailedRuntimeVariant.replace(/-/g, " ")}.`}
-                            {sidecarStartupError ? ` ${sidecarStartupError}.` : ""}
-                          </div>
-                          <div className="mt-1 text-[0.6875rem] leading-relaxed text-white/55">
-                            Open Local AI Model to retry startup, switch models, or disable local scene analysis
-                            temporarily.
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            void refreshSidecarStatus();
-                            openSidecarModal(true);
-                          }}
-                          className="rounded-lg bg-white/10 px-3 py-1.5 text-[0.6875rem] font-medium text-white/80 transition-colors hover:bg-white/20 hover:text-white"
-                        >
-                          Open Local AI Model
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 )}
 

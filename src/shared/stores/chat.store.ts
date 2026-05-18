@@ -2,6 +2,7 @@
 // Zustand Store: Chat Slice
 // ──────────────────────────────────────────────
 import { create } from "zustand";
+import { generationUtilityApi } from "../api/integration-utility-api";
 import type { AvatarCropValue } from "../lib/utils";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { Chat, ChatMode, Message } from "@marinara-engine/shared";
@@ -316,11 +317,7 @@ export const useChatStore = create<ChatState>()(
         if (ctrl) ctrl.abort();
         // Explicitly tell the server to abort — the SSE close event may not
         // fire reliably, so this ensures the backend (e.g. KoboldCPP) stops.
-        fetch("/api/generate/abort", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chatId: streamingChatId }),
-        }).catch(() => {});
+        generationUtilityApi.abort(streamingChatId).catch(() => {});
       }
     },
     appendStreamBuffer: (text, chatId) =>
