@@ -450,7 +450,7 @@ export function ChatSidebar() {
     (mode: ChatMode) => {
       const connectionRows = ((connections ?? []) as Array<{ id: string }>).filter((connection) => !!connection.id);
       if (connectionRows.length === 0) {
-        if (mode === "conversation" || mode === "roleplay") {
+        if (mode === "conversation" || mode === "roleplay" || mode === "game") {
           setPendingNewChatMode(mode);
         }
         return;

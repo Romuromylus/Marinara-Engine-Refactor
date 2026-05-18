@@ -44,7 +44,7 @@ import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
 import { ColorPicker } from "../../../shared/components/ui/ColorPicker";
 import { TrackerCardColorControls } from "../../../shared/components/ui/TrackerCardColorControls";
 import { ExpandedTextarea } from "../../../shared/components/ui/ExpandedTextarea";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
 import { parseTrackerCardColorConfig, serializeTrackerCardColorConfig } from "../../../shared/lib/tracker-card-colors";
 import {
   useCharacterSprites,
@@ -371,7 +371,7 @@ export function PersonaEditor() {
         onSelect={(format: ExportFormatChoice) => {
           if (!personaId) return;
           setExportDialogOpen(false);
-          void api.download(`/characters/personas/${personaId}/export?format=${format}`);
+          void exportApi.persona(personaId, format).then(exportApi.triggerDownload);
         }}
       />
       <AvatarGenerationModal

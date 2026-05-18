@@ -217,7 +217,7 @@ async function buildGameStateContext(
   chatId: string,
   chat: JsonRecord,
 ): Promise<{ context: string; location: string | null; playerItems: string[]; gameCards: JsonRecord[] }> {
-  const worldState = await storage.request<unknown>("GET", `/world-state/${encodeURIComponent(chatId)}`).catch(() => ({}));
+  const worldState = await storage.getWorldState<unknown>(chatId).catch(() => ({}));
   const state = parseJsonObject(worldState);
   const meta = parseJsonObject(chat.metadata);
   const gameCards = parseJsonArray<JsonRecord>(meta.gameCharacterCards);
@@ -277,7 +277,7 @@ async function loadSpellbookContext(
 ): Promise<{ context: string; attacks: CombatAttack[] }> {
   if (!spellbookId?.trim()) return { context: "", attacks: [] };
   const entries = await storage
-    .request<unknown>("GET", `/lorebooks/${encodeURIComponent(spellbookId)}/entries`)
+    .listLorebookEntries<unknown>(spellbookId)
     .then((rows) => (Array.isArray(rows) ? rows.filter(isRecord) : []))
     .catch(() => safeList<JsonRecord>(storage, "lorebook-entries", { lorebookId: spellbookId }));
 
@@ -826,12 +826,12 @@ async function recentHistory(storage: StorageGateway, chatId: string, depth: num
 }
 
 async function messagesForChat(storage: StorageGateway, chatId: string): Promise<Array<JsonRecord & Partial<Message>>> {
-  const rows = await storage.request<unknown>("GET", `/chats/${encodeURIComponent(chatId)}/messages`);
+  const rows = await storage.listChatMessages<unknown>(chatId);
   return Array.isArray(rows) ? rows.filter(isRecord) : [];
 }
 
 async function createChatMessage(storage: StorageGateway, chatId: string, message: JsonRecord): Promise<unknown> {
-  return storage.request("POST", `/chats/${encodeURIComponent(chatId)}/messages`, message);
+  return storage.createChatMessage(chatId, message);
 }
 
 async function requireChat(storage: StorageGateway, chatId: string): Promise<JsonRecord & Partial<Chat>> {

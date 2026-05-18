@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "../../../shared/lib/utils";
-import { ApiError } from "../../../shared/api/api-client";
+import { ApiError } from "../../../shared/api/api-errors";
 import { importApi } from "../../../shared/api/import-api";
 
 interface Props {
@@ -266,7 +266,7 @@ export function STBulkImportModal({ open, onClose }: Props) {
           folderToken?: string;
           folders?: string[];
           error?: string;
-        }>(selected);
+        }>(selected, { pickerSelected: true });
         if (!data?.success || !data.path) {
           setError(`Unable to list directories${data?.error ? `: ${data.error}` : ""}`);
           setShowFolderBrowser(true);

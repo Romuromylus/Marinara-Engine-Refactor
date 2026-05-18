@@ -175,7 +175,7 @@ export async function generateConversationSchedules(
   if (Object.keys(newSchedules).length > 0) {
     const freshChat = (await capabilities.storage.get<JsonRecord>("chats", input.chatId)) ?? chat;
     const freshMeta = parseJsonObject(freshChat.metadata);
-    await capabilities.storage.request("PATCH", `/chats/${encodeURIComponent(input.chatId)}/metadata`, {
+    await capabilities.storage.patchChatMetadata(input.chatId, {
       ...freshMeta,
       conversationSchedulesEnabled: true,
       characterSchedules: newSchedules,
@@ -598,7 +598,7 @@ async function syncGeneratedSchedulesToOtherChats(
       changed = true;
     }
     if (changed) {
-      await storage.request("PATCH", `/chats/${encodeURIComponent(chatId)}/metadata`, {
+      await storage.patchChatMetadata(chatId, {
         ...meta,
         conversationSchedulesEnabled: true,
         characterSchedules: chatSchedules,

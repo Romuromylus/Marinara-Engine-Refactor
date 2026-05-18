@@ -2,7 +2,7 @@
 
 This document is the review plan for reorganizing Marinara into a TypeScript domain engine backed by a small Rust capability kernel. It intentionally avoids exact implementation code. It inventories the current refactor repository and the original TypeScript source files so every file has an explicit home or disposition.
 
-Scope notes: sidecar and sync-client are deferred as external-service work. They remain listed for completeness but should not drive the near-term module graph.
+Scope notes: sidecar and sync-client are deferred external-service work and must not be part of the active runtime graph.
 
 ## Architecture Decision
 
@@ -25,7 +25,7 @@ React features
 - Rust commands stay thin. They validate capability inputs, call Rust capability services, and return DTOs/events.
 - Storage record shapes are defined once in TypeScript contracts for UI/engine and persisted through Rust storage adapters. Rust may validate capability inputs but should not reimplement product rules.
 - Provider request construction may be TypeScript, but attaching secrets and making authenticated network calls is Rust.
-- Legacy `src/shared/legacy-shared` is temporary. Move its files into `src/engine/contracts` and remove the alias once imports are migrated.
+- Do not add compatibility barrels, one-line re-export shims, or `legacy-shared` aliases. Import contracts and helpers from their owning files.
 
 ## Target Repository Shape
 
@@ -65,11 +65,11 @@ src-tauri/
 
 | Planned file/module | Responsibility | Touches / dependencies |
 | --- | --- | --- |
-| src/engine/core/index.ts | Barrel for TS engine core primitives. | No React, no Tauri. |
+| src/engine/core/* | TS engine core primitives in owner files. | No React, no Tauri; avoid barrel-only files. |
 | src/engine/core/result.ts | Small success/error helpers for engine use cases. | Shared by all engine modules. |
 | src/engine/core/clock.ts | Clock abstraction for tests and scheduling. | Chat autonomous scheduling, agents, generation. |
 | src/engine/core/ids.ts | Client-side temporary IDs where safe; durable IDs may come from Rust storage. | Chat draft UI, optimistic updates. |
-| src/engine/contracts/index.ts | Barrel replacing @marinara-engine/shared alias. | All TS modules. |
+| src/engine/contracts/* | TS-owned contracts imported from their owning files. | All TS modules; avoid a catch-all contracts barrel. |
 | src/engine/contracts/constants/* | Copied shared constants. | UI and engine. |
 | src/engine/contracts/types/* | Copied shared type contracts. | UI, engine, shared/api. |
 | src/engine/contracts/schemas/* | Copied Zod schemas. | Form validation, command input validation. |
@@ -141,15 +141,12 @@ src-tauri/
 | src-tauri/src/events/mod.rs | Typed event names and emit helpers. |
 | src-tauri/crates/core/src/lib.rs | Rust error, paths, config, IDs, cancellation, logging foundations. |
 | src-tauri/crates/security/src/lib.rs | Secrets, path safety, outbound URL policy, safe fetch, content type validation, permissions. |
-| src-tauri/crates/storage/src/lib.rs | Raw file-backed storage manager, atomic writes, manifests, repositories, backups. |
+| src-tauri/crates/storage/src/lib.rs | Raw file-backed storage manager, atomic writes, manifests, repositories, current Tauri migrations. |
 | src-tauri/crates/llm/src/lib.rs | Authenticated provider transport, model discovery, streaming fetch, redaction, local URL policy. |
 | src-tauri/crates/assets/src/lib.rs | Avatar/background/gallery/font/blob validation and placement. |
 | src-tauri/crates/import/src/lib.rs | Filesystem import scanners, path tokens, PNG card IO, profile import/export file operations. |
 | src-tauri/crates/integrations/src/lib.rs | OAuth, tokens, authenticated integration calls, native device calls. |
 | src-tauri/crates/updates/src/lib.rs | Update metadata, permission-gated application. |
-| src-tauri/crates/sidecar/src/lib.rs | Deferred placeholder; external-service scope. |
-| src-tauri/crates/sync-client/src/lib.rs | Deferred placeholder; external-service scope. |
-| src-tauri/crates/sync-protocol/src/lib.rs | Deferred placeholder until sync returns. |
 
 ## Module Boundary Map
 
@@ -161,7 +158,7 @@ src-tauri/
 | Prompt/Lorebook/Regex | TypeScript engine | Storage and optional embedding capabilities | Mostly copy/adapt existing TS. |
 | Game | TypeScript engine | Rust storage/assets/LLM transport | Mechanics are not performance risky; keep in TS. |
 | Chat autonomous/Roleplay | TypeScript engine | Rust storage/assets/LLM transport/integrations | Chat scheduling/autonomous rules and roleplay rules stay TS. |
-| Storage | Rust capability | TypeScript StorageGateway | Atomic writes, backups, manifests, path safety need Rust. |
+| Storage | Rust capability | TypeScript StorageGateway | Atomic writes, manifests, and path safety need Rust. |
 | Security | Rust capability | All adapters | Secrets, OAuth, cookies, safe fetch, path safety. |
 | LLM provider calls | Rust transport with TS request shaping | Agents/generation | Secrets and SSRF policy stay Rust. |
 | Integrations | Split | Rust auth/network/native; TS orchestration/heuristics | Spotify/TTS/translation/bot-browser/haptic. |
@@ -2726,8 +2723,8 @@ Generated from 2887 files in the current refactor repository, excluding node_mod
 | src/features/agents/hooks/use-agents.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/agents/hooks/use-custom-tools.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/agents/hooks/use-regex-scripts.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
-| src/features/autonomous/hooks/use-autonomous-messaging.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
-| src/features/autonomous/hooks/use-background-autonomous.ts | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
+| src/features/chats/hooks/autonomous/use-autonomous-messaging.ts | Conversation-mode hook | Keep in TypeScript. Conversation autonomy belongs under chats; do not share this path with roleplay or game mode. |
+| src/features/chats/hooks/autonomous/use-background-autonomous.ts | Conversation-mode hook | Keep in TypeScript. Background autonomy belongs under chats; do not share this path with roleplay or game mode. |
 | src/features/bot-browser/components/BotBrowserModal.tsx | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/bot-browser/components/BotBrowserPanel.tsx | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
 | src/features/bot-browser/components/BotBrowserView.tsx | React feature UI | Keep in TypeScript. Components and hooks call shared/api or engine services; no privileged work. |
@@ -2965,58 +2962,7 @@ Generated from 2887 files in the current refactor repository, excluding node_mod
 | src/shared/hooks/use-page-activity.ts | Shared React hooks | Keep in TypeScript. Browser/UI hooks or thin API hooks only. |
 | src/shared/hooks/use-translate.ts | Shared React hooks | Keep in TypeScript. Browser/UI hooks or thin API hooks only. |
 | src/shared/hooks/use-tts.ts | Shared React hooks | Keep in TypeScript. Browser/UI hooks or thin API hooks only. |
-| src/shared/legacy-shared/constants/agent-prompts.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/chat-modes.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/defaults.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/game-assets.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/image-generation-defaults.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/impersonate.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/model-lists.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/providers.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/constants/security.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/index.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/agent.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/app-settings.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/character.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/chat-preset.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/chat.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/connection.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/custom-tool.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/extension.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/lorebook.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/prompt.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/regex.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/schemas/theme.schema.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/agent.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/character.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/chat-preset.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/chat.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/combat-encounter.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/connection.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/export.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/extension.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/game-state.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/game.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/haptic.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/image-generation-defaults.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/lorebook.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/persona.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/prompt.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/regex.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/scene.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/theme.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/tts.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/types/vn.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/agent-cost.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/game-state-text.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/generation-guide.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/lorebook-keyword-matching.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/macro-engine.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/music-score.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/regex-replacement.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/regex-safety.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/skill-check-format.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
-| src/shared/legacy-shared/utils/xml-wrapper.ts | Temporary contracts copy | Move into src/engine/contracts or engine utility homes; delete alias after imports are migrated. |
+| src/engine/contracts/** | Engine contracts | Current home for TS-owned contracts and schemas; import concrete files directly and do not recreate `legacy-shared` or catch-all barrels. |
 | src/shared/lib/agent-cadence.ts | Shared TS helper | Keep if pure/browser display. Move domain helpers to src/engine; reroute privileged helpers to Rust capability adapters. |
 | src/shared/lib/agent-failures.ts | Shared TS helper | Keep if pure/browser display. Move domain helpers to src/engine; reroute privileged helpers to Rust capability adapters. |
 | src/shared/lib/api-client.ts | Shared TS helper | Keep if pure/browser display. Move domain helpers to src/engine; reroute privileged helpers to Rust capability adapters. |
@@ -3389,7 +3335,7 @@ Generated from 562 TypeScript/TSX files under original packages/shared/src, pack
 | packages/server/src/routes/app-settings.routes.ts | Do not copy route shell | src/shared/api + src-tauri/src/commands | Fastify route wrapper is replaced by Tauri command/event wrapper; preserve behavior only. |
 | packages/server/src/routes/avatars.routes.ts | Do not copy route shell | src/shared/api + src-tauri/src/commands | Fastify route wrapper is replaced by Tauri command/event wrapper; preserve behavior only. |
 | packages/server/src/routes/backgrounds.routes.ts | Do not copy route shell | src/shared/api + src-tauri/src/commands | Fastify route wrapper is replaced by Tauri command/event wrapper; preserve behavior only. |
-| packages/server/src/routes/backup.routes.ts | Do not copy route shell | src/shared/api + src-tauri/src/commands | Fastify route wrapper is replaced by Tauri command/event wrapper; preserve behavior only. |
+| packages/server/src/routes/backup.routes.ts | Do not copy route shell | import/profile current package commands only | Old backup/archive runtime compatibility is excluded; current profile package import/export is the replacement scope. |
 | packages/server/src/routes/bot-browser-chartavern.routes.ts | Do not copy route shell | src/shared/api + src-tauri/src/commands | Fastify route wrapper is replaced by Tauri command/event wrapper; preserve behavior only. |
 | packages/server/src/routes/bot-browser-datacat.routes.ts | Do not copy route shell | src/shared/api + src-tauri/src/commands | Fastify route wrapper is replaced by Tauri command/event wrapper; preserve behavior only. |
 | packages/server/src/routes/bot-browser-janny.routes.ts | Do not copy route shell | src/shared/api + src-tauri/src/commands | Fastify route wrapper is replaced by Tauri command/event wrapper; preserve behavior only. |
@@ -3585,7 +3531,7 @@ Generated from 562 TypeScript/TSX files under original packages/shared/src, pack
 | packages/shared/src/constants/model-lists.ts | Copy directly | src/engine/contracts/constants | Shared constants used by UI and engine; avoid duplicate copies. |
 | packages/shared/src/constants/providers.ts | Copy directly | src/engine/contracts/constants | Shared constants used by UI and engine; avoid duplicate copies. |
 | packages/shared/src/constants/security.ts | Copy directly | src/engine/contracts/constants | Shared constants used by UI and engine; avoid duplicate copies. |
-| packages/shared/src/index.ts | Copy/adapt barrel | src/engine/contracts/index.ts | Temporary compatibility barrel while imports are cleaned up. |
+| packages/shared/src/index.ts | Do not copy barrel | none | Import contracts from owning files instead of recreating a compatibility barrel. |
 | packages/shared/src/schemas/agent.schema.ts | Copy directly | src/engine/contracts/schemas | Zod validation for UI and engine boundaries. |
 | packages/shared/src/schemas/app-settings.schema.ts | Copy directly | src/engine/contracts/schemas | Zod validation for UI and engine boundaries. |
 | packages/shared/src/schemas/character.schema.ts | Copy directly | src/engine/contracts/schemas | Zod validation for UI and engine boundaries. |
@@ -3634,7 +3580,7 @@ Generated from 562 TypeScript/TSX files under original packages/shared/src, pack
 ## Implementation Sequence
 
 1. Add `src/engine` folders and capability interfaces without moving behavior yet.
-2. Move `src/shared/legacy-shared` into `src/engine/contracts`; keep a temporary barrel/alias until all imports are updated.
+2. Move shared contracts into `src/engine/contracts` owner files with direct imports; do not add temporary barrels or aliases.
 3. Add `shared/api` Tauri adapter shells for storage, LLM, assets, imports, integrations, and events.
 4. Implement Rust storage/security/LLM-transport foundations first because TS engine modules need those capabilities.
 5. Copy/adapt prompt, lorebook, regex, and LLM context-fit helpers into `src/engine`.
@@ -3642,7 +3588,7 @@ Generated from 562 TypeScript/TSX files under original packages/shared/src, pack
 7. Copy/adapt generation orchestration into `src/engine/generation`; switch streaming from SSE to Tauri events through `LlmGateway`.
 8. Move game, conversation, and roleplay service logic into `src/engine`, replacing DB/filesystem/network calls with gateways.
 9. Update React hooks to call engine use cases and shared/api adapters.
-10. Remove old `/api` seams, `legacy-shared` alias, and placeholder unavailable calls after each vertical slice is real.
+10. Remove old `/api` seams, placeholder unavailable calls, and any compatibility shims after each vertical slice is real.
 
 ## Review Questions
 

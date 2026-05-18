@@ -251,9 +251,10 @@ export async function* generateLorebookMaker(
     if (!capabilities.storage) {
       throw new Error("Lorebook auto-save requires a storage capability.");
     }
-    await capabilities.storage.request?.("POST", `/lorebooks/${encodeURIComponent(input.lorebookId)}/entries/bulk`, {
-      entries: allEntries.map((entry) => ({ ...entry, lorebookId: input.lorebookId })),
-    });
+    await capabilities.storage.createLorebookEntries(
+      input.lorebookId,
+      allEntries.map((entry) => ({ ...entry, lorebookId: input.lorebookId })),
+    );
     yield { type: "saved", data: { count: allEntries.length, lorebookId: input.lorebookId } };
   }
 

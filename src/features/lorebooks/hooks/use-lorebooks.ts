@@ -4,7 +4,7 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { scanActiveLorebookEntries } from "../../../engine/generation/active-lorebooks";
 import { storageApi } from "../../../shared/api/storage-api";
-import { api, ApiError } from "../../../shared/api/api-client";
+import { ApiError } from "../../../shared/api/api-errors";
 import { invokeTauri } from "../../../shared/api/tauri-client";
 import type { Lorebook, LorebookEntry, LorebookFolder } from "../../../engine/contracts/types/lorebook";
 import { characterKeys } from "../../characters/hooks/use-characters";
@@ -21,6 +21,89 @@ export const lorebookKeys = {
   active: (chatId?: string | null) =>
     chatId ? ([...lorebookKeys.all, "active", chatId] as const) : ([...lorebookKeys.all, "active"] as const),
 };
+
+async function transferLorebookEntries(
+  sourceLorebookId: string,
+  targetLorebookId: string,
+  entryIds: string[],
+  operation: "copy" | "move",
+): Promise<{
+  operation: "copy" | "move";
+  sourceLorebookId: string;
+  targetLorebookId: string;
+  requested: number;
+  transferred: number;
+  created: LorebookEntry[];
+}> {
+  const created: LorebookEntry[] = [];
+  for (const entryId of entryIds) {
+    const entry = await storageApi.get<LorebookEntry>("lorebook-entries", entryId);
+    if (!entry || entry.lorebookId !== sourceLorebookId) continue;
+    if (operation === "move") {
+      created.push(await storageApi.update<LorebookEntry>("lorebook-entries", entryId, { lorebookId: targetLorebookId }));
+    } else {
+      const copy = { ...(entry as unknown as Record<string, unknown>) };
+      delete copy.id;
+      created.push(
+        await storageApi.create<LorebookEntry>("lorebook-entries", {
+          ...copy,
+          lorebookId: targetLorebookId,
+        }),
+      );
+    }
+  }
+  return {
+    operation,
+    sourceLorebookId,
+    targetLorebookId,
+    requested: entryIds.length,
+    transferred: created.length,
+    created,
+  };
+}
+
+async function reorderLorebookEntries(
+  lorebookId: string,
+  entryIds: string[],
+  folderId?: string | null,
+): Promise<LorebookEntry[]> {
+  await Promise.all(
+    entryIds.map((entryId, index) => {
+      const patch: Record<string, unknown> = { order: index, sortOrder: index };
+      if (folderId !== undefined) patch.folderId = folderId;
+      return storageApi.update("lorebook-entries", entryId, patch);
+    }),
+  );
+  return storageApi.list<LorebookEntry>("lorebook-entries", { filters: { lorebookId } });
+}
+
+async function reorderLorebookFolders(lorebookId: string, folderIds: string[]): Promise<LorebookFolder[]> {
+  await Promise.all(
+    folderIds.map((folderId, index) =>
+      storageApi.update("lorebook-folders", folderId, {
+        order: index,
+        sortOrder: index,
+      }),
+    ),
+  );
+  return storageApi.list<LorebookFolder>("lorebook-folders", { filters: { lorebookId } });
+}
+
+function lorebookEntryMatches(entry: LorebookEntry, query: string) {
+  const haystack = [
+    entry.name,
+    entry.description,
+    entry.content,
+    entry.group,
+    entry.tag,
+    ...(Array.isArray(entry.keys) ? entry.keys : []),
+    ...(Array.isArray(entry.secondaryKeys) ? entry.secondaryKeys : []),
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n")
+    .toLowerCase();
+  return haystack.includes(query);
+}
 
 // ── Lorebooks ──
 
@@ -212,8 +295,15 @@ export function useDeleteLorebookEntry() {
 export function useBulkCreateEntries() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ lorebookId, entries }: { lorebookId: string; entries: unknown[] }) =>
-      api.post<LorebookEntry[]>(`/lorebooks/${lorebookId}/entries/bulk`, { entries }),
+    mutationFn: async ({ lorebookId, entries }: { lorebookId: string; entries: unknown[] }) =>
+      Promise.all(
+        entries.map((entry) =>
+          storageApi.create<LorebookEntry>("lorebook-entries", {
+            ...((entry && typeof entry === "object" && !Array.isArray(entry) ? entry : {}) as Record<string, unknown>),
+            lorebookId,
+          }),
+        ),
+      ),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: lorebookKeys.entries(variables.lorebookId) });
       qc.invalidateQueries({ queryKey: lorebookKeys.active() });
@@ -235,18 +325,7 @@ export function useTransferLorebookEntries() {
       entryIds: string[];
       operation: "copy" | "move";
     }) =>
-      api.post<{
-        operation: "copy" | "move";
-        sourceLorebookId: string;
-        targetLorebookId: string;
-        requested: number;
-        transferred: number;
-        created: LorebookEntry[];
-      }>(`/lorebooks/${sourceLorebookId}/entries/transfer`, {
-        targetLorebookId,
-        entryIds,
-        operation,
-      }),
+      transferLorebookEntries(sourceLorebookId, targetLorebookId, entryIds, operation),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: lorebookKeys.entries(variables.sourceLorebookId) });
       qc.invalidateQueries({ queryKey: lorebookKeys.entries(variables.targetLorebookId) });
@@ -272,10 +351,7 @@ export function useReorderLorebookEntries() {
        */
       folderId?: string | null;
     }) =>
-      api.put<LorebookEntry[]>(`/lorebooks/${lorebookId}/entries/reorder`, {
-        entryIds,
-        ...(folderId !== undefined ? { folderId } : {}),
-      }),
+      reorderLorebookEntries(lorebookId, entryIds, folderId),
     onSuccess: (entries, variables) => {
       qc.setQueryData(lorebookKeys.entries(variables.lorebookId), entries);
       qc.invalidateQueries({ queryKey: lorebookKeys.entries(variables.lorebookId) });
@@ -342,7 +418,7 @@ export function useReorderLorebookFolders() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ lorebookId, folderIds }: { lorebookId: string; folderIds: string[] }) =>
-      api.put<LorebookFolder[]>(`/lorebooks/${lorebookId}/folders/reorder`, { folderIds }),
+      reorderLorebookFolders(lorebookId, folderIds),
     onSuccess: (folders, variables) => {
       qc.setQueryData(lorebookKeys.folders(variables.lorebookId), folders);
       qc.invalidateQueries({ queryKey: lorebookKeys.folders(variables.lorebookId) });
@@ -353,7 +429,12 @@ export function useReorderLorebookFolders() {
 export function useSearchLorebookEntries(query: string) {
   return useQuery({
     queryKey: lorebookKeys.search(query),
-    queryFn: () => api.get<LorebookEntry[]>(`/lorebooks/search/entries?q=${encodeURIComponent(query)}`),
+    queryFn: async () => {
+      const q = query.trim().toLowerCase();
+      if (q.length < 2) return [];
+      const entries = await storageApi.list<LorebookEntry>("lorebook-entries");
+      return entries.filter((entry) => lorebookEntryMatches(entry, q));
+    },
     enabled: query.length >= 2,
   });
 }

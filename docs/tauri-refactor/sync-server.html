@@ -152,7 +152,7 @@ flowchart TB
 
   Metadata --> CRDT["CRDT or append-only log<br/>chats, messages, characters, lorebooks, game notes"]
   Settings --> LWW["LWW + revision history<br/>UI prefs, haptic, TTS, translation, generation params"]
-  Files --> CAS["Content-addressed blobs<br/>avatars, gallery, sprites, backgrounds, backups"]
+  Files --> CAS["Content-addressed blobs<br/>avatars, gallery, sprites, backgrounds, current profile packages"]
   Secrets --> NoSync["Do not sync by default<br/>API keys, OAuth refresh tokens"]
   LocalOnly --> Ignore["Never sync<br/>sidecar binaries, runtime installs, temp logs"]
         </pre>
@@ -174,7 +174,7 @@ flowchart TB
           <div class="compose-service">
             <strong>object storage</strong>
             <span>Local FS or S3</span>
-            <p>Avatars, gallery, sprites, generated assets, backups.</p>
+            <p>Avatars, gallery, sprites, generated assets, current profile packages.</p>
           </div>
           <div class="compose-service">
             <strong>redis</strong>

@@ -5,7 +5,7 @@ import { AlertTriangle, Check, ChevronDown, Plus, RefreshCw, Save } from "lucide
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Message } from "../../../engine/contracts/types/chat";
-import { api } from "../../../shared/api/api-client";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import { cn } from "../../../shared/lib/utils";
 import { useGenerate } from "../../generation/hooks/use-generate";
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
@@ -106,9 +106,10 @@ export function SecretPlotPanel({
     queryKey,
     enabled: !!chatId,
     queryFn: async () => {
-      const res = await api.get<{ agentConfigId: string; memory: Record<string, unknown> }>(
-        `/agents/memory/${AGENT_TYPE}/${chatId}`,
-      );
+      const res = await invokeTauri<{ agentConfigId: string; memory: Record<string, unknown> }>("agent_memory_get", {
+        agentType: AGENT_TYPE,
+        chatId,
+      });
       return res;
     },
   });
@@ -163,7 +164,11 @@ export function SecretPlotPanel({
   const patchMemory = useCallback(
     async (patch: Record<string, unknown>) => {
       if (!chatId) return;
-      await api.patch<{ memory: Record<string, unknown> }>(`/agents/memory/${AGENT_TYPE}/${chatId}`, { patch });
+      await invokeTauri<{ memory: Record<string, unknown> }>("agent_memory_patch", {
+        agentType: AGENT_TYPE,
+        chatId,
+        patch,
+      });
       await qc.invalidateQueries({ queryKey });
     },
     [chatId, qc, queryKey],

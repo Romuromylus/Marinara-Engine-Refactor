@@ -17,7 +17,7 @@ import {
   useUIStore,
 } from "../../shared/stores/ui.store";
 import { useChatStore } from "../../shared/stores/chat.store";
-import { useBackgroundAutonomousPolling } from "../../features/autonomous/hooks/use-background-autonomous";
+import { useBackgroundAutonomousPolling } from "../../features/chats/hooks/autonomous/use-background-autonomous";
 import { useClearAutonomousUnread } from "../../features/chats/hooks/use-chats";
 import { useIdleDetection } from "../../shared/hooks/use-idle-detection";
 import { usePageActivity } from "../../shared/hooks/use-page-activity";

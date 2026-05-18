@@ -12,7 +12,7 @@ import { useAgentConfigs, useUpdateAgent, type AgentConfigRow } from "../../agen
 import { useCharacters, usePersonas } from "../../characters/hooks/use-characters";
 import { useGenerate } from "../../generation/hooks/use-generate";
 import { useGameStatePatcher } from "../../world-state/hooks/use-world-state-patcher";
-import { api } from "../../../shared/api/api-client";
+import { npcAvatarApi } from "../../../shared/api/avatar-api";
 import { parseCharacterDisplayData } from "../../../shared/lib/character-display";
 import { cn } from "../../../shared/lib/utils";
 import {
@@ -284,10 +284,7 @@ export function TrackerDataSidebar({ fillHeight = false }: { fillHeight?: boolea
         const targetCharacterId = character.characterId;
 
         try {
-          const response = await api.post<{ avatarPath: string }>(`/avatars/npc/${activeChatId}`, {
-            name: character.name,
-            avatar: dataUrl,
-          });
+          const response = await npcAvatarApi.upload(activeChatId, character.name, dataUrl);
           const latestState = useGameStateStore.getState().current;
           const latestCharacters = latestState?.chatId === activeChatId ? (latestState.presentCharacters ?? []) : [];
           const targetIndex = latestCharacters.findIndex((candidate) => candidate.characterId === targetCharacterId);

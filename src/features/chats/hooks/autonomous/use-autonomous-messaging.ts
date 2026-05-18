@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { checkConversationAutonomous, checkConversationCharacterExchange, clearGenerationInProgress, getConversationBusyDelay, markGenerationInProgress, recordAssistantActivity as recordAssistantActivityState, recordAutonomousClientPresence, recordUserActivity as recordUserActivityState } from "../../../engine/modes/chat/autonomous/autonomous.service";
-import { generateConversationSchedules } from "../../../engine/modes/chat/schedules/schedule.service";
-import { llmApi } from "../../../shared/api/llm-api";
-import { storageApi } from "../../../shared/api/storage-api";
-import { useChatStore } from "../../../shared/stores/chat.store";
-import { useUIStore } from "../../../shared/stores/ui.store";
-import { characterKeys } from "../../characters/hooks/use-characters";
-import { chatKeys } from "../../chats/hooks/use-chats";
-import { useGenerate } from "../../generation/hooks/use-generate";
+import { checkConversationAutonomous, checkConversationCharacterExchange, clearGenerationInProgress, getConversationBusyDelay, markGenerationInProgress, recordAssistantActivity as recordAssistantActivityState, recordAutonomousClientPresence, recordUserActivity as recordUserActivityState } from "../../../../engine/modes/chat/autonomous/autonomous.service";
+import { generateConversationSchedules } from "../../../../engine/modes/chat/schedules/schedule.service";
+import { llmApi } from "../../../../shared/api/llm-api";
+import { storageApi } from "../../../../shared/api/storage-api";
+import { useChatStore } from "../../../../shared/stores/chat.store";
+import { useUIStore } from "../../../../shared/stores/ui.store";
+import { characterKeys } from "../../../characters/hooks/use-characters";
+import { chatKeys } from "../use-chats";
+import { useGenerate } from "../../../generation/hooks/use-generate";
 
 export function useAutonomousMessaging(
   chatId: string | null,
@@ -122,10 +122,6 @@ export function useAutonomousMessaging(
     if (!chatId || !autonomousEnabled) return;
 
     const poll = async () => {
-      if (document.hidden) {
-        schedulePoll(poll);
-        return;
-      }
       if (generatingRef.current || useChatStore.getState().abortControllers.has(chatId)) {
         schedulePoll(poll);
         return;

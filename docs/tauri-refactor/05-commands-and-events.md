@@ -209,7 +209,7 @@ font_list
 font_load
 ```
 
-### Imports And Backups
+### Imports And Current Profile Packages
 
 ```text
 import_pick_folder
@@ -218,28 +218,15 @@ import_scan_sillytavern
 import_run_sillytavern_bulk
 import_character_card
 import_lorebook
-backup_export_profile
-backup_import_profile
-backup_create_archive
-backup_restore_archive
+profile_export_current
+profile_import_current
 ```
+
+Old backup/archive compatibility is not part of the runtime application. If old install data needs conversion later, that belongs in a separate migration script.
 
 ### Sidecar
 
-```text
-sidecar_get_status
-sidecar_get_config
-sidecar_update_config
-sidecar_list_models
-sidecar_download_model
-sidecar_cancel_download
-sidecar_install_runtime
-sidecar_reinstall_runtime
-sidecar_start
-sidecar_stop
-sidecar_restart
-sidecar_get_logs
-```
+Sidecar commands are intentionally absent from the active Tauri app until the sidecar scope is reintroduced.
 
 ### Integrations
 
@@ -394,4 +381,4 @@ src/shared/api/bindings.ts
 
 Frontend code should import DTOs from generated bindings, not duplicate shapes by hand.
 
-Rust domain crates own their own frontend-facing DTOs. Do not create a central contracts crate. Shared primitives such as IDs and pagination should come from `core`; sync protocol shapes should come from `sync-protocol`.
+Rust domain crates own their own frontend-facing DTOs. Do not create a central contracts crate. Shared primitives such as IDs and pagination should come from `core`; sync protocol shapes are deferred with sync.

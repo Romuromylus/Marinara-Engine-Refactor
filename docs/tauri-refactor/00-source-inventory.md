@@ -119,7 +119,7 @@ Status: Complete.
 - Reopened the settings slice during cleanup and replaced the reduced `SettingsPanel` with the moved original `components/panels/SettingsPanel.tsx`, including tracker-panel appearance controls, custom font/background UI, import/export flows, advanced/admin controls, and the original synced-theme hook contract.
 - Moved original settings support that the panel expects, including `components/panels/settings/TTSConfigCard.tsx` and the original `hooks/use-themes.ts`; backend/file actions intentionally route through unavailable API seams.
 - Wired the existing right panel settings route to render the migrated `SettingsPanel`.
-- Deferred real persistence, imports, backups, updates, background/font file operations, extension execution, and destructive data actions until their owning Rust backend slices.
+- Deferred real persistence, imports, current profile package export/import, updates, background/font file operations, extension execution, and destructive data actions until their owning Rust backend slices.
 
 ### Phase 2 Slice 2 Theme/Preferences UI
 
@@ -208,7 +208,7 @@ Status: Complete, reworked from simplified shell to moved original UI tree.
 - Added a thin `GameConversationView` adapter that wires selected `game` chats into the moved original `GameSurface`; it supplies existing chat/message query results and leaves backend-dependent actions routed to failing seams.
 - Moved supporting original UI used directly by the game surface: `ActiveWorldInfoButton.tsx`, `ChatGallery.tsx`, `ChatGalleryDrawer.tsx`, `ChatRoleplayPanels.tsx`, `ImagePromptPanel.tsx`, `PinnedImageOverlay.tsx`, `SpriteOverlay.tsx`, `WeatherEffects.tsx`, `chat-area.types.ts`, `sprite-display-modes.ts`, and `sprite-placement.ts`.
 - Moved original shared UI/helpers needed by the game tree: `EmojiPicker.tsx`, `GenerationParametersEditor.tsx`, `ImagePromptReviewModal.tsx`, `SpeechToTextButton.tsx`, `utils.ts`, `character-display.ts`, `chat-macros.ts`, `connection-filters.ts`, `dialogue-quotes.ts`, `draft-translation.ts`, `markdown.tsx`, `spotify-playback-events.ts`, `tts-audio-cache.ts`, `tts-dialogue.ts`, `tts-service.ts`, `ui.store.ts`, and `sidecar.store.ts`.
-- Copied original `packages/shared/src` to `src/shared/legacy-shared` and aliased `@marinara-engine/shared` to it so moved UI retains its original type imports until Rust-generated DTO bindings replace it in Phase 3.
+- Earlier copied shared contracts have been moved into owner files under `src/engine/contracts`; do not recreate `legacy-shared` aliases or barrel shims.
 - Added explicit unavailable/inert seams for later backend or future frontend slices: generation (`useGenerate`), scene analysis (`useSceneAnalysis`), regex application, translation, TTS config, gallery persistence, and agent expression results. These do not fake success or persistence.
 - Added original client dependencies required by moved UI: `@dnd-kit/core` and `zod`.
 - Deferred real backend behavior to later Rust slices: turn orchestration, generation streaming, scene analysis, map/combat/checkpoint/journal/inventory mutation persistence, gallery file storage, asset generation, TTS/translation/provider calls, Spotify playback, and filesystem-backed game assets.

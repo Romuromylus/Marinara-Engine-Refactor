@@ -17,7 +17,7 @@ Last updated: 2026-05-18.
 - [x] Confirmed conversation/autonomous is a chat subsystem under `engine/modes/chat`.
 - [x] Confirmed sidecar and sync-client are deferred external-service scope.
 - [~] Create `src/engine` layers from `docs/tauri-refactor/14-layered-module-architecture.md`.
-- [~] Replace server-stub frontend API with typed Tauri/native calls. StorageGateway and LLMGateway now use direct Tauri commands, but the generic `api_request` router remains for many feature hooks and must keep shrinking.
+- [x] Replace server-stub frontend API with typed Tauri/native calls. The generic `api_request`/string-router bridge has been removed from both TypeScript and Rust.
 - [x] Build Rust capability commands for storage, assets/imports, LLM transport, and integrations.
 - [x] Removed direct browser `fetch('/api/...')` calls for local Fastify routes; local app calls now go through Tauri API adapters or local TypeScript helpers.
 - [x] Removed remaining active source `fetch()` calls; non-API blob loading no longer uses browser fetch.
@@ -29,7 +29,7 @@ Last updated: 2026-05-18.
 - [x] Layer 0: `src/engine/core` primitives.
 - [x] Layer 1: `src/engine/capabilities` TypeScript ports.
 - [x] Layer 2: `src/engine/shared` pure helpers.
-- [ ] Layer 3: `src/engine/entities` pure entity operations.
+- [  ] Layer 3: `src/engine/entities` pure entity operations.
 - [x] Layer 4: `src/engine/repositories` capability-backed repositories.
 - [~] Layer 5: `src/engine/generation-core` prompt, lorebook, regex, LLM DTO helpers.
 - [~] Layer 6: `src/engine/agents-runtime` agent executor, pipeline, knowledge, and tools.
@@ -46,7 +46,7 @@ Last updated: 2026-05-18.
 - [x] `src-tauri/src/commands/storage.rs` command facade split into capability modules under `src-tauri/src/commands/storage/`.
 - [x] Asset commands are routed through focused storage capability modules and `marinara-assets`; the deleted top-level asset shim is no longer active.
 - [x] Import commands: character JSON/PNG/CharX, native `.marinara` packages, lorebooks, presets, personas, JSONL chat imports, native folder picking, ST bulk scan/run, current-format media restore, folder/group remapping, and current Marinara/ST heuristic handling are routed through native storage.
-- [~] LLM provider transport commands are wired through typed Tauri commands, `commands/storage/llm.rs`, and `crates/llm`; `openai_chatgpt` and `claude_subscription` parity still needs a real native implementation before they can be restored to the active UI.
+- [~] LLM provider transport commands are wired through typed Tauri commands, `commands/storage/llm.rs`, and `crates/llm`; `openai_chatgpt` and `claude_subscription` are restored in contracts/model catalogs, but native local-auth transport still needs full parity.
 - [x] Integration commands are wired through focused native storage modules and `crates/integrations`.
 - [x] Browser-era update/PWA commands were removed from the active Tauri app surface.
 - [x] Removed unused `src-tauri/src/events/mod.rs`; active streaming uses typed Tauri channels.
@@ -136,6 +136,11 @@ Last updated: 2026-05-18.
 - [x] Rebuilt current-format imports/exports for Marinara character/persona/lorebook/preset envelopes, SillyTavern-compatible exports, embedded character media, sprite/gallery restore, prompt group/section remapping, and embedded lorebook pointer cleanup.
 - [x] Replaced prompt-review fallback assembly with full preset/section/group/choice-block orchestration over migrated storage and LLM streaming.
 - [x] Removed duplicate API re-export shims, deleted conversation-mode re-export wrappers, removed active sidecar/sync runtime branches, removed active legacy runtime compatibility paths, and kept old-data conversion out of normal app code.
+- [x] Removed the generic local API bridge (`shared/api/api-client.ts`, Rust `api_request`, `api_stream_events`, `api_stream_channel`, and `storage/router.rs`) and moved remaining callers to typed storage, LLM, asset, import/export, bot-browser, integration, or feature APIs.
+- [x] Replaced the path-string TypeScript storage gateway with explicit capability methods for chat messages, metadata, summaries, memories, lorebook entries, prompt presets, world state, and message swipes.
+- [x] Restored `openai_chatgpt` and `claude_subscription` provider IDs in TypeScript contracts, Zod schemas, provider definitions, model lists, and Rust static model catalogs so the connection UI no longer silently drops original provider choices.
+- [x] Removed empty feature directories and deleted router-only Rust dead functions left after the bridge removal.
+- [x] Replaced internal import helper path dispatch with direct named Tauri import commands.
 
 ## 2026-05-18 Follow-up Parity Pass
 
@@ -152,15 +157,34 @@ Last updated: 2026-05-18.
 - [x] Moved engine storage and LLM gateways off the generic local route string and onto typed Tauri commands (`storage_*`, `llm_*`).
 - [x] Removed empty/dead crate placeholders, including deferred sidecar/sync placeholders.
 
+## 2026-05-18 Current Audit Cleanup Pass
+
+- [x] Re-ran current-state audits against the original repo for generation/autonomy, assets/imports/bot-browser, and mode separation. The audit found behavior bugs rather than old Fastify `/api` fetches.
+- [x] Fixed the generation request contract mismatch: `startGeneration` now accepts the original `userMessage` field as well as `message`, so chat send, roleplay choices, slash commands, autonomous sends, and game input no longer drop the user's turn.
+- [x] Wired generation attachments into the migrated pipeline: readable text attachments are appended to the user prompt and saved message, image attachments are passed through `LlmMessage.images`, and attachment/mention metadata is persisted on the saved user message.
+- [x] Added targeted generation directives for mentioned characters, requested responding character, and impersonation requests; impersonation can now block pre/post agents through the migrated engine input.
+- [x] Removed Node `Buffer` usage from browser-side generation helpers and replaced it with browser-safe `TextEncoder`, `TextDecoder`, and `atob`.
+- [x] Extended native LLM request shaping for OpenAI-compatible, Anthropic, and Google transports to carry multimodal image parts plus common parameters such as `top_p`, `top_k`, penalties, stop sequences, seed, response format, custom parameters, and OpenRouter provider routing where applicable.
+- [x] Added native default base URLs for Mistral, Cohere compatibility, and NanoGPT in the Rust LLM transport instead of falling through to OpenAI defaults.
+- [x] Tightened remote binary loading with Rust outbound URL policy, MIME validation, and response size limits.
+- [x] Tightened managed game asset handling: upload extension/category checks, filename sanitization, media/text size caps, text-file-only editing, hidden/manifest filtering, native top-level folder flags, image dimensions, and filesystem created/modified timestamps.
+- [x] Switched SillyTavern bulk import progress from accumulated events to a real Tauri channel so the UI can receive progress while the import is running.
+- [x] Fixed the sidebar new-game no-connection path so it opens the same connection-gate flow as conversation and roleplay instead of silently returning.
+- [x] Updated migration docs to remove stale backup/archive compatibility, sidecar/sync active-surface instructions, `legacy-shared` guidance, and barrel/re-export recommendations.
+
 ## Remaining Migration Gaps
 
-- [~] Generic local API router cleanup: `api_request`, `api_stream_events`, `api_stream_channel`, `shared/api/api-client.ts`, and many feature hooks still use method/path strings. StorageGateway and LLMGateway are direct now; assets, integrations, import/export helpers, and feature CRUD hooks still need typed command/client replacements.
-- [~] LLM provider parity: `openai_chatgpt` and `claude_subscription` are still not active because they need native Tauri implementations rather than the old Node SDK/server path.
-- [~] Prompt/command workflow parity: prompt reviewer and preset preview are migrated, but embedded command execution still needs a full current-app pass for the old command families that are still exposed in settings.
-- [~] Conversation autonomy parity: core local orchestration exists, but schedule inheritance, scene-busy filtering, talkativeness fallback, and follow-up limit parity still need deeper source-level migration.
+- [~] LLM provider parity: `openai_chatgpt` and `claude_subscription` are present in contracts/model catalogs, but their local-auth transports still need native Tauri implementations rather than the old Node SDK/server path.
+- [~] LLM provider parity: common OpenAI-compatible/Anthropic/Google parameters and image inputs are wired, but full original Responses API/GPT-5 reasoning, thinking events, usage accounting, abort propagation, and local-auth ChatGPT/Claude subscription parity are still not complete.
+- [~] Game mode parity: storage/assets/mechanics routes exist, but the main `GameSurface` send path still uses generic generation instead of a fully separate game turn orchestrator, and map/party-card/encounter/session mechanics still need a deeper original-vs-refactor migration pass.
+- [~] Roleplay scene parity: scene create/fork/conclude paths exist, but original per-character scene memory persistence and richer continuity context still need migration.
+- [~] Mode separation: `chat`, `roleplay`, and `game` have separate engine homes, but UI still has deep imports and large mixed surfaces that need to be split so editing one mode cannot affect the others.
+- [~] Prompt/command workflow parity: hidden command parsing now executes several storage/integration side effects, but UI/navigation/fetch/selfie/cross-post command families still need a complete current-app orchestration pass.
+- [~] Conversation autonomy parity: scheduleless talkativeness fallback, scene-busy filtering, follow-up limits, and hidden-window polling improved, but a Rust-side/background scheduler equivalent is still not present.
 - [~] Spotify DJ playlist parity: native Spotify transport exists, but exact DJ Mari playlist construction/playback behavior still needs original-vs-refactor parity work.
 - [~] Bot browser and paid provider parity: native routes exist, but auth/session recovery for non-Chub providers still needs live-provider verification and fixes as upstreams change.
-- [~] Large-file cleanup: `imports.rs`, `bot_browser.rs`, and `sprites.rs` are split out of `storage.rs` but are still large enough to merit further provider/workflow submodule cleanup.
+- [~] Import/assets parity: ST bulk import now streams, and game asset validation improved, but folder browsing/root token policy and current-package heuristics still need another source-level review.
+- [~] Large-file cleanup: `GameSurface.tsx`, `ChatSettingsDrawer.tsx`, `GameNarration.tsx`, and several Rust provider/workflow modules remain above the review threshold and need focused splits.
 
 ## Remaining External QA
 
@@ -193,3 +217,11 @@ Last updated: 2026-05-18.
 - [x] `pnpm build` passed on 2026-05-18 after full source migration parity and mode-separation cleanup, with Vite large-chunk warnings only.
 - [x] `pnpm typecheck` passed on 2026-05-18 after game JSON repair, translation persistence, typed storage/LLM command, and sprite cleanup-route fixes.
 - [x] `cargo check --manifest-path src-tauri/Cargo.toml` passed on 2026-05-18 after typed storage/LLM command additions.
+- [x] `pnpm typecheck` passed on 2026-05-18 after generic API bridge removal, typed storage gateway cleanup, and provider catalog restoration.
+- [x] `cargo check --manifest-path src-tauri/Cargo.toml` passed on 2026-05-18 after generic API bridge removal and Rust route dead-code cleanup.
+- [x] `pnpm build` passed on 2026-05-18 after generic API bridge removal, with Vite large-chunk warnings only.
+- [x] `pnpm check:docs` passed on 2026-05-18 after generic API bridge removal checklist updates.
+- [x] `pnpm typecheck` passed on 2026-05-18 after generation input/attachment, asset validation, import streaming, and docs cleanup.
+- [x] `cargo check --manifest-path src-tauri/Cargo.toml` passed on 2026-05-18 after generation image transport, asset validation, binary URL policy, and import streaming.
+- [x] `pnpm build` passed on 2026-05-18 after generation input/attachment, asset validation, import streaming, and docs cleanup, with Vite large-chunk warnings only.
+- [x] `pnpm check:docs` passed on 2026-05-18 after no-legacy/no-sidecar-sync docs cleanup.

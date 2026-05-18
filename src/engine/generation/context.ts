@@ -25,7 +25,7 @@ export async function resolveGenerationConnection(
 }
 
 export async function loadChatMessages(storage: StorageGateway, chatId: string): Promise<JsonRecord[]> {
-  const messages = await storage.request<unknown>("GET", `/chats/${encodeURIComponent(chatId)}/messages`);
+  const messages = await storage.listChatMessages<unknown>(chatId);
   return Array.isArray(messages) ? messages.filter(isRecord) : [];
 }
 

@@ -74,11 +74,11 @@ async fn search_tracks(state: &AppState, body: Value) -> AppResult<Value> {
             items
                 .iter()
                 .filter_map(Value::as_str)
-        .filter(|uri| uri.starts_with("spotify:track:"))
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>()
-    })
-    .unwrap_or_default();
+                .filter(|uri| uri.starts_with("spotify:track:"))
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let route = ParsedPath::new("");
     let credentials = resolve_credentials(state, &route, &body).await?;
     let params = form_urlencoded(&[

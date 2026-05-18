@@ -29,7 +29,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { toast } from "sonner";
-import { ApiError } from "../../../shared/api/api-client";
+import { ApiError } from "../../../shared/api/api-errors";
 import { spotifyApi } from "../../../shared/api/integration-utility-api";
 import {
   SPOTIFY_SCENE_TRACK_CHANGE_EVENT,

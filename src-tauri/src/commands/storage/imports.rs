@@ -10,7 +10,19 @@ mod timestamps;
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 use timestamps::{apply_timestamp_overrides, timestamp_overrides_from_value};
+
+const FOLDER_TOKEN_TTL_MS: u128 = 15 * 60 * 1000;
+
+#[derive(Clone)]
+struct FolderTokenEntry {
+    path: PathBuf,
+    expires_at: u128,
+}
+
+static FOLDER_TOKENS: LazyLock<Mutex<HashMap<String, FolderTokenEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn parse_object(raw: &[u8]) -> AppResult<Value> {
     Ok(serde_json::from_slice(raw)?)
@@ -34,6 +46,153 @@ fn modified_at(path: &Path) -> Value {
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|duration| Value::String(format!("{}", duration.as_millis())))
         .unwrap_or(Value::Null)
+}
+
+fn home_dir() -> PathBuf {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
+fn canonical_directory(path: &Path) -> AppResult<PathBuf> {
+    let resolved = if path.as_os_str().is_empty() {
+        home_dir()
+    } else {
+        path.to_path_buf()
+    };
+    let canonical = resolved.canonicalize().map_err(AppError::from)?;
+    if canonical.is_dir() {
+        Ok(canonical)
+    } else {
+        Err(AppError::invalid_input("Not a directory"))
+    }
+}
+
+fn canonical_allowed_roots() -> Vec<PathBuf> {
+    std::env::var("IMPORT_ALLOWED_ROOTS")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .filter_map(|path| {
+                    let candidate = PathBuf::from(path);
+                    let resolved = if candidate.is_absolute() {
+                        candidate
+                    } else {
+                        std::env::current_dir().ok()?.join(candidate)
+                    };
+                    resolved.canonicalize().ok()
+                })
+                .filter(|path| path.is_dir())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn is_inside_dir(path: &Path, root: &Path) -> bool {
+    let Ok(canonical_path) = path.canonicalize() else {
+        return false;
+    };
+    let Ok(canonical_root) = root.canonicalize() else {
+        return false;
+    };
+    canonical_path.starts_with(canonical_root)
+}
+
+fn is_home_contained(path: &Path) -> bool {
+    is_inside_dir(path, &home_dir())
+}
+
+fn is_allowed_import_root(path: &Path) -> bool {
+    canonical_allowed_roots()
+        .iter()
+        .any(|root| is_inside_dir(path, root))
+}
+
+fn has_configured_import_roots() -> bool {
+    !canonical_allowed_roots().is_empty()
+}
+
+fn cleanup_folder_tokens(tokens: &mut HashMap<String, FolderTokenEntry>) {
+    let now = now_millis();
+    tokens.retain(|_, entry| entry.expires_at >= now);
+}
+
+fn issue_folder_token(path: &Path) -> AppResult<String> {
+    let canonical = canonical_directory(path)?;
+    let token = new_id();
+    let mut tokens = FOLDER_TOKENS.lock().map_err(|_| {
+        AppError::new(
+            "folder_token_lock_error",
+            "Could not access import folder token state",
+        )
+    })?;
+    cleanup_folder_tokens(&mut tokens);
+    tokens.insert(
+        token.clone(),
+        FolderTokenEntry {
+            path: canonical,
+            expires_at: now_millis() + FOLDER_TOKEN_TTL_MS,
+        },
+    );
+    Ok(token)
+}
+
+pub(super) fn resolve_import_folder(body: &Value) -> AppResult<PathBuf> {
+    let raw_path = body
+        .get("folderPath")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let folder_token = body
+        .get("folderToken")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+
+    if !folder_token.is_empty() {
+        let mut tokens = FOLDER_TOKENS.lock().map_err(|_| {
+            AppError::new(
+                "folder_token_lock_error",
+                "Could not access import folder token state",
+            )
+        })?;
+        cleanup_folder_tokens(&mut tokens);
+        let Some(entry) = tokens.get(folder_token).cloned() else {
+            return Err(AppError::invalid_input(
+                "Folder token is missing or expired",
+            ));
+        };
+        if !raw_path.is_empty() {
+            let provided = canonical_directory(Path::new(raw_path))?;
+            if provided != entry.path {
+                return Err(AppError::invalid_input(
+                    "Folder token does not match folderPath",
+                ));
+            }
+        }
+        if has_configured_import_roots() && !is_allowed_import_root(&entry.path) {
+            return Err(AppError::invalid_input(
+                "folderPath is not allowed. Use the folder picker/browser or set IMPORT_ALLOWED_ROOTS.",
+            ));
+        }
+        return Ok(entry.path);
+    }
+
+    if raw_path.is_empty() {
+        return Err(AppError::invalid_input(
+            "folderPath or folderToken is required",
+        ));
+    }
+    let resolved = canonical_directory(Path::new(raw_path))?;
+    if !is_allowed_import_root(&resolved) {
+        return Err(AppError::invalid_input(
+            "folderPath is not allowed. Use the folder picker/browser or set IMPORT_ALLOWED_ROOTS.",
+        ));
+    }
+    Ok(resolved)
 }
 
 fn parse_chara_text(text: &str) -> Option<Value> {
@@ -121,9 +280,9 @@ fn extract_chara_from_png(bytes: &[u8]) -> AppResult<Value> {
 
 fn read_zip_entry(bytes: &[u8], name: &str) -> AppResult<Option<Vec<u8>>> {
     let cursor = Cursor::new(bytes);
-    let mut archive = zip::ZipArchive::new(cursor)
-        .map_err(|error| AppError::invalid_input(format!("Could not read zip archive: {error}")))?;
-    let result = match archive.by_name(name) {
+    let mut zip_reader = zip::ZipArchive::new(cursor)
+        .map_err(|error| AppError::invalid_input(format!("Could not read ZIP package: {error}")))?;
+    let result = match zip_reader.by_name(name) {
         Ok(mut file) => {
             let mut contents = Vec::new();
             file.read_to_end(&mut contents)?;
@@ -139,11 +298,11 @@ fn read_zip_entry(bytes: &[u8], name: &str) -> AppResult<Option<Vec<u8>>> {
 
 fn read_zip_entry_names(bytes: &[u8]) -> AppResult<Vec<String>> {
     let cursor = Cursor::new(bytes);
-    let mut archive = zip::ZipArchive::new(cursor)
-        .map_err(|error| AppError::invalid_input(format!("Could not read zip archive: {error}")))?;
+    let mut zip_reader = zip::ZipArchive::new(cursor)
+        .map_err(|error| AppError::invalid_input(format!("Could not read ZIP package: {error}")))?;
     let mut names = Vec::new();
-    for index in 0..archive.len() {
-        let file = archive.by_index(index).map_err(|error| {
+    for index in 0..zip_reader.len() {
+        let file = zip_reader.by_index(index).map_err(|error| {
             AppError::invalid_input(format!("Could not read zip entry: {error}"))
         })?;
         names.push(file.name().to_string());
@@ -158,10 +317,18 @@ fn zip_entry_name_case_insensitive(names: &[String], expected: &str) -> Option<S
         .cloned()
 }
 
-fn directory_listing(path: PathBuf) -> AppResult<Value> {
+fn directory_listing(path: PathBuf, picker_selected: bool) -> AppResult<Value> {
+    let path = canonical_directory(&path)?;
+    if !picker_selected && !is_home_contained(&path) && !is_allowed_import_root(&path) {
+        return Ok(json!({
+            "success": false,
+            "error": "Access denied: path outside home directory"
+        }));
+    }
     if !path.is_dir() {
         return Ok(json!({ "success": false, "error": "Not a directory" }));
     }
+    let folder_token = issue_folder_token(&path)?;
     let mut folders: Vec<String> = fs::read_dir(&path)
         .map(|rows| {
             rows.filter_map(Result::ok)
@@ -175,7 +342,7 @@ fn directory_listing(path: PathBuf) -> AppResult<Value> {
     Ok(json!({
         "success": true,
         "path": path.to_string_lossy(),
-        "folderToken": path.to_string_lossy(),
+        "folderToken": folder_token,
         "folders": folders
     }))
 }
@@ -1007,7 +1174,9 @@ fn import_marinara_file(state: &AppState, body: Value) -> AppResult<Value> {
     let data_bytes = read_zip_entry(&uploaded.bytes, &data_entry)?
         .ok_or_else(|| AppError::invalid_input(".marinara file is missing data.json"))?;
     if data_bytes.len() > MAX_DATA_JSON_BYTES {
-        return Err(AppError::invalid_input("data.json in .marinara file is too large"));
+        return Err(AppError::invalid_input(
+            "data.json in .marinara file is too large",
+        ));
     }
     let mut envelope = parse_object(&data_bytes)?;
 
@@ -1133,7 +1302,9 @@ fn inherit_wrapper_timestamps(record: &mut Value, wrapper: &Value) {
         .entry("metadata".to_string())
         .or_insert_with(|| json!({}));
     if let Some(metadata) = metadata.as_object_mut() {
-        metadata.entry("timestamps".to_string()).or_insert(timestamps);
+        metadata
+            .entry("timestamps".to_string())
+            .or_insert(timestamps);
     }
 }
 
@@ -1694,15 +1865,21 @@ pub(crate) fn import_call(state: &AppState, rest: &[&str], body: Value) -> AppRe
         }
         ["list-directory"] => {
             let path = body.get("path").and_then(Value::as_str).unwrap_or("");
+            let picker_selected = body
+                .get("pickerSelected")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let base = if path.trim().is_empty() {
-                std::env::var("USERPROFILE")
-                    .or_else(|_| std::env::var("HOME"))
-                    .unwrap_or_else(|_| ".".to_string())
+                home_dir()
             } else {
-                path.to_string()
+                PathBuf::from(path)
             };
-            let resolved = PathBuf::from(base);
-            directory_listing(resolved)
+            directory_listing(base, picker_selected).or_else(|error| {
+                Ok(json!({
+                    "success": false,
+                    "error": error.message
+                }))
+            })
         }
         ["st-bulk", "scan"] => bulk_imports::scan_st_folder(body),
         ["st-bulk", "run"] => bulk_imports::run_st_bulk_import(state, body),
@@ -1713,14 +1890,19 @@ pub(crate) fn import_call(state: &AppState, rest: &[&str], body: Value) -> AppRe
     }
 }
 
-pub(crate) fn import_stream_events(
+pub(crate) fn import_stream_channel(
     state: &AppState,
     rest: &[&str],
     body: Value,
-) -> AppResult<Vec<Value>> {
+    on_event: tauri::ipc::Channel<Value>,
+) -> AppResult<()> {
     match rest {
         ["st-bulk", "run"] | ["st-bulk", "run-stream"] => {
-            bulk_imports::run_st_bulk_import_events(state, body)
+            bulk_imports::run_st_bulk_import_channel(state, body, |event| {
+                on_event.send(event).map_err(|error| {
+                    AppError::new("import_stream_channel_error", error.to_string())
+                })
+            })
         }
         _ => Err(AppError::new(
             "stream_not_supported",

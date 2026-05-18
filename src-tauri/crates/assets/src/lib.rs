@@ -4,8 +4,14 @@ use marinara_security::assert_relative_safe_path;
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 const MANAGED_GAME_ASSET_CATEGORIES: &[&str] = &["music", "sfx", "ambient", "sprites", "backgrounds"];
+const MAX_TEXT_ASSET_BYTES: usize = 1_000_000;
+const MAX_MEDIA_ASSET_BYTES: usize = 75 * 1024 * 1024;
+const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
+const AUDIO_EXTENSIONS: &[&str] = &["mp3", "ogg", "wav", "flac", "m4a", "aac", "opus"];
+const TEXT_EXTENSIONS: &[&str] = &["txt", "md", "markdown", "json", "jsonl", "yaml", "yml", "csv", "log"];
 
 #[derive(Clone)]
 pub struct AssetService {
@@ -48,7 +54,11 @@ impl AssetService {
         }
         let mut rows = Vec::new();
         for entry in fs::read_dir(dir)? {
-            rows.push(self.entry_to_json(entry?.path())?);
+            let path = entry?.path();
+            if should_skip_asset_entry(&path) {
+                continue;
+            }
+            rows.push(self.entry_to_json(path)?);
         }
         sort_asset_rows(&mut rows);
         Ok(rows)
@@ -99,11 +109,21 @@ impl AssetService {
     }
 
     pub fn read_text(&self, path: &str) -> AppResult<String> {
-        Ok(fs::read_to_string(self.absolute_path(path)?)?)
+        let path = self.absolute_path(path)?;
+        ensure_text_asset_path(&path)?;
+        let metadata = fs::metadata(&path)?;
+        if metadata.len() > MAX_TEXT_ASSET_BYTES as u64 {
+            return Err(AppError::invalid_input("Text asset is too large to read"));
+        }
+        Ok(fs::read_to_string(path)?)
     }
 
     pub fn write_text(&self, path: &str, content: &str) -> AppResult<()> {
         let path = self.absolute_path(path)?;
+        ensure_text_asset_path(&path)?;
+        if content.as_bytes().len() > MAX_TEXT_ASSET_BYTES {
+            return Err(AppError::invalid_input("Text asset is too large to write"));
+        }
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -175,14 +195,13 @@ impl AssetService {
         if !MANAGED_GAME_ASSET_CATEGORIES.contains(&category) {
             return Err(AppError::invalid_input("Invalid game asset category"));
         }
-        let name = file
+        let original_name = file
             .get("name")
             .and_then(Value::as_str)
             .filter(|name| !name.trim().is_empty())
             .ok_or_else(|| AppError::invalid_input("Uploaded file is missing a name"))?;
-        if name.contains('/') || name.contains('\\') {
-            return Err(AppError::invalid_input("Uploaded filename must not include path separators"));
-        }
+        let name = sanitize_filename(original_name)?;
+        ensure_upload_extension(category, &name)?;
         let base64 = file
             .get("base64")
             .and_then(Value::as_str)
@@ -190,6 +209,9 @@ impl AssetService {
         let bytes = general_purpose::STANDARD
             .decode(base64)
             .map_err(|error| AppError::invalid_input(format!("Invalid upload encoding: {error}")))?;
+        if bytes.len() > MAX_MEDIA_ASSET_BYTES {
+            return Err(AppError::invalid_input("Uploaded file is too large"));
+        }
 
         let mut rel = PathBuf::from(category);
         if let Some(subcategory) = subcategory.filter(|value| !value.trim().is_empty()) {
@@ -230,15 +252,23 @@ impl AssetService {
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_else(|| path.to_string());
-        Ok(json!({
+        let (width, height) = image_dimensions_for(&absolute);
+        let mut info = json!({
             "name": name,
             "path": self.relative_string(&absolute),
             "absolutePath": absolute.to_string_lossy(),
             "size": if metadata.is_file() { metadata.len() } else { 0 },
             "format": absolute.extension().map(|ext| ext.to_string_lossy().to_ascii_lowercase()),
-            "modified": now_iso(),
-            "created": now_iso()
-        }))
+            "modified": system_time_iso(metadata.modified().ok()),
+            "created": system_time_iso(metadata.created().ok())
+        });
+        if let Some(width) = width {
+            info["width"] = json!(width);
+        }
+        if let Some(height) = height {
+            info["height"] = json!(height);
+        }
+        Ok(info)
     }
 
     fn transfer_many(&self, paths: &[String], target_folder: &str, move_files: bool) -> Value {
@@ -273,7 +303,7 @@ impl AssetService {
             let mut children = Vec::new();
             for entry in fs::read_dir(path)? {
                 let child_path = entry?.path();
-                if child_path.file_name().and_then(|name| name.to_str()) == Some("meta.json") {
+                if should_skip_asset_entry(&child_path) || child_path.file_name().and_then(|name| name.to_str()) == Some("meta.json") {
                     continue;
                 }
                 children.push(self.node_for_path(&child_path, root_name)?);
@@ -285,9 +315,12 @@ impl AssetService {
                 "type": "folder",
                 "children": children,
                 "size": 0,
-                "modified": now_iso(),
+                "modified": system_time_iso(metadata.modified().ok()),
                 "absolutePath": path.to_string_lossy()
             });
+            if is_native_asset_folder(&rel) {
+                node["native"] = Value::Bool(true);
+            }
             if let Some(description) = description {
                 node["description"] = Value::String(description);
             }
@@ -315,7 +348,7 @@ impl AssetService {
             "isDirectory": metadata.is_dir(),
             "ext": ext,
             "size": if metadata.is_file() { metadata.len() } else { 0 },
-            "modified": now_iso()
+            "modified": system_time_iso(metadata.modified().ok())
         }))
     }
 
@@ -331,6 +364,9 @@ impl AssetService {
         }
         for entry in fs::read_dir(path)? {
             let path = entry?.path();
+            if should_skip_asset_entry(&path) {
+                continue;
+            }
             if path.is_dir() {
                 self.collect_manifest_entries(&path, assets, by_category, count)?;
                 continue;
@@ -400,6 +436,86 @@ fn folder_description(path: &Path) -> Option<String> {
         .get("description")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
+}
+
+fn path_extension(path: &Path) -> String {
+    path.extension()
+        .map(|ext| ext.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+fn ensure_text_asset_path(path: &Path) -> AppResult<()> {
+    let extension = path_extension(path);
+    if TEXT_EXTENSIONS.contains(&extension.as_str()) {
+        Ok(())
+    } else {
+        Err(AppError::invalid_input("Only text asset files can be edited as text"))
+    }
+}
+
+fn ensure_upload_extension(category: &str, filename: &str) -> AppResult<()> {
+    let extension = Path::new(filename)
+        .extension()
+        .map(|ext| ext.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    let allowed = match category {
+        "music" | "sfx" | "ambient" => AUDIO_EXTENSIONS,
+        "sprites" | "backgrounds" => IMAGE_EXTENSIONS,
+        _ => &[],
+    };
+    if allowed.contains(&extension.as_str()) {
+        Ok(())
+    } else {
+        Err(AppError::invalid_input(format!(
+            "Can't upload .{extension} files to {category}"
+        )))
+    }
+}
+
+fn sanitize_filename(name: &str) -> AppResult<String> {
+    let sanitized = name
+        .trim()
+        .chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            ch if ch.is_control() => '_',
+            ch => ch,
+        })
+        .collect::<String>()
+        .trim_matches('.')
+        .trim()
+        .to_string();
+    if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
+        return Err(AppError::invalid_input("Invalid uploaded filename"));
+    }
+    Ok(sanitized)
+}
+
+fn should_skip_asset_entry(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.starts_with('.') || name == "manifest.json")
+        .unwrap_or(false)
+}
+
+fn is_native_asset_folder(rel: &str) -> bool {
+    !rel.is_empty() && !rel.contains('/') && MANAGED_GAME_ASSET_CATEGORIES.contains(&rel)
+}
+
+fn system_time_iso(value: Option<SystemTime>) -> String {
+    value
+        .map(chrono::DateTime::<chrono::Utc>::from)
+        .map(|date| date.to_rfc3339())
+        .unwrap_or_else(now_iso)
+}
+
+fn image_dimensions_for(path: &Path) -> (Option<u32>, Option<u32>) {
+    if !IMAGE_EXTENSIONS.contains(&path_extension(path).as_str()) {
+        return (None, None);
+    }
+    image::image_dimensions(path)
+        .map(|(width, height)| (Some(width), Some(height)))
+        .unwrap_or((None, None))
 }
 
 fn copy_missing(source: &Path, target: &Path) -> AppResult<()> {

@@ -654,15 +654,15 @@ src/features/<feature>/
   hooks/
   stores/
   lib/
-  public.ts
+  api.ts or owner modules with real behavior, when needed
 ```
 
 Rules:
 
 - Feature internals import their own feature files freely.
-- Other features may import only from `src/features/<feature>/public.ts`.
+- Other features may import only explicit owner modules that contain real behavior or types.
 - Avoid deep imports such as `features/chats/components/SpriteOverlay`.
-- If two features need the same component, either expose it intentionally through `public.ts` or move it to `shared/components` or a lower feature primitive package.
+- If two features need the same component, move it to `shared/components` or a lower feature primitive package.
 
 ### UI Layer 2: Top-Level Mode Surfaces
 
@@ -679,7 +679,7 @@ src/features/chat/
   components/awareness/
   components/summaries/
   hooks/
-  public.ts
+  api.ts
 
 src/features/roleplay/
   screens/RoleplayScreen.tsx
@@ -688,7 +688,7 @@ src/features/roleplay/
   components/encounter/
   components/visual-novel/
   hooks/
-  public.ts
+  api.ts
 
 src/features/game/
   screens/GameScreen.tsx
@@ -700,7 +700,7 @@ src/features/game/
   components/assets/
   hooks/
   stores/
-  public.ts
+  api.ts
 ```
 
 Mode UI rule:
@@ -712,7 +712,7 @@ chat UI, roleplay UI, and game UI do not deep-import each other.
 If game needs message rendering, it imports a stable chat primitive from:
 
 ```text
-src/features/chat/public.ts
+src/features/chat/api.ts
 ```
 
 If roleplay and game both need sprite display, that component should move to:
@@ -721,7 +721,7 @@ If roleplay and game both need sprite display, that component should move to:
 src/features/visuals/
   sprites/
   weather/
-  public.ts
+  api.ts
 ```
 
 or to `src/shared/components` if it is truly generic.
@@ -762,7 +762,7 @@ Current `src/features/chats/components` contains normal chat, chat autonomous/co
 | `ChatArea`, `ChatConversationSurface`, `ConversationView`, `ConversationMessage`, `ConversationInput`, `ChatMessage`, `ChatInput`, `ChatBranchSelector`, `SwipeJumpControl` | `features/chat/components/*` | Normal chat primitives and normal chat screen. |
 | `ConversationAutonomousEffects`, autonomous notifications, summary popovers/editors when chat-autonomous-specific | `features/chat/components/autonomous/*` or `features/chat/components/summaries/*` | Autonomous conversation behavior is part of chat, not a separate product mode. |
 | `ChatRoleplaySurface`, `RoleplayHUD`, `RoleplayHUDPanels`, `RoleplayHUDActionsMenu`, `SceneBanner`, `CyoaChoices`, `EncounterModal`, `EchoChamberPanel` | `features/roleplay/components/*` | Roleplay-specific UI. |
-| `SpriteOverlay`, `SpriteSidebar`, `ExpressionPanel`, `WeatherEffects`, `PinnedImageOverlay` | `features/visuals/components/*` or `features/roleplay/public.ts` | Use a shared visuals feature if game and roleplay both need them. |
+| `SpriteOverlay`, `SpriteSidebar`, `ExpressionPanel`, `WeatherEffects`, `PinnedImageOverlay` | `features/visuals/components/*` or a roleplay owner module with real behavior | Use a shared visuals feature if game and roleplay both need them. |
 | `ChatGallery`, `ChatGalleryDrawer`, `ChatFilesDrawer` | `features/gallery` or `features/chat/components/files` | Gallery/file UI should call assets capability. |
 | `ActiveWorldInfoButton`, `ImagePromptPanel`, `GenerationReplayDetailsModal`, `PeekPromptModal` | place by owner: chat/generation/game | Avoid a dumping-ground chat folder. |
 
@@ -822,7 +822,7 @@ src/features/agents/
     debug/
     thought-bubbles/
   hooks/
-  public.ts
+  api.ts
 ```
 
 Agent runtime code should not live in `features/agents`; it belongs in:
@@ -894,8 +894,8 @@ Rust must not import TypeScript concepts like agent phases, game turns, prompt s
 
 Use structure first, then tooling.
 
-1. Add `public.ts` barrels to every feature.
-2. Ban deep feature imports across feature boundaries.
+1. Ban single-line barrels and re-export shims.
+2. Ban deep feature imports across feature boundaries unless the target file is an intentional owner API, not a forwarding file.
 3. Add ESLint `no-restricted-imports` rules once folders exist.
 4. Add a small dependency check script that rejects forbidden imports:
    - `engine/modes/game` importing `engine/modes/roleplay`
@@ -904,15 +904,15 @@ Use structure first, then tooling.
    - any `engine/*` importing `src/features/*`
    - any `engine/*` importing `@tauri-apps/api`
    - any `engine/*` importing React
-   - any `features/*` deep-importing another feature without `public.ts`
+   - any `features/*` importing another feature's private implementation files
 5. Keep `docs/tauri-refactor/13-typescript-rust-organization-plan.md` as the exhaustive inventory, and use this document as the architectural dependency rulebook.
 
 ## Migration Order
 
 1. Create `engine/contracts`, `engine/core`, `engine/capabilities`, and `engine/shared`.
-2. Move `legacy-shared` into `engine/contracts`.
+2. Move shared contracts into `engine/contracts` owner files and update imports directly.
 3. Move pure shared utilities into `engine/shared`.
-4. Create feature `public.ts` barrels without moving UI yet.
+4. Create explicit feature owner modules where needed without barrel-only files.
 5. Split `features/chats/components` into `features/chat`, `features/roleplay`, `features/visuals`, and `features/gallery`; place autonomous conversation UI under `features/chat`.
 6. Split `features/game/components` into the internal game UI subfolders.
 7. Move prompt/lorebook/regex into `engine/generation-core`.

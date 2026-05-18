@@ -42,7 +42,7 @@ import {
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
 import { cn } from "../../../shared/lib/utils";
 import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
 import { ExportFormatDialog, type ExportFormatChoice } from "../../../shared/components/ui/ExportFormatDialog";
 
 type PersonaRow = {
@@ -291,11 +291,7 @@ export function PersonasPanel() {
       setExportingSelected(true);
       setExportDialogOpen(false);
       try {
-        await api.downloadPost(
-          "/characters/personas/export-bulk",
-          { ids: [...selectedPersonaIds], format },
-          format === "compatible" ? "compatible-personas.zip" : "marinara-personas.zip",
-        );
+        exportApi.triggerDownload(await exportApi.personasBulk([...selectedPersonaIds], format));
         toast.success(`Exported ${selectedPersonaIds.size} persona${selectedPersonaIds.size === 1 ? "" : "s"}`);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to export personas");

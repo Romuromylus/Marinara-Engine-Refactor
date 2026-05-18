@@ -13,6 +13,7 @@ const DEFAULT_HORDE_BASE_URL: &str = "https://stablehorde.net/api/v2";
 const DEFAULT_AUTOMATIC1111_BASE_URL: &str = "http://localhost:7860";
 const DEFAULT_COMFYUI_BASE_URL: &str = "http://127.0.0.1:8188";
 const DEFAULT_NANOGPT_BASE_URL: &str = "https://nano-gpt.com/api/v1";
+const DEFAULT_BLOCKENTROPY_BASE_URL: &str = "https://api.blockentropy.ai";
 const DEFAULT_RUNPOD_BASE_URL: &str = "https://api.runpod.ai/v2";
 const NOVELAI_V4_PROMPT_HINT: &str = "NovelAI V4/V4.5 prompts support roughly 512 T5 tokens and reject most Unicode prompt characters; try a shorter ASCII prompt without emoji or non-Latin text.";
 
@@ -127,6 +128,7 @@ fn connection_base_url(connection: &Value, source: &str) -> String {
         "comfyui" => DEFAULT_COMFYUI_BASE_URL,
         "runpod_comfyui" => DEFAULT_RUNPOD_BASE_URL,
         "nanogpt" => DEFAULT_NANOGPT_BASE_URL,
+        "blockentropy" => DEFAULT_BLOCKENTROPY_BASE_URL,
         _ => DEFAULT_OPENAI_IMAGE_BASE_URL,
     };
     connection
@@ -2069,10 +2071,10 @@ async fn parse_novelai_image_response(
     content_type: &str,
 ) -> AppResult<(String, String)> {
     if bytes.starts_with(b"PK") || content_type.to_ascii_lowercase().contains("zip") {
-        let mut archive = zip::ZipArchive::new(Cursor::new(bytes.clone()))
+        let mut zip_reader = zip::ZipArchive::new(Cursor::new(bytes.clone()))
             .map_err(|error| AppError::new("image_response_error", error.to_string()))?;
-        for index in 0..archive.len() {
-            let mut file = archive
+        for index in 0..zip_reader.len() {
+            let mut file = zip_reader
                 .by_index(index)
                 .map_err(|error| AppError::new("image_response_error", error.to_string()))?;
             if file.is_dir() {

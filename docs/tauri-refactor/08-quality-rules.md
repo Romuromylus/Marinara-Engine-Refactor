@@ -44,13 +44,12 @@ If a file crosses the hard review point, split it or document why it should rema
 - outbound URL policy checks
 - secret save/load/delete
 - repository round trips
-- backup export/import
+- current profile package export/import
 - prompt assembly snapshots
 - lorebook injection ordering
 - regex pipeline behavior
 - dice and combat mechanics
 - game state checkpoint/restore
-- sidecar launch plan construction
 - import folder token validation
 
 ### Required Frontend Tests

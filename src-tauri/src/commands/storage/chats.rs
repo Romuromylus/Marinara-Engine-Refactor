@@ -79,112 +79,6 @@ fn merge_chat_metadata(
     state.storage.patch("chats", chat_id, chat)
 }
 
-pub(crate) fn chat_messages(
-    state: &AppState,
-    method: &str,
-    chat_id: &str,
-    body: Value,
-    query: &HashMap<String, String>,
-) -> AppResult<Value> {
-    match method {
-        "GET" => {
-            let mut rows = messages_for_chat(state, chat_id)?;
-            if let Some(limit) = query
-                .get("limit")
-                .and_then(|value| value.parse::<usize>().ok())
-                .filter(|limit| *limit > 0)
-            {
-                if rows.len() > limit {
-                    rows = rows.split_off(rows.len() - limit);
-                }
-            }
-            Ok(Value::Array(rows))
-        }
-        "POST" => {
-            let mut object = ensure_object(body)?;
-            object.insert("chatId".to_string(), Value::String(chat_id.to_string()));
-            object
-                .entry("role".to_string())
-                .or_insert_with(|| Value::String("user".to_string()));
-            object
-                .entry("content".to_string())
-                .or_insert_with(|| Value::String(String::new()));
-            object
-                .entry("extra".to_string())
-                .or_insert_with(|| json!({}));
-            object
-                .entry("activeSwipeIndex".to_string())
-                .or_insert_with(|| json!(0));
-            let content = object
-                .get("content")
-                .cloned()
-                .unwrap_or_else(|| Value::String(String::new()));
-            object
-                .entry("swipes".to_string())
-                .or_insert_with(|| json!([{ "content": content }]));
-            let record = state.storage.create("messages", Value::Object(object))?;
-            touch_chat(state, chat_id)?;
-            Ok(record)
-        }
-        _ => Err(AppError::new(
-            "method_not_allowed",
-            "Unsupported messages method",
-        )),
-    }
-}
-
-pub(crate) fn chat_message_item(
-    state: &AppState,
-    method: &str,
-    chat_id: &str,
-    message_id: &str,
-    body: Value,
-) -> AppResult<Value> {
-    match method {
-        "GET" => get_required(state, "messages", message_id),
-        "PATCH" => {
-            let updated = state.storage.patch("messages", message_id, body)?;
-            touch_chat(state, chat_id)?;
-            Ok(updated)
-        }
-        "DELETE" => {
-            let deleted = state.storage.delete("messages", message_id)?;
-            touch_chat(state, chat_id)?;
-            Ok(json!({ "deleted": deleted }))
-        }
-        _ => Err(AppError::new(
-            "method_not_allowed",
-            "Unsupported message method",
-        )),
-    }
-}
-
-pub(crate) fn patch_message_extra(
-    state: &AppState,
-    chat_id: &str,
-    message_id: &str,
-    body: Value,
-) -> AppResult<Value> {
-    let mut message = get_required(state, "messages", message_id)?;
-    let patch = ensure_object(body)?;
-    {
-        let object = message
-            .as_object_mut()
-            .ok_or_else(|| AppError::invalid_input("Message is not an object"))?;
-        let extra = object
-            .entry("extra".to_string())
-            .or_insert_with(|| json!({}))
-            .as_object_mut()
-            .ok_or_else(|| AppError::invalid_input("Message extra is not an object"))?;
-        for (key, value) in patch {
-            extra.insert(key, value);
-        }
-    }
-    let updated = state.storage.patch("messages", message_id, message)?;
-    touch_chat(state, chat_id)?;
-    Ok(updated)
-}
-
 pub(crate) fn message_swipes(
     state: &AppState,
     _method: &str,
@@ -267,43 +161,6 @@ pub(crate) fn bulk_delete_messages(
     }
     touch_chat(state, chat_id)?;
     Ok(json!({ "deleted": deleted }))
-}
-
-pub(crate) fn bulk_hide_messages(state: &AppState, chat_id: &str, body: Value) -> AppResult<Value> {
-    let ids = body
-        .get("messageIds")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let hidden = body.get("hidden").and_then(Value::as_bool).unwrap_or(true);
-    for id in ids.iter().filter_map(Value::as_str) {
-        patch_message_extra(state, chat_id, id, json!({ "hiddenFromAi": hidden }))?;
-    }
-    Ok(json!({ "updated": true }))
-}
-
-pub(crate) fn patch_chat_object_field(
-    state: &AppState,
-    chat_id: &str,
-    field: &str,
-    body: Value,
-) -> AppResult<Value> {
-    let mut chat = get_required(state, "chats", chat_id)?;
-    let patch = ensure_object(body)?;
-    {
-        let object = chat
-            .as_object_mut()
-            .ok_or_else(|| AppError::invalid_input("Chat is not an object"))?;
-        let target = object
-            .entry(field.to_string())
-            .or_insert_with(|| json!({}))
-            .as_object_mut()
-            .ok_or_else(|| AppError::invalid_input(format!("Chat {field} is not an object")))?;
-        for (key, value) in patch {
-            target.insert(key, value);
-        }
-    }
-    state.storage.patch("chats", chat_id, chat)
 }
 
 pub(crate) fn mark_autonomous_unread(
@@ -436,14 +293,20 @@ pub(crate) fn export_chat_memories(state: &AppState, chat_id: &str) -> AppResult
     }))
 }
 
-pub(crate) fn import_chat_memories(state: &AppState, chat_id: &str, body: Value) -> AppResult<Value> {
+pub(crate) fn import_chat_memories(
+    state: &AppState,
+    chat_id: &str,
+    body: Value,
+) -> AppResult<Value> {
     get_required(state, "chats", chat_id)?;
     let incoming = body
         .get("data")
         .and_then(|data| data.get("chunks"))
         .or_else(|| body.get("chunks"))
         .and_then(Value::as_array)
-        .ok_or_else(|| AppError::invalid_input("Memory Recall import must contain a data.chunks array"))?;
+        .ok_or_else(|| {
+            AppError::invalid_input("Memory Recall import must contain a data.chunks array")
+        })?;
     let mut memories = chat_array_field(state, chat_id, "memories")?
         .as_array()
         .cloned()
@@ -571,19 +434,6 @@ pub(crate) fn branch_chat(state: &AppState, chat_id: &str, body: Value) -> AppRe
         }
     }
     Ok(new_chat)
-}
-
-pub(crate) fn peek_prompt(state: &AppState, chat_id: &str) -> AppResult<Value> {
-    let messages: Vec<Value> = messages_for_chat(state, chat_id)?
-        .into_iter()
-        .map(|message| {
-            json!({
-                "role": message.get("role").and_then(Value::as_str).unwrap_or("user"),
-                "content": message.get("content").and_then(Value::as_str).unwrap_or("")
-            })
-        })
-        .collect();
-    Ok(json!({ "messages": messages, "parameters": {}, "generationInfo": Value::Null }))
 }
 
 pub(crate) fn delete_chat_with_messages(state: &AppState, chat_id: &str) -> AppResult<()> {

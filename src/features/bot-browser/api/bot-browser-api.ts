@@ -1,4 +1,5 @@
-import { api } from "../../../shared/api/api-client";
+import { importApi } from "../../../shared/api/import-api";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import { loadUrlBlob } from "../../../shared/lib/url-blob";
 
 const TAURI_ASSET_PREFIX = "tauri-api:";
@@ -59,15 +60,17 @@ export function botBrowserAssetUrl(path: string): string {
 }
 
 export async function botBrowserGet<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  return api.get<T>(normalizeBotBrowserPath(path), init);
+  if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+  return invokeTauri<T>("bot_browser_get", { path: normalizeBotBrowserPath(path) });
 }
 
 export async function botBrowserPost<T = unknown>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
-  return api.post<T>(normalizeBotBrowserPath(path), body, init);
+  if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+  return invokeTauri<T>("bot_browser_post", { path: normalizeBotBrowserPath(path), body: body ?? null });
 }
 
 export async function botBrowserBlob(path: string, fallbackMimeType = "image/png", init?: RequestInit): Promise<Blob> {
-  const payload = await api.get<BinaryPayload>(normalizeBotBrowserPath(path), init);
+  const payload = await botBrowserGet<BinaryPayload>(path, init);
   return payloadToBlob(payload, fallbackMimeType);
 }
 
@@ -90,5 +93,5 @@ export async function resolveBotBrowserAssetUrl(src: string, init?: RequestInit)
 }
 
 export async function importStCharacter(body: Record<string, unknown>): Promise<ImportCharacterResult> {
-  return api.post<ImportCharacterResult>("/import/st-character", body);
+  return importApi.stCharacterJson<ImportCharacterResult>(body);
 }

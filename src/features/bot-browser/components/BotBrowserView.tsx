@@ -107,7 +107,6 @@ interface ProviderConfig {
   nsfwMode: "free" | "login" | "wyvern";
   search: (params: SearchParams) => Promise<{ cards: BrowseCard[]; totalCount: number }>;
   fetchDetail: (card: BrowseCard) => Promise<CardDetail | null>;
-  importCard: (card: BrowseCard) => Promise<void>;
   getAvatarUrl: (card: BrowseCard) => string;
   getExternalUrl: (card: BrowseCard) => string;
   siteName: string;
@@ -433,7 +432,6 @@ const chubProvider: ProviderConfig = {
       embeddedLorebook: def.embedded_lorebook,
     };
   },
-  importCard: async () => {},
 };
 
 // ════════════════════════════════════════════════
@@ -611,7 +609,6 @@ const jannyProvider: ProviderConfig = {
     return null;
   },
 
-  importCard: async () => {},
 };
 
 // ════════════════════════════════════════════════
@@ -697,7 +694,6 @@ const chartavernProvider: ProviderConfig = {
       hasLorebook: !!c.lorebookId,
     };
   },
-  importCard: async () => {},
 };
 
 // ════════════════════════════════════════════════
@@ -795,7 +791,6 @@ const pygmalionProvider: ProviderConfig = {
       alternateGreetings: Array.isArray(p.alternateGreetings) ? p.alternateGreetings.filter(Boolean) : [],
     };
   },
-  importCard: async () => {},
 };
 
 // ════════════════════════════════════════════════
@@ -899,7 +894,6 @@ const wyvernProvider: ProviderConfig = {
       hasLorebook: !!(c.lorebooks?.length > 0),
     };
   },
-  importCard: async () => {},
 };
 
 // ════════════════════════════════════════════════
@@ -1121,7 +1115,6 @@ const datacatProvider: ProviderConfig = {
       return null;
     }
   },
-  importCard: async () => {},
 };
 
 // ════════════════════════════════════════════════

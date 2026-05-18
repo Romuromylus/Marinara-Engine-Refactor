@@ -8,7 +8,8 @@ import { useCreateChat } from "../../chats/hooks/use-chats";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ArrowRightLeft } from "lucide-react";
 import { PROFESSOR_MARI_ID, DEFAULT_CONNECTION_ID } from "../../../engine/contracts/constants/defaults";
-import { api } from "../../../shared/api/api-client";
+import { storageApi } from "../../../shared/api/storage-api";
+import type { Character } from "../../../engine/contracts/types/character";
 
 // ─── Step definitions ─────────────────────────
 
@@ -372,10 +373,13 @@ function OnboardingTutorialInner() {
           // Disable autonomous messages, cross-chat awareness, and memory recall
           // BEFORE activating the chat — otherwise ConversationView triggers schedule generation
           try {
-            await api.patch(`/chats/${chat.id}/metadata`, {
-              autonomousMessages: false,
-              crossChatAwareness: false,
-              enableMemoryRecall: false,
+            await storageApi.update("chats", chat.id, {
+              metadata: {
+                ...(chat.metadata ?? {}),
+                autonomousMessages: false,
+                crossChatAwareness: false,
+                enableMemoryRecall: false,
+              },
             });
           } catch {
             /* non-critical */
@@ -383,10 +387,13 @@ function OnboardingTutorialInner() {
           // Insert Mari's first message BEFORE activating the chat
           // so the ConversationView picks it up on first render
           try {
-            const char = await api.get<{ data: string }>(`/characters/${PROFESSOR_MARI_ID}`);
-            const charData = JSON.parse(char.data) as { first_mes?: string };
+            const char = await storageApi.get<Character>("characters", PROFESSOR_MARI_ID);
+            if (!char) return;
+            const charData =
+              typeof char.data === "string" ? (JSON.parse(char.data) as { first_mes?: string }) : char.data;
             if (charData.first_mes) {
-              await api.post(`/chats/${chat.id}/messages`, {
+              await storageApi.create("messages", {
+                chatId: chat.id,
                 role: "assistant",
                 characterId: PROFESSOR_MARI_ID,
                 content: charData.first_mes,

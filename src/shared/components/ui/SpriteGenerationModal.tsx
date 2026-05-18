@@ -10,7 +10,7 @@ import { cn } from "../../lib/utils";
 import { useConnections } from "../../../features/connections/hooks/use-connections";
 import { useSpriteCapabilities } from "../../../features/characters/hooks/use-characters";
 import { useUIStore } from "../../stores/ui.store";
-import { api } from "../../api/api-client";
+import { spriteApi } from "../../api/image-generation-api";
 import { ImagePromptReviewModal, type ImagePromptOverride, type ImagePromptReviewItem } from "./ImagePromptReviewModal";
 
 // ── Types ──
@@ -756,13 +756,13 @@ export function SpriteGenerationModal({
       };
 
       if (reviewImagePromptsBeforeSend) {
-        const preview = await api.post<GenerateSheetPreviewResult>("/sprites/generate-sheet/preview", payload);
+        const preview = await spriteApi.generateSheetPreview<GenerateSheetPreviewResult>(payload);
         if (preview.items.length > 0) {
           const overrides = await openPromptReview(preview.items);
           if (!overrides) throw new SpritePromptReviewCancelledError();
           setPromptReviewSubmitting(true);
           try {
-            return await api.post<GenerateSheetResult>("/sprites/generate-sheet", {
+            return await spriteApi.generateSheet<GenerateSheetResult>({
               ...payload,
               promptOverrides: overrides,
             });
@@ -772,7 +772,7 @@ export function SpriteGenerationModal({
         }
       }
 
-      return api.post<GenerateSheetResult>("/sprites/generate-sheet", payload);
+      return spriteApi.generateSheet<GenerateSheetResult>(payload);
     },
     [
       appearance,
@@ -984,7 +984,7 @@ export function SpriteGenerationModal({
     setError(null);
 
     try {
-      const result = await api.post<{ cells: Array<{ expression: string; base64: string }> }>("/sprites/cleanup", {
+      const result = await spriteApi.cleanup<{ cells: Array<{ expression: string; base64: string }> }>({
         cleanupStrength,
         engine: "builtin",
         cells: cells.map((cell) => ({
@@ -1235,7 +1235,7 @@ export function SpriteGenerationModal({
               ? cleaned
               : `full_${cleaned}`
             : cleaned.replace(/^full_/, "");
-        await api.post(`/sprites/${entityId}`, {
+        await spriteApi.upload(entityId, {
           expression,
           image: cell.dataUrl,
         });

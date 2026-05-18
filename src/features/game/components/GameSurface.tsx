@@ -48,9 +48,12 @@ import { useConnections } from "../../connections/hooks/use-connections";
 import { useGenerate } from "../../generation/hooks/use-generate";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { spriteKeys, type SpriteInfo } from "../../characters/hooks/use-characters";
-import { api, getJsonRepairRequest, type JsonRepairRequest } from "../../../shared/api/api-client";
+import { getJsonRepairRequest, type JsonRepairRequest } from "../../../shared/api/api-errors";
+import { npcAvatarApi } from "../../../shared/api/avatar-api";
+import { spriteApi } from "../../../shared/api/image-generation-api";
 import { spotifyApi } from "../../../shared/api/integration-utility-api";
 import { gameAssetFileUrlFromPath, userBackgroundUrl } from "../../../shared/api/local-file-api";
+import { storageApi } from "../../../shared/api/storage-api";
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
 import { cn, type AvatarCrop, type AvatarCropValue } from "../../../shared/lib/utils";
 import { filterLanguageGenerationConnections } from "../../../shared/lib/connection-filters";
@@ -917,6 +920,28 @@ import type { Chat, Message } from "../../../engine/contracts/types/chat";
 import type { SessionSummary, Combatant, GameCombatStateSnapshot } from "../../../engine/contracts/types/game";
 import type { CharacterMap, PersonaInfo } from "../../chats/components/chat-area.types";
 
+function metadataRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+async function persistGameMetadata(
+  chatId: string,
+  patch: Record<string, unknown>,
+  fallbackMetadata?: Record<string, unknown>,
+) {
+  const latest = await storageApi.get<Chat>("chats", chatId);
+  const metadata = latest ? metadataRecord(latest.metadata) : (fallbackMetadata ?? {});
+  return storageApi.update<Chat>("chats", chatId, { metadata: { ...metadata, ...patch } });
+}
+
 /** Typewriter component for the intro screen — reveals text character-by-character. */
 function IntroTypewriter({ text, onComplete }: { text: string; onComplete?: () => void }) {
   const [visible, setVisible] = useState(0);
@@ -1622,7 +1647,7 @@ export function GameSurface({
   const openGameAssetsBrowser = useUIStore((s) => s.openGameAssetsBrowser);
   const gameSnapshot = useGameStateStore((s) => (s.current?.chatId === activeChatId ? s.current : null));
   const chatCharacterIds = useMemo(() => getChatCharacterIds(chat.characterIds), [chat.characterIds]);
-  const useSpotifyGameMusic = chatMeta.gameUseSpotifyMusic === true;
+  const useSpotifyGameMusic = chatMeta.gameUseSpotifyMusic === true || chatMeta.gameEnableSpotifyDj === true;
   const { data: connectionsList } = useConnections();
   const updateChat = useUpdateChat();
   const languageConnections = useMemo(
@@ -2202,7 +2227,7 @@ export function GameSurface({
       if (updated !== previousInventory) {
         inventoryItemsRef.current = updated;
         setInventoryItems(updated);
-        api.patch(`/chats/${activeChatId}/metadata`, { gameInventory: updated }).catch(() => {});
+        persistGameMetadata(activeChatId, { gameInventory: updated }, chatMeta).catch(() => {});
       }
 
       if (currentGameState?.chatId === activeChatId && currentPlayerStats && nextPlayerStats !== currentPlayerStats) {
@@ -2372,7 +2397,7 @@ export function GameSurface({
   const spriteQueries = useQueries({
     queries: characterIds.map((id) => ({
       queryKey: spriteKeys.list(id),
-      queryFn: () => api.get<SpriteInfo[]>(`/sprites/${id}`),
+      queryFn: () => spriteApi.list<SpriteInfo[]>(id),
       enabled: !!id,
       staleTime: 5 * 60 * 1000,
     })),
@@ -2434,7 +2459,7 @@ export function GameSurface({
   const librarySpriteQueries = useQueries({
     queries: speakingLibraryCharacters.map((entry) => ({
       queryKey: spriteKeys.list(entry.character.id),
-      queryFn: () => api.get<SpriteInfo[]>(`/sprites/${entry.character.id}`),
+      queryFn: () => spriteApi.list<SpriteInfo[]>(entry.character.id),
       enabled: !!entry.character.id,
       staleTime: 5 * 60 * 1000,
     })),
@@ -2442,7 +2467,7 @@ export function GameSurface({
 
   const personaSpriteQuery = useQuery({
     queryKey: spriteKeys.list(personaSpriteId ?? ""),
-    queryFn: () => api.get<SpriteInfo[]>(`/sprites/${personaSpriteId}`),
+    queryFn: () => spriteApi.list<SpriteInfo[]>(personaSpriteId ?? ""),
     enabled: !!personaSpriteId,
     staleTime: 5 * 60 * 1000,
   });
@@ -2823,11 +2848,11 @@ export function GameSurface({
           recentSpotifyTrackHistoryRef.current,
           track.uri,
         );
-        api
-          .patch(`/chats/${activeChatId}/metadata`, {
-            gameRecentSpotifyTracks: recentSpotifyTrackHistoryRef.current,
-          })
-          .catch(() => {});
+        persistGameMetadata(
+          activeChatId,
+          { gameRecentSpotifyTracks: recentSpotifyTrackHistoryRef.current },
+          chatMeta,
+        ).catch(() => {});
         await queryClient.invalidateQueries({ queryKey: ["spotify", "player"] });
       } catch (error) {
         console.warn("[spotify/game] Failed to play scene track:", error);
@@ -3027,7 +3052,7 @@ export function GameSurface({
           recentMusicHistoryRef.current = appendRecentMusic(recentMusicHistoryRef.current, state.currentMusic);
           patch.gameRecentMusic = recentMusicHistoryRef.current;
         }
-        api.patch(`/chats/${activeChatId}/metadata`, patch).catch(() => {});
+        persistGameMetadata(activeChatId, patch, chatMeta).catch(() => {});
       }, 1500);
     });
     return () => {
@@ -3036,14 +3061,16 @@ export function GameSurface({
       if (scenePersistTimer.current) {
         clearTimeout(scenePersistTimer.current);
         const { currentBackground, currentMusic, currentAmbient } = useGameAssetStore.getState();
-        api
-          .patch(`/chats/${activeChatId}/metadata`, {
+        persistGameMetadata(
+          activeChatId,
+          {
             gameSceneBackground: currentBackground,
             gameSceneMusic: currentMusic,
             gameSceneAmbient: currentAmbient,
             gameRecentMusic: recentMusicHistoryRef.current,
-          })
-          .catch(() => {});
+          },
+          chatMeta,
+        ).catch(() => {});
       }
     };
   }, [activeChatId]);
@@ -3064,7 +3091,7 @@ export function GameSurface({
     if (!snapshot || !snapshot.party?.length || !snapshot.enemies?.length) return;
     if (chatMeta.gameActiveState !== "combat") {
       // Stale snapshot — combat ended but the metadata write didn't land. Clear it.
-      api.patch(`/chats/${activeChatId}/metadata`, { gameCombatState: null }).catch(() => {});
+      persistGameMetadata(activeChatId, { gameCombatState: null }, chatMeta).catch(() => {});
       return;
     }
     // Runtime validation: the snapshot is JSON-deserialized from chat metadata that
@@ -3079,7 +3106,7 @@ export function GameSurface({
         "[game-surface] Discarding combat snapshot — failed Combatant schema validation. " +
           "Likely written by an older client version.",
       );
-      api.patch(`/chats/${activeChatId}/metadata`, { gameCombatState: null }).catch(() => {});
+      persistGameMetadata(activeChatId, { gameCombatState: null }, chatMeta).catch(() => {});
       return;
     }
     setCombatParty(rawParty);
@@ -3110,7 +3137,7 @@ export function GameSurface({
       combatPersistTimer.current = null;
     }
     combatPendingSnapshotRef.current = null;
-    api.patch(`/chats/${chatId}/metadata`, { gameCombatState: null }).catch(() => {});
+    persistGameMetadata(chatId, { gameCombatState: null }).catch(() => {});
   }, []);
   useEffect(() => {
     if (combatRestoredChatIdRef.current !== activeChatId) return;
@@ -3130,9 +3157,9 @@ export function GameSurface({
       // keepalive flush below or the lifecycle wipes in `clearCombatSnapshot`. A
       // silent failure here means the user keeps fighting believing state is saved,
       // then loses progress on refresh — the operator needs to see this in console.
-      api
-        .patch(`/chats/${activeChatId}/metadata`, { gameCombatState: snapshot })
-        .catch((err) => console.error("[game-surface] combat snapshot persist failed", err));
+      persistGameMetadata(activeChatId, { gameCombatState: snapshot }, chatMeta).catch((err: unknown) =>
+        console.error("[game-surface] combat snapshot persist failed", err),
+      );
       combatPendingSnapshotRef.current = null;
       combatPersistTimer.current = null;
     }, 800);
@@ -3148,9 +3175,7 @@ export function GameSurface({
       // which is exactly the scenario this feature is meant to protect.
       const pending = combatPendingSnapshotRef.current;
       if (pending) {
-        api
-          .patch(`/chats/${pending.chatId}/metadata`, { gameCombatState: pending.snapshot }, { keepalive: true })
-          .catch(() => {});
+        persistGameMetadata(pending.chatId, { gameCombatState: pending.snapshot }).catch(() => {});
         combatPendingSnapshotRef.current = null;
       }
     };
@@ -3210,12 +3235,14 @@ export function GameSurface({
       }
       if (segmentPersistTimer.current) clearTimeout(segmentPersistTimer.current);
       segmentPersistTimer.current = setTimeout(() => {
-        api
-          .patch(`/chats/${activeChatId}/metadata`, {
+        persistGameMetadata(
+          activeChatId,
+          {
             gameNarrationIndex: index,
             gameNarrationMessageId: narrationProgressMessageId,
-          })
-          .catch(() => {});
+          },
+          chatMeta,
+        ).catch(() => {});
       }, 500);
     },
     [activeChatId, narrationProgressMessageId, segmentStorageKey],
@@ -3228,12 +3255,14 @@ export function GameSurface({
         try {
           const saved = parseStoredNarrationProgress(localStorage.getItem(segmentStorageKey));
           if (saved) {
-            api
-              .patch(`/chats/${activeChatId}/metadata`, {
+            persistGameMetadata(
+              activeChatId,
+              {
                 gameNarrationIndex: saved.index,
                 gameNarrationMessageId: saved.messageId,
-              })
-              .catch(() => {});
+              },
+              chatMeta,
+            ).catch(() => {});
           }
         } catch {
           /* */
@@ -3373,9 +3402,9 @@ export function GameSurface({
     } catch {
       /* ignore */
     }
-    api
-      .patch(`/chats/${activeChatId}/metadata`, { gameNarrationIndex: 0, gameNarrationMessageId: msg.id })
-      .catch(() => {});
+    persistGameMetadata(activeChatId, { gameNarrationIndex: 0, gameNarrationMessageId: msg.id }, chatMeta).catch(
+      () => {},
+    );
 
     const tags = parseGmTags(msg.content);
     const directAddressMode = latestAssistantDirectAddressMode;
@@ -4630,10 +4659,7 @@ export function GameSurface({
 
       try {
         const avatar = await readFileAsDataUrl(file);
-        const response = await api.post<{ avatarPath: string }>(`/avatars/npc/${activeChatId}`, {
-          name: targetNpc.name,
-          avatar,
-        });
+        const response = await npcAvatarApi.upload(activeChatId, targetNpc.name, avatar);
 
         const nextNpc = { ...targetNpc, avatarUrl: response.avatarPath };
         const nextNpcs =
@@ -5116,7 +5142,7 @@ export function GameSurface({
         next.set(`${messageId}:${segmentIndex}`, payload);
         return next;
       });
-      api.patch(`/chats/${activeChatId}/metadata`, { [key]: payload }).catch(() => {});
+      persistGameMetadata(activeChatId, { [key]: payload }, chatMeta).catch(() => {});
 
       if (payload.readableContent) {
         upsertReadableJournalEntry({
@@ -5139,7 +5165,7 @@ export function GameSurface({
         next.add(`${messageId}:${segmentIndex}`);
         return next;
       });
-      api.patch(`/chats/${activeChatId}/metadata`, { [key]: true }).catch(() => {});
+      persistGameMetadata(activeChatId, { [key]: true }, chatMeta).catch(() => {});
     },
     [activeChatId],
   );

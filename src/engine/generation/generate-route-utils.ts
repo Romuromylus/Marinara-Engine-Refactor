@@ -147,20 +147,24 @@ export function extractImageAttachmentDataUrls(attachments: PromptAttachment[] |
 
 function estimateDataUrlBytes(dataUrl: string): number {
   const commaIndex = dataUrl.indexOf(",");
-  if (!dataUrl.startsWith("data:") || commaIndex < 0) return Buffer.byteLength(dataUrl, "utf8");
+  if (!dataUrl.startsWith("data:") || commaIndex < 0) return utf8ByteLength(dataUrl);
 
   const meta = dataUrl.slice(0, commaIndex).toLowerCase();
   const payload = dataUrl.slice(commaIndex + 1);
   if (!meta.includes(";base64")) {
     try {
-      return Buffer.byteLength(decodeURIComponent(payload), "utf8");
+      return utf8ByteLength(decodeURIComponent(payload));
     } catch {
-      return Buffer.byteLength(payload, "utf8");
+      return utf8ByteLength(payload);
     }
   }
 
   const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
   return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
 }
 
 function isReadableTextAttachment(attachment: PromptAttachment): boolean {
@@ -189,12 +193,21 @@ function decodeDataUrlText(dataUrl: string): string | null {
   const payload = dataUrl.slice(commaIndex + 1);
   try {
     if (meta.includes(";base64")) {
-      return Buffer.from(payload, "base64").toString("utf8");
+      return new TextDecoder("utf-8", { fatal: false }).decode(base64ToBytes(payload));
     }
     return decodeURIComponent(payload);
   } catch {
     return null;
   }
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = globalThis.atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 function escapeXmlAttribute(value: string): string {

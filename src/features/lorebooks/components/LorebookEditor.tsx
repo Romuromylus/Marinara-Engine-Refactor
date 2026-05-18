@@ -71,7 +71,8 @@ import {
 } from "lucide-react";
 import { cn } from "../../../shared/lib/utils";
 import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import type { Lorebook, LorebookEntry, LorebookFolder, LorebookCategory } from "../../../engine/contracts/types/lorebook";
 import { testPrimaryKeys, testSecondaryKeys } from "../../../engine/shared/regex/lorebook-keyword-matching";
 import { LorebookEntryRow } from "./LorebookEntryRow";
@@ -1017,7 +1018,7 @@ export function LorebookEditor() {
         onSelect={(format: ExportFormatChoice) => {
           if (!lorebookId) return;
           setExportDialogOpen(false);
-          void api.download(`/lorebooks/${lorebookId}/export?format=${format}`);
+          void exportApi.lorebook(lorebookId, format).then(exportApi.triggerDownload);
         }}
       />
 
@@ -2038,10 +2039,13 @@ function VectorizeSection({ lorebookId, entries }: { lorebookId: string; entries
     setResult(null);
     try {
       const conn = embeddingConnections.find((c) => c.id === selectedConnectionId);
-      const res = await api.post(`/lorebooks/${lorebookId}/vectorize`, {
+      const res = await invokeTauri("lorebook_vectorize", {
+        id: lorebookId,
+        body: {
         connectionId: selectedConnectionId,
         model: conn?.embeddingModel ?? "",
         onlyMissing: !allVectorized,
+        },
       });
       const data = res as { vectorized: number; total?: number; skipped?: number };
       await queryClient.invalidateQueries({ queryKey: lorebookKeys.entries(lorebookId) });

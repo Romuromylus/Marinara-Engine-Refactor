@@ -1,30 +1,45 @@
 import type { AgentResult } from "../contracts/types/agent";
 import type { EventGateway } from "../capabilities/events";
+import type { IntegrationGateway } from "../capabilities/integrations";
 import type { LlmGateway, LlmMessage } from "../capabilities/llm";
 import type { StorageGateway } from "../capabilities/storage";
 import { createGenerationAgentRuntime } from "./agent-runner";
 import { persistConnectedCommandTags } from "./connected-commands";
 import { llmParameters, loadChatMessages, requireRecord, resolveGenerationConnection } from "./context";
+import {
+  appendReadableAttachmentsToContent,
+  extractImageAttachmentDataUrls,
+  getAttachmentFilename,
+  type PromptAttachment,
+} from "./generate-route-utils";
 import type { GenerationEvent } from "./generation-events";
 import { assembleGenerationPrompt } from "./prompt-assembly";
+import type { GenerationCharacterContext } from "./prompt-assembly";
 import { applyRuntimeRegexScripts } from "./regex-runtime";
-import { hiddenFromAi, isRecord, nowIso, readString, type JsonRecord } from "./runtime-records";
+import { hiddenFromAi, isRecord, nowIso, readString, stringArray, type JsonRecord } from "./runtime-records";
 
 export interface StartGenerationInput extends JsonRecord {
   chatId: string;
   connectionId?: string | null;
   message?: string;
+  userMessage?: string | null;
   messages?: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   parameters?: Record<string, unknown>;
   promptPresetId?: string | null;
   generationGuide?: string | null;
   regenerateMessageId?: string | null;
   impersonate?: boolean;
+  impersonateBlockAgents?: boolean;
+  impersonatePromptTemplate?: string | null;
+  forCharacterId?: string | null;
+  mentionedCharacterNames?: string[];
+  attachments?: PromptAttachment[];
 }
 
 export interface GenerationEngineDeps {
   storage: StorageGateway;
   llm: LlmGateway;
+  integrations: IntegrationGateway;
   events?: EventGateway;
 }
 
@@ -35,16 +50,59 @@ export interface RetryAgentsInput extends JsonRecord {
   options?: Record<string, unknown>;
 }
 
-async function saveUserMessage(storage: StorageGateway, input: StartGenerationInput): Promise<string> {
-  const raw = readString(input.message).trim();
-  if (!raw || input.impersonate === true || readString(input.regenerateMessageId).trim()) return "";
-  const content = await applyRuntimeRegexScripts(storage, "user_input", raw);
-  if (!content.trim()) return "";
-  await storage.call(`/chats/${encodeURIComponent(input.chatId)}/messages`, {
+interface PreparedUserInput {
+  content: string;
+  attachments: PromptAttachment[];
+  images: string[];
+  mentionedCharacterNames: string[];
+}
+
+function inputUserMessage(input: StartGenerationInput): string {
+  return readString(input.message) || readString(input.userMessage);
+}
+
+function inputAttachments(input: StartGenerationInput): PromptAttachment[] {
+  return Array.isArray(input.attachments) ? input.attachments.filter(isRecord).map((attachment) => attachment as PromptAttachment) : [];
+}
+
+function imageAttachmentNotes(attachments: PromptAttachment[]): string {
+  const names = attachments
+    .filter((attachment) => readString(attachment.type).toLowerCase().startsWith("image/"))
+    .map(getAttachmentFilename);
+  if (names.length === 0) return "";
+  return names.map((name) => `[Attached image: ${name}]`).join("\n");
+}
+
+async function prepareUserInput(storage: StorageGateway, input: StartGenerationInput): Promise<PreparedUserInput> {
+  const raw = inputUserMessage(input).trim();
+  const attachments = inputAttachments(input);
+  const images = extractImageAttachmentDataUrls(attachments);
+  const mentionedCharacterNames = stringArray(input.mentionedCharacterNames).filter((name) => name.trim().length > 0);
+  const regexed = raw ? await applyRuntimeRegexScripts(storage, "user_input", raw) : "";
+  const withReadableAttachments = appendReadableAttachmentsToContent(regexed, attachments);
+  const imageNotes = imageAttachmentNotes(attachments);
+  return {
+    content: [withReadableAttachments, imageNotes].filter((part) => part.trim().length > 0).join("\n\n"),
+    attachments,
+    images,
+    mentionedCharacterNames,
+  };
+}
+
+async function saveUserMessage(
+  storage: StorageGateway,
+  input: StartGenerationInput,
+  prepared: PreparedUserInput,
+): Promise<void> {
+  if (!prepared.content.trim() || input.impersonate === true || readString(input.regenerateMessageId).trim()) return;
+  const extra: Record<string, unknown> = {};
+  if (prepared.attachments.length) extra.attachments = prepared.attachments;
+  if (prepared.mentionedCharacterNames.length) extra.mentionedCharacterNames = prepared.mentionedCharacterNames;
+  await storage.createChatMessage(input.chatId, {
     role: "user",
-    content,
+    content: prepared.content,
+    extra,
   });
-  return content;
 }
 
 function requestMessages(input: StartGenerationInput): LlmMessage[] | null {
@@ -55,6 +113,66 @@ function requestMessages(input: StartGenerationInput): LlmMessage[] | null {
       content: readString(message.content).trim(),
     }))
     .filter((message) => message.content.length > 0);
+}
+
+function withImageAttachments(messages: LlmMessage[], images: string[]): LlmMessage[] {
+  if (images.length === 0 || messages.length === 0) return messages;
+  const next = messages.map((message) => ({ ...message }));
+  let targetIndex = -1;
+  for (let index = next.length - 1; index >= 0; index -= 1) {
+    if (next[index]?.role === "user") {
+      targetIndex = index;
+      break;
+    }
+  }
+  if (targetIndex < 0) {
+    next.push({ role: "user", content: "", images });
+  } else {
+    next[targetIndex] = {
+      ...next[targetIndex]!,
+      images: [...(next[targetIndex]!.images ?? []), ...images],
+    };
+  }
+  return next;
+}
+
+function directiveMessages(
+  input: StartGenerationInput,
+  characters: GenerationCharacterContext[],
+  prepared: PreparedUserInput,
+): LlmMessage[] {
+  const messages: LlmMessage[] = [];
+  if (input.impersonate === true) {
+    const template =
+      readString(input.impersonatePromptTemplate).trim() ||
+      "Write the next reply as the user's persona. Do not continue as the assistant or narrator.";
+    messages.push({
+      role: "user",
+      content: [template, prepared.content.trim() ? `Direction:\n${prepared.content.trim()}` : ""]
+        .filter(Boolean)
+        .join("\n\n"),
+    });
+    return messages;
+  }
+
+  const forCharacterId = readString(input.forCharacterId).trim();
+  if (forCharacterId) {
+    const character = characters.find((candidate) => candidate.id === forCharacterId);
+    messages.push({
+      role: "user",
+      content: character?.name
+        ? `[Generation instruction: respond as ${character.name}.]`
+        : `[Generation instruction: respond as the requested character.]`,
+    });
+  }
+
+  if (prepared.mentionedCharacterNames.length) {
+    messages.push({
+      role: "user",
+      content: `[Generation instruction: the user's latest message explicitly mentioned ${prepared.mentionedCharacterNames.join(", ")}. Prioritize those character voices when selecting who responds.]`,
+    });
+  }
+  return messages;
 }
 
 function visibleTranscript(messages: JsonRecord[]): string {
@@ -109,13 +227,10 @@ async function saveAssistantMessage(args: {
 
   const regenerateMessageId = readString(args.input.regenerateMessageId).trim();
   if (regenerateMessageId) {
-    return args.storage.call(
-      `/chats/${encodeURIComponent(args.input.chatId)}/messages/${encodeURIComponent(regenerateMessageId)}/swipes`,
-      { content: args.content },
-    );
+    return args.storage.addChatMessageSwipe(args.input.chatId, regenerateMessageId, args.content);
   }
 
-  return args.storage.call(`/chats/${encodeURIComponent(args.input.chatId)}/messages`, {
+  return args.storage.createChatMessage(args.input.chatId, {
     role: "assistant",
     content: args.content,
     generationInfo: {
@@ -161,7 +276,7 @@ export async function retryGenerationAgents(
   });
   const results: AgentResult[] = [];
   const runtime = await createGenerationAgentRuntime(
-    { storage: deps.storage, llm: deps.llm },
+    { storage: deps.storage, llm: deps.llm, integrations: deps.integrations },
     {
       chat,
       connection,
@@ -198,7 +313,8 @@ export async function* startGeneration(
   if (!chatId) throw new Error("chatId is required");
 
   yield { type: "phase", data: "Saving message..." };
-  const latestUserInput = await saveUserMessage(deps.storage, input);
+  const preparedUserInput = await prepareUserInput(deps.storage, input);
+  await saveUserMessage(deps.storage, input, preparedUserInput);
   const chat = requireRecord(await deps.storage.get("chats", chatId), "Chat");
   const connection = await resolveGenerationConnection(deps.storage, chat, input);
   const storedMessages = await loadChatMessages(deps.storage, chatId);
@@ -212,25 +328,28 @@ export async function* startGeneration(
     storedMessages,
     connection,
     request: input,
-    latestUserInput: latestUserInput || readString(input.message),
+    latestUserInput: preparedUserInput.content || inputUserMessage(input),
   });
 
   if (!directMessages) {
-    yield { type: "phase", data: "Running pre-generation agents..." };
-    const runtime = await createGenerationAgentRuntime(
-      { storage: deps.storage, llm: deps.llm },
-      {
-        chat,
-        connection,
-        storedMessages,
-        characters: assembly.characters,
-        persona: assembly.persona,
-        activatedLorebookEntries: assembly.activatedLorebookEntries,
-        chatSummary: assembly.chatSummary,
-        signal,
-      },
-      (result) => agentEvents.push(result),
-    );
+    const agentsEnabled = input.impersonateBlockAgents !== true;
+    yield { type: "phase", data: agentsEnabled ? "Running pre-generation agents..." : "Calling model..." };
+    const runtime = agentsEnabled
+      ? await createGenerationAgentRuntime(
+          { storage: deps.storage, llm: deps.llm, integrations: deps.integrations },
+          {
+            chat,
+            connection,
+            storedMessages,
+            characters: assembly.characters,
+            persona: assembly.persona,
+            activatedLorebookEntries: assembly.activatedLorebookEntries,
+            chatSummary: assembly.chatSummary,
+            signal,
+          },
+          (result) => agentEvents.push(result),
+        )
+      : null;
     for (const result of agentEvents) {
       yield { type: "agent_result", data: result };
     }
@@ -241,12 +360,15 @@ export async function* startGeneration(
       storedMessages,
       connection,
       request: input,
-      latestUserInput: latestUserInput || readString(input.message),
-      agentData: runtime.agentData,
+      latestUserInput: preparedUserInput.content || inputUserMessage(input),
+      agentData: runtime?.agentData,
     });
-    prompt = assembly.messages;
+    prompt = withImageAttachments(
+      [...assembly.messages, ...directiveMessages(input, assembly.characters, preparedUserInput)],
+      preparedUserInput.images,
+    );
 
-    const parallelAgents = runtime.runParallel();
+    const parallelAgents = runtime?.runParallel() ?? Promise.resolve<AgentResult[]>([]);
     yield { type: "phase", data: "Calling model..." };
     let content = "";
     for await (const chunk of deps.llm.stream(
@@ -265,13 +387,13 @@ export async function* startGeneration(
     }
 
     const parallelResults = await parallelAgents;
-    const postResults = await runtime.runPost(content);
+    const postResults = runtime ? await runtime.runPost(content) : [];
     for (const result of [...parallelResults, ...postResults, ...agentEvents]) {
       yield { type: "agent_result", data: result };
     }
-    const allAgentResults = [...runtime.preResults, ...parallelResults, ...postResults, ...agentEvents];
+    const allAgentResults = [...(runtime?.preResults ?? []), ...parallelResults, ...postResults, ...agentEvents];
     content = await applyRuntimeRegexScripts(deps.storage, "ai_output", content);
-    const connected = await persistConnectedCommandTags(deps.storage, chat, content);
+    const connected = await persistConnectedCommandTags(deps.storage, chat, content, deps.integrations);
     const saved = await saveAssistantMessage({
       storage: deps.storage,
       chat,
@@ -279,7 +401,7 @@ export async function* startGeneration(
       connection,
       content: connected.displayContent,
       agentResults: allAgentResults,
-      noteCount: connected.createdNotes.length,
+      noteCount: connected.createdNotes.length + connected.executedCommands.length,
     });
     await persistAgentResults(deps.storage, chatId, messageId(saved), allAgentResults);
     if (saved) yield { type: "assistant_message", data: saved };
@@ -287,6 +409,10 @@ export async function* startGeneration(
     return;
   }
 
+  prompt = withImageAttachments(
+    [...(prompt ?? []), ...directiveMessages(input, assembly.characters, preparedUserInput)],
+    preparedUserInput.images,
+  );
   yield { type: "phase", data: "Calling model..." };
   let content = "";
   for await (const chunk of deps.llm.stream(
@@ -304,7 +430,7 @@ export async function* startGeneration(
     }
   }
   content = await applyRuntimeRegexScripts(deps.storage, "ai_output", content);
-  const connected = await persistConnectedCommandTags(deps.storage, chat, content);
+  const connected = await persistConnectedCommandTags(deps.storage, chat, content, deps.integrations);
   const saved = await saveAssistantMessage({
     storage: deps.storage,
     chat,
@@ -312,7 +438,7 @@ export async function* startGeneration(
     connection,
     content: connected.displayContent,
     agentResults: [],
-    noteCount: connected.createdNotes.length,
+    noteCount: connected.createdNotes.length + connected.executedCommands.length,
   });
   if (saved) yield { type: "assistant_message", data: saved };
   yield { type: "done" };

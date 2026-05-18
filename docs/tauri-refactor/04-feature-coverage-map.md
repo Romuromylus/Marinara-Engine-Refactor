@@ -13,7 +13,7 @@ Every route from `E:/Personal Projects/Marinara-Engine/packages/server/src/route
 | `app-settings.routes.ts` | `storage/repositories/app_settings.rs` | `features/settings` |
 | `avatars.routes.ts` | `assets/avatars.rs` | `features/characters`, `features/personas` |
 | `backgrounds.routes.ts` | `assets/backgrounds.rs` | `features/settings`, `features/assets` |
-| `backup.routes.ts` | `storage/backup.rs`, `import/profile` | `features/imports`, settings backup UI |
+| `backup.routes.ts` | Removed from active runtime; current profile package import/export lives in `import/profile` | `features/imports`, settings profile package UI |
 | `bot-browser.routes.ts` | `integrations/bot_browser` | `features/bot-browser` |
 | `bot-browser-chartavern.routes.ts` | `integrations/bot_browser/chartavern.rs` | `features/bot-browser` |
 | `bot-browser-datacat.routes.ts` | `integrations/bot_browser/datacat.rs` | `features/bot-browser` |
@@ -47,7 +47,7 @@ Every route from `E:/Personal Projects/Marinara-Engine/packages/server/src/route
 | `prompts.routes.ts` | `storage/repositories/prompts.rs` | `features/prompts` |
 | `regex-scripts.routes.ts` | `generation/pipeline/regex.rs`, `agents` | `features/agents` |
 | `scene.routes.ts` | `roleplay/scene` | `features/roleplay` |
-| `sidecar.routes.ts` | `sidecar` | `features/sidecar` |
+| `sidecar.routes.ts` | Deferred out of active app scope | none |
 | `spotify-auth.routes.ts` | `integrations/spotify/oauth.rs`, `integrations/spotify/tokens.rs` | `features/spotify`, agent tools |
 | `sprites.routes.ts` | `roleplay/sprites`, `assets` | `features/roleplay`, `features/assets` |
 | `themes.routes.ts` | `storage/repositories/themes.rs` | `features/themes`, settings |
@@ -74,7 +74,7 @@ Every route from `E:/Personal Projects/Marinara-Engine/packages/server/src/route
 | Swipes and branches | `chat/swipes.rs`, `branch.rs` | `features/chat` |
 | Chat folders | `chat/folders.rs` | `features/chat` |
 | App settings | `storage/repositories/app_settings.rs` | `features/settings` |
-| Backups | `storage/backup.rs`, `import/profile` | `features/imports`, `features/settings` |
+| Current profile packages | `import/profile` | `features/imports`, `features/settings` |
 | File-storage import | `import/file_storage.rs` | file-based import only; SQLite import is intentionally removed |
 
 ## Characters, Personas, Lorebooks, Prompts
@@ -189,15 +189,7 @@ Every route from `E:/Personal Projects/Marinara-Engine/packages/server/src/route
 
 ## Sidecar
 
-| Feature | Rust Target | Frontend Target |
-| --- | --- | --- |
-| Model config | `sidecar/config.rs` | `features/sidecar` |
-| Model downloads | `sidecar/downloads.rs` | `features/sidecar` |
-| Runtime install | `sidecar/runtime/install.rs` | `features/sidecar` |
-| llama.cpp process | `sidecar/process/manager.rs` | status UI only |
-| MLX runtime | `sidecar/runtime/mlx.rs` | status UI only |
-| Sidecar inference | `sidecar/inference.rs` | generation consumers |
-| Sidecar logs | `sidecar/process/logs.rs` | `features/sidecar` |
+Sidecar is excluded from the active Tauri migration. Do not keep sidecar UI, commands, or placeholder status surfaces in the app until that scope is intentionally reopened.
 
 ## Integrations
 
@@ -230,13 +222,4 @@ Every route from `E:/Personal Projects/Marinara-Engine/packages/server/src/route
 
 ## Sync And Docker Deployment
 
-| Feature | Rust Target | Frontend Target |
-| --- | --- | --- |
-| Sync settings | `sync-client/config.rs` | `features/sync` |
-| Device pairing | `sync-client/device.rs`, `sync-server/routes/devices.rs` | `features/sync` |
-| Local sync queue | `sync-client/queue.rs` | status display only |
-| Metadata push/pull | `sync-client/push.rs`, `pull.rs`, `sync-server/services/sync_service.rs` | `features/sync` |
-| Blob sync | `sync-client/blobs.rs`, `sync-server/services/blob_service.rs` | progress display only |
-| Conflict review | `sync-client/conflicts.rs`, `sync-server/sync/conflicts.rs` | `features/sync/ConflictReviewPanel.tsx` |
-| Docker sync API | `sync-server` | deployment docs and settings help |
-| Sync OpenAPI | `sync-server/openapi.rs` | developer docs |
+Sync is excluded from the active Tauri migration. Do not keep sync settings, pairing, queue, conflict review, or Docker sync UI in the app until that scope is intentionally reopened.

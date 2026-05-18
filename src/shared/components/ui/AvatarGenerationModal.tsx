@@ -3,7 +3,7 @@ import { Camera, ImagePlus, Loader2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useConnections } from "../../../features/connections/hooks/use-connections";
 import { useUIStore } from "../../stores/ui.store";
-import { api } from "../../api/api-client";
+import { imageGenerationApi } from "../../api/image-generation-api";
 import { cn } from "../../lib/utils";
 import { urlToDataUrl } from "../../lib/url-blob";
 import { Modal } from "./Modal";
@@ -114,10 +114,7 @@ export function AvatarGenerationModal({
         useCurrentAvatarReference && defaultAvatarUrl ? [await imageUrlToDataUrl(defaultAvatarUrl)] : undefined;
       const payload = buildPayload(referenceImages);
       if (reviewImagePromptsBeforeSend) {
-        const preview = await api.post<{ items: ImagePromptReviewItem[] }>(
-          "/characters/avatar-generation/preview",
-          payload,
-        );
+        const preview = await imageGenerationApi.avatarPreview<{ items: ImagePromptReviewItem[] }>(payload);
         if (preview.items.length > 0) {
           const overrides = await openPromptReview(preview.items);
           if (!overrides) return;
@@ -126,8 +123,7 @@ export function AvatarGenerationModal({
         }
       }
 
-      const result = await api.post<AvatarGenerationResponse>(
-        "/characters/avatar-generation",
+      const result = await imageGenerationApi.avatarGenerate<AvatarGenerationResponse>(
         buildPayload(referenceImages, promptOverrides),
       );
       setGeneratedAvatar(result.image);

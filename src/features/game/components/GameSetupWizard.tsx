@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { GameSetupConfig, GameGmMode } from "../../../engine/contracts/types/game";
 import { getCharacterTitle } from "../../../shared/lib/character-display";
-import { api } from "../../../shared/api/api-client";
+import { spotifyApi } from "../../../shared/api/integration-utility-api";
 import { cn, getAvatarCropStyle, parseAvatarCropJson, type AvatarCropValue } from "../../../shared/lib/utils";
 import { Modal } from "../../../shared/components/ui/Modal";
 import {
@@ -326,7 +326,7 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
   const spotifyPlaylistsQuery = useQuery({
     queryKey: ["spotify", "playlists", 50],
     queryFn: () =>
-      api.get<{
+      spotifyApi.playlists<{
         playlists: Array<{
           id: string;
           name: string;
@@ -334,7 +334,7 @@ export function GameSetupWizard({ onComplete, onCancel, isLoading, characters }:
           trackCount: number | null;
           owned: boolean | null;
         }>;
-      }>("/spotify/playlists?limit=50"),
+      }>({ limit: 50 }),
     enabled: enableSpotifyDj && gameSpotifySourceType === "playlist",
     staleTime: 60_000,
     retry: false,

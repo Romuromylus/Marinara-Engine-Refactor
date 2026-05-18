@@ -25,7 +25,7 @@ import { applyInlineMarkdown, renderMarkdownBlocks } from "../../../shared/lib/m
 import { chatKeys } from "../../chats/hooks/use-chats";
 import { resolveMessageMacros } from "../../../shared/lib/chat-macros";
 import { useTranslate } from "../../../shared/hooks/use-translate";
-import { api } from "../../../shared/api/api-client";
+import { storageApi } from "../../../shared/api/storage-api";
 import type { CharacterMap, MessageSelectionToggle, PersonaInfo } from "./chat-area.types";
 import { GenerationReplayDetailsModal, hasGenerationReplayDetails } from "./GenerationReplayDetailsModal";
 import { ImagePromptPanel } from "./ImagePromptPanel";
@@ -421,7 +421,9 @@ export const ConversationMessage = memo(function ConversationMessage({
           ),
         };
       });
-      await api.patch(`/chats/${message.chatId}/messages/${message.id}/extra`, { attachments: updated });
+      await storageApi.patchChatMessageExtra(message.id, {
+        attachments: updated,
+      });
       qc.invalidateQueries({ queryKey: msgKey });
     },
     [extra.attachments, message.chatId, message.id, qc],

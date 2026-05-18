@@ -1,11 +1,11 @@
 // ──────────────────────────────────────────────
 // Slash Commands — SillyTavern-style / commands
 // ──────────────────────────────────────────────
-import { api } from "../api/api-client";
 import { chatBackgroundMetadataToUrl } from "./backgrounds";
 import { planRoleplayScene, createRoleplayScene } from "../../engine/modes/roleplay/scene/scene-service";
 import { llmApi } from "../api/llm-api";
 import { storageApi } from "../api/storage-api";
+import { spriteApi } from "../api/image-generation-api";
 import { useChatStore } from "../stores/chat.store";
 import { useUIStore } from "../stores/ui.store";
 import { toast } from "sonner";
@@ -180,7 +180,7 @@ function findSceneCharacter(
 
 async function listSpriteExpressions(characterId: string): Promise<string[]> {
   try {
-    const sprites = await api.get<Array<{ expression?: string }>>(`/sprites/${encodeURIComponent(characterId)}`);
+    const sprites = await spriteApi.list<Array<{ expression?: string }>>(characterId);
     const expressions = sprites
       .map((sprite) => sprite.expression?.trim())
       .filter((expression): expression is string => !!expression);
@@ -188,6 +188,17 @@ async function listSpriteExpressions(characterId: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+async function setMessagesHidden(messageIds: string[], hidden: boolean) {
+  await Promise.all(
+    messageIds.map((messageId) =>
+      storageApi.patchChatMessageExtra(messageId, {
+        hiddenFromAI: hidden,
+        hiddenFromAi: hidden,
+      }),
+    ),
+  );
 }
 
 async function buildEmoteListFeedback(characters: Array<{ id: string; name: string }>): Promise<string> {
@@ -464,7 +475,7 @@ const COMMANDS: SlashCommand[] = [
       }
 
       if (/^(reset|clear|default)$/i.test(raw)) {
-        await api.patch(`/chats/${ctx.chatId}/metadata`, { impersonatePrompt: null });
+        await storageApi.patchChatMetadata(ctx.chatId, { impersonatePrompt: null });
         ctx.invalidate();
         return { handled: true, feedback: "Impersonate prompt reset to the default." };
       }
@@ -474,7 +485,7 @@ const COMMANDS: SlashCommand[] = [
         return { handled: true, feedback: "Please provide a prompt, or use /impersonate_prompt reset." };
       }
 
-      await api.patch(`/chats/${ctx.chatId}/metadata`, { impersonatePrompt: prompt });
+      await storageApi.patchChatMetadata(ctx.chatId, { impersonatePrompt: prompt });
       ctx.invalidate();
       return { handled: true, feedback: `Impersonate prompt updated:\n${prompt}` };
     },
@@ -501,7 +512,7 @@ const COMMANDS: SlashCommand[] = [
 
       setTimeout(async () => {
         try {
-          await api.post(`/chats/${chatId}/messages`, {
+          await storageApi.createChatMessage(chatId, {
             role: "narrator",
             content: `⏰ **Reminder:** ${message}`,
           });
@@ -548,7 +559,7 @@ const COMMANDS: SlashCommand[] = [
 
       // If no prompt and no messages, guide the user
       if (!prompt) {
-        const msgs = await api.get<unknown[]>(`/chats/${ctx.chatId}/messages`);
+        const msgs = await storageApi.listChatMessages<unknown>(ctx.chatId);
         if (!msgs || msgs.length === 0) {
           return {
             handled: true,
@@ -646,7 +657,7 @@ const COMMANDS: SlashCommand[] = [
         };
       }
 
-      const messages: Array<{ id: string; extra?: unknown }> = await api.get(`/chats/${ctx.chatId}/messages`);
+      const messages = await storageApi.listChatMessages<{ id: string; extra?: unknown }>(ctx.chatId);
       const total = messages.length;
       const max = indices[indices.length - 1]!;
       if (max > total) {
@@ -662,10 +673,7 @@ const COMMANDS: SlashCommand[] = [
         .map((idx) => messages[idx - 1]!.id);
 
       if (targetIds.length > 0) {
-        await api.patch(`/chats/${ctx.chatId}/messages/bulk-hidden`, {
-          messageIds: targetIds,
-          hidden: true,
-        });
+        await setMessagesHidden(targetIds, true);
       }
 
       ctx.invalidate();
@@ -687,7 +695,7 @@ const COMMANDS: SlashCommand[] = [
         };
       }
 
-      const messages: Array<{ id: string; extra?: unknown }> = await api.get(`/chats/${ctx.chatId}/messages`);
+      const messages = await storageApi.listChatMessages<{ id: string; extra?: unknown }>(ctx.chatId);
       const total = messages.length;
       const max = indices[indices.length - 1]!;
       if (max > total) {
@@ -703,10 +711,7 @@ const COMMANDS: SlashCommand[] = [
         .map((idx) => messages[idx - 1]!.id);
 
       if (targetIds.length > 0) {
-        await api.patch(`/chats/${ctx.chatId}/messages/bulk-hidden`, {
-          messageIds: targetIds,
-          hidden: false,
-        });
+        await setMessagesHidden(targetIds, false);
       }
 
       ctx.invalidate();

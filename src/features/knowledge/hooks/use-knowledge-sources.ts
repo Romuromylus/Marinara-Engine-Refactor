@@ -2,7 +2,6 @@
 // React Query: Knowledge Source file hooks
 // ──────────────────────────────────────────────
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../shared/api/api-client";
 import { knowledgeSourcesApi } from "../../../shared/api/integration-utility-api";
 
 export interface KnowledgeSource {
@@ -21,7 +20,7 @@ const ksKeys = {
 export function useKnowledgeSources() {
   return useQuery({
     queryKey: ksKeys.list(),
-    queryFn: () => api.get<KnowledgeSource[]>("/knowledge-sources"),
+    queryFn: () => knowledgeSourcesApi.list<KnowledgeSource[]>(),
     staleTime: 60_000,
   });
 }
@@ -39,7 +38,7 @@ export function useUploadKnowledgeSource() {
 export function useDeleteKnowledgeSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/knowledge-sources/${id}`),
+    mutationFn: (id: string) => knowledgeSourcesApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ksKeys.all });
     },

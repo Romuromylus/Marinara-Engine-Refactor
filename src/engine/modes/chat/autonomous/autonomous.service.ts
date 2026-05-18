@@ -1,5 +1,5 @@
 import type { StorageGateway } from "../../../capabilities/storage";
-import { getBusyDelay, getCurrentStatus, type WeekSchedule } from "../schedules/schedule.service.js";
+import { getBusyDelay, getCurrentStatus, getMonday, type WeekSchedule } from "../schedules/schedule.service.js";
 
 // ── Types ──
 
@@ -37,6 +37,8 @@ type StoredMessage = {
   characterId?: unknown;
 };
 
+type UserStatus = "active" | "idle" | "dnd";
+
 function metadataRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
     try {
@@ -62,13 +64,51 @@ async function requireChat(storage: StorageGateway, chatId: string): Promise<Sto
 }
 
 async function chatMessages(storage: StorageGateway, chatId: string): Promise<StoredMessage[]> {
-  const rows = await storage.request<unknown>("GET", `/chats/${encodeURIComponent(chatId)}/messages`);
+  const rows = await storage.listChatMessages<unknown>(chatId);
   return Array.isArray(rows) ? (rows as StoredMessage[]) : [];
 }
 
 function characterSchedules(meta: Record<string, unknown>): Record<string, WeekSchedule> {
   const raw = metadataRecord(meta.characterSchedules);
   return raw as Record<string, WeekSchedule>;
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function characterTalkativeness(character: unknown): number {
+  const row = metadataRecord(character);
+  const data = metadataRecord(row.data);
+  const extensions = metadataRecord(data.extensions);
+  const raw = extensions.talkativeness;
+  const value = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() ? Number(raw) : NaN;
+  if (!Number.isFinite(value)) return 50;
+  return clampPercent(value <= 1 ? value * 100 : value);
+}
+
+function schedulelessInactivityThresholdMinutes(talkativeness: number, userStatus: UserStatus): number {
+  const chatty = clampPercent(talkativeness) / 100;
+  const minMinutes = userStatus === "idle" ? 10 : 30;
+  const maxMinutes = userStatus === "idle" ? 180 : 360;
+  return Math.round(maxMinutes - (maxMinutes - minMinutes) * chatty);
+}
+
+function createSchedulelessAutonomySchedule(talkativeness: number, userStatus: UserStatus): WeekSchedule {
+  return {
+    weekStart: getMonday().toISOString(),
+    days: {},
+    inactivityThresholdMinutes: schedulelessInactivityThresholdMinutes(talkativeness, userStatus),
+    talkativeness,
+  };
+}
+
+function stringSet(value: unknown): Set<string> {
+  return new Set(
+    Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      : [],
+  );
 }
 
 export async function getConversationStatus(
@@ -92,13 +132,14 @@ export async function getConversationStatus(
 
 export async function checkConversationAutonomous(
   storage: StorageGateway,
-  input: { chatId: string; userStatus?: string },
+  input: { chatId: string; userStatus?: string; maxFollowups?: number },
 ): Promise<AutonomousCheckResult> {
   const chat = await requireChat(storage, input.chatId);
   const meta = metadataRecord(chat.metadata);
+  const userStatus: UserStatus = input.userStatus === "idle" || input.userStatus === "dnd" ? input.userStatus : "active";
   const disabled = meta.autonomousMessages !== true;
   if (disabled) return { shouldTrigger: false, characterIds: [], reason: "disabled", inactivityMs: 0 };
-  if (input.userStatus === "dnd") return { shouldTrigger: false, characterIds: [], reason: "user_dnd", inactivityMs: 0 };
+  if (userStatus === "dnd") return { shouldTrigger: false, characterIds: [], reason: "user_dnd", inactivityMs: 0 };
   if (meta.sceneStatus === "active") return { shouldTrigger: false, characterIds: [], reason: "scene_active", inactivityMs: 0 };
 
   const messages = await chatMessages(storage, input.chatId);
@@ -113,16 +154,45 @@ export async function checkConversationAutonomous(
 
   const ids = chatCharacterIds(chat);
   const schedules = characterSchedules(meta);
-  const hasSchedules = Object.keys(schedules).length > 0;
-  if (hasSchedules) {
-    const scheduled = checkAutonomousMessaging(input.chatId, schedules, ids.length > 1);
-    if (scheduled.shouldTrigger) return scheduled;
+  const autonomySchedules: Record<string, WeekSchedule> = { ...schedules };
+  await Promise.all(
+    ids
+      .filter((characterId) => !autonomySchedules[characterId])
+      .map(async (characterId) => {
+        const character = await storage.get("characters", characterId);
+        autonomySchedules[characterId] = createSchedulelessAutonomySchedule(characterTalkativeness(character), userStatus);
+      }),
+  );
+
+  const sceneBusyIds = stringSet(meta.sceneBusyCharIds);
+  for (const busyId of sceneBusyIds) {
+    delete autonomySchedules[busyId];
   }
 
-  const last = messages[messages.length - 1];
-  if (last?.role === "user" && ids.length > 0) {
-    return { shouldTrigger: true, characterIds: [ids[0]!], reason: "user_inactivity", inactivityMs: 0 };
+  const scheduled = checkAutonomousMessaging(input.chatId, autonomySchedules, ids.length > 1, {
+    maxFollowups: input.maxFollowups,
+  });
+  if (scheduled.shouldTrigger) return scheduled;
+
+  if (Object.keys(schedules).length > 0) {
+    const last = messages[messages.length - 1];
+    if (last?.role === "user") {
+      const onlineIds = ids.filter((characterId) => {
+        if (sceneBusyIds.has(characterId)) return false;
+        const status = getCurrentStatus(schedules[characterId] ?? autonomySchedules[characterId]!);
+        return status.status !== "offline";
+      });
+      if (onlineIds.length > 0) {
+        return {
+          shouldTrigger: true,
+          characterIds: [onlineIds[0]!],
+          reason: "user_inactivity",
+          inactivityMs: 0,
+        };
+      }
+    }
   }
+
   return { shouldTrigger: false, characterIds: [], reason: "waiting", inactivityMs: 0 };
 }
 

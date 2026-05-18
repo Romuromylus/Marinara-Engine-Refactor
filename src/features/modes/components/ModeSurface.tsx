@@ -34,7 +34,7 @@ import { useGenerate } from "../../generation/hooks/use-generate";
 import { useCharacters, usePersonas } from "../../characters/hooks/use-characters";
 import { useConnections } from "../../connections/hooks/use-connections";
 import { usePageActivity } from "../../../shared/hooks/use-page-activity";
-import { ApiError } from "../../../shared/api/api-client";
+import { ApiError } from "../../../shared/api/api-errors";
 import { filterLanguageGenerationConnections } from "../../../shared/lib/connection-filters";
 import { getChatDisplayName, getConnectedChatDisplayName, parseChatMetadata } from "../../../shared/lib/chat-display";
 import { parseCharacterDisplayData } from "../../../shared/lib/character-display";

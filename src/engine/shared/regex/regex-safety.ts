@@ -6,9 +6,8 @@
 //
 // Not a full safe-regex replacement: false negatives are possible against
 // expert-crafted patterns that pass star-height inspection but still backtrack
-// catastrophically. The server-side timeout executor in
-// packages/server/src/services/lorebook/regex-timeout.ts is the second line of
-// defense for those cases.
+// catastrophically. The Tauri migration also caps frontend lorebook scan text
+// length before running user regexes.
 
 export interface PatternSafetyOptions {
   /** Reject any source string longer than this. Default 1000. */

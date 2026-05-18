@@ -2,7 +2,7 @@
 // Hooks: Custom Themes
 // ──────────────────────────────────────────────
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../shared/api/api-client";
+import { storageApi } from "../../../shared/api/storage-api";
 import type { CreateThemeInput, UpdateThemeInput } from "../../../engine/contracts/schemas/theme.schema";
 import type { Theme } from "../../../engine/contracts/types/theme";
 
@@ -18,7 +18,7 @@ export function findDuplicateTheme(themes: Theme[], name: string, css: string) {
 export function useThemes() {
   return useQuery({
     queryKey: themeKeys.list(),
-    queryFn: () => api.get<Theme[]>("/themes"),
+    queryFn: () => storageApi.list<Theme>("themes"),
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -29,7 +29,7 @@ export function useThemes() {
 export function useCreateTheme() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateThemeInput) => api.post<Theme>("/themes", data),
+    mutationFn: (data: CreateThemeInput) => storageApi.create<Theme>("themes", data as Record<string, unknown>),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: themeKeys.all });
     },
@@ -39,7 +39,8 @@ export function useCreateTheme() {
 export function useUpdateTheme() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & UpdateThemeInput) => api.patch<Theme>(`/themes/${id}`, data),
+    mutationFn: ({ id, ...data }: { id: string } & UpdateThemeInput) =>
+      storageApi.update<Theme>("themes", id, data as Record<string, unknown>),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: themeKeys.all });
     },
@@ -49,7 +50,7 @@ export function useUpdateTheme() {
 export function useDeleteTheme() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/themes/${id}`),
+    mutationFn: (id: string) => storageApi.delete("themes", id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: themeKeys.all });
     },
@@ -59,7 +60,18 @@ export function useDeleteTheme() {
 export function useSetActiveTheme() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string | null) => api.put<Theme | null>("/themes/active", { id }),
+    mutationFn: async (id: string | null) => {
+      const themes = await storageApi.list<Theme>("themes");
+      let selected: Theme | null = null;
+      await Promise.all(
+        themes.map(async (theme) => {
+          const isActive = !!id && theme.id === id;
+          const updated = await storageApi.update<Theme>("themes", theme.id, { isActive, active: isActive });
+          if (isActive) selected = updated;
+        }),
+      );
+      return selected;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: themeKeys.all });
     },

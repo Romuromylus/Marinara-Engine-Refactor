@@ -5,7 +5,7 @@
 // provides tag resolution for audio/images.
 // ──────────────────────────────────────────────
 import { create } from "zustand";
-import { api } from "../../../shared/api/api-client";
+import { gameAssetsApi } from "../../../shared/api/assets-api";
 import { gameAssetFileUrlFromPath } from "../../../shared/api/local-file-api";
 
 interface AssetEntry {
@@ -62,7 +62,7 @@ export const useGameAssetStore = create<GameAssetStore>((set, get) => ({
   fetchManifest: async () => {
     set({ isLoading: true, error: null });
     try {
-      const data = await api.get<AssetManifest>("/game-assets/manifest");
+      const data = await gameAssetsApi.manifest<AssetManifest>();
       set({ manifest: data, isLoading: false });
     } catch (e) {
       set({ error: (e as Error).message, isLoading: false });
@@ -72,8 +72,8 @@ export const useGameAssetStore = create<GameAssetStore>((set, get) => ({
   rescanAssets: async () => {
     set({ isLoading: true });
     try {
-      await api.post("/game-assets/rescan");
-      const data = await api.get<AssetManifest>("/game-assets/manifest");
+      const result = await gameAssetsApi.rescan();
+      const data = (result as { manifest?: AssetManifest }).manifest ?? (await gameAssetsApi.manifest<AssetManifest>());
       set({ manifest: data, isLoading: false });
     } catch (e) {
       set({ error: (e as Error).message, isLoading: false });

@@ -2,9 +2,9 @@
 // React Query: Character, Group & Persona hooks
 // ──────────────────────────────────────────────
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../shared/api/api-client";
 import { storageApi } from "../../../shared/api/storage-api";
 import { invokeTauri } from "../../../shared/api/tauri-client";
+import { galleryApi, spriteApi } from "../../../shared/api/image-generation-api";
 import type { CharacterCardVersion } from "../../../engine/contracts/types/character";
 
 export const characterKeys = {
@@ -195,7 +195,7 @@ export const spriteKeys = {
 export function useSpriteCapabilities() {
   return useQuery({
     queryKey: spriteKeys.capabilities(),
-    queryFn: () => api.get<SpriteCapabilities>("/sprites/capabilities"),
+    queryFn: () => spriteApi.capabilities<SpriteCapabilities>(),
     staleTime: 5 * 60_000,
   });
 }
@@ -203,7 +203,7 @@ export function useSpriteCapabilities() {
 export function useCharacterSprites(characterId: string | null) {
   return useQuery({
     queryKey: spriteKeys.list(characterId ?? ""),
-    queryFn: () => api.get<SpriteInfo[]>(`/sprites/${characterId}`),
+    queryFn: () => spriteApi.list<SpriteInfo[]>(characterId!),
     enabled: !!characterId,
   });
 }
@@ -212,7 +212,7 @@ export function useUploadSprite() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ characterId, expression, image }: { characterId: string; expression: string; image: string }) =>
-      api.post<SpriteInfo>(`/sprites/${characterId}`, { expression, image }),
+      spriteApi.upload<SpriteInfo>(characterId, { expression, image }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: spriteKeys.list(variables.characterId) });
     },
@@ -223,7 +223,7 @@ export function useDeleteSprite() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ characterId, expression }: { characterId: string; expression: string }) =>
-      api.delete(`/sprites/${characterId}/${expression}`),
+      spriteApi.delete(characterId, expression),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: spriteKeys.list(variables.characterId) });
     },
@@ -244,7 +244,7 @@ export function useCleanupSavedSprites() {
       cleanupStrength?: number;
       engine?: SpriteCleanupEngine;
     }) =>
-      api.post<SpriteCleanupResult>(`/sprites/${characterId}/cleanup-saved`, { expressions, cleanupStrength, engine }),
+      spriteApi.cleanupSaved<SpriteCleanupResult>(characterId, { expressions, cleanupStrength, engine }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: spriteKeys.list(variables.characterId) });
     },
@@ -255,7 +255,7 @@ export function useRestoreSpriteCleanupPoint() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ characterId, restorePointId }: { characterId: string; restorePointId: string }) =>
-      api.post<SpriteCleanupRestoreResult>(`/sprites/${characterId}/cleanup-restore`, { restorePointId }),
+      spriteApi.cleanupRestore<SpriteCleanupRestoreResult>(characterId, { restorePointId }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: spriteKeys.list(variables.characterId) });
     },
@@ -265,7 +265,7 @@ export function useRestoreSpriteCleanupPoint() {
 export function useCharacterGalleryImages(characterId: string | null) {
   return useQuery({
     queryKey: characterKeys.gallery(characterId ?? ""),
-    queryFn: () => api.get<CharacterGalleryImage[]>(`/characters/${characterId}/gallery`),
+    queryFn: () => storageApi.list<CharacterGalleryImage>("character-gallery", { filters: { characterId } }),
     enabled: !!characterId,
     staleTime: 5 * 60_000,
   });
@@ -276,11 +276,7 @@ export function useUploadCharacterGalleryImage(characterId: string) {
   return useMutation({
     mutationFn: async (files: File[]) => {
       const uploads = await Promise.allSettled(
-        files.map((file) => {
-          const formData = new FormData();
-          formData.append("file", file);
-          return api.upload<CharacterGalleryImage>(`/characters/${characterId}/gallery/upload`, formData);
-        }),
+        files.map((file) => galleryApi.uploadCharacter<CharacterGalleryImage>(characterId, file)),
       );
 
       const successfulUploads = uploads.filter(
@@ -307,7 +303,7 @@ export function useUploadCharacterGalleryImage(characterId: string) {
 export function useDeleteCharacterGalleryImage(characterId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (imageId: string) => api.delete(`/characters/${characterId}/gallery/${imageId}`),
+    mutationFn: (imageId: string) => storageApi.delete("character-gallery", imageId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: characterKeys.gallery(characterId) });
     },

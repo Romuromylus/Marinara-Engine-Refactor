@@ -32,7 +32,7 @@ import { useCharacters, usePersonas } from "../../characters/hooks/use-character
 import type { Lorebook, LorebookCategory } from "../../../engine/contracts/types/lorebook";
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
 import { cn } from "../../../shared/lib/utils";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
 import { getChatCharacterIds } from "../../../shared/lib/chat-macros";
 import { ExportFormatDialog, type ExportFormatChoice } from "../../../shared/components/ui/ExportFormatDialog";
 import { resolveManagedLocalAssetUrl } from "../../../shared/api/local-file-api";
@@ -283,11 +283,7 @@ export function LorebooksPanel() {
       setExportingSelected(true);
       setExportDialogOpen(false);
       try {
-        await api.downloadPost(
-          "/lorebooks/export-bulk",
-          { ids: [...selectedLorebookIds], format },
-          format === "compatible" ? "compatible-lorebooks.zip" : "marinara-lorebooks.zip",
-        );
+        exportApi.triggerDownload(await exportApi.lorebooksBulk([...selectedLorebookIds], format));
         toast.success(`Exported ${selectedLorebookIds.size} lorebook${selectedLorebookIds.size === 1 ? "" : "s"}`);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to export lorebooks");

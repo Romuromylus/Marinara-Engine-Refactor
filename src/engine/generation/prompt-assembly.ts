@@ -429,7 +429,7 @@ async function buildMemoryRecallBlock(
   if (!chatId) return null;
   let memories: JsonRecord[] = [];
   try {
-    const rows = await storage.request<unknown>("GET", `/chats/${encodeURIComponent(chatId)}/memories`);
+    const rows = await storage.listChatMemories<unknown>(chatId);
     memories = Array.isArray(rows) ? rows.filter(isRecord) : [];
   } catch {
     memories = Array.isArray(chat.memories) ? chat.memories.filter(isRecord) : [];

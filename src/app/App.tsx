@@ -4,7 +4,7 @@ import { AppShell } from "./shell/AppShell";
 import { ModalRenderer } from "./shell/ModalRenderer";
 import { CustomThemeInjector } from "./providers/CustomThemeInjector";
 import { AppDialogRenderer } from "../shared/components/ui/AppDialogRenderer";
-import { api } from "../shared/api/api-client";
+import { fontsApi } from "../shared/api/settings-assets-api";
 import { filePathToAssetUrl } from "../shared/api/local-file-api";
 import { useUIStore } from "../shared/stores/ui.store";
 import { installRangeSliderSync } from "./startup/range-slider-sync";
@@ -79,9 +79,9 @@ export function App() {
     let cancelled = false;
 
     const loadFonts = () => {
-      api
-      .get<CustomFontFace[]>("/fonts")
-      .then((fonts) => {
+      fontsApi
+        .list<CustomFontFace[]>()
+        .then((fonts) => {
         if (cancelled) return;
         const css = fonts
           .map((font) => {
@@ -99,8 +99,8 @@ export function App() {
           document.head.appendChild(style);
         }
         style.textContent = css;
-      })
-      .catch(() => {});
+        })
+        .catch(() => {});
     };
 
     loadFonts();

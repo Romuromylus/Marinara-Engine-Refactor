@@ -91,10 +91,13 @@ import {
   useClearChatNotes,
   chatKeys,
 } from "../../chats/hooks/use-chats";
-import { api } from "../../../shared/api/api-client";
 import { generateConversationSchedules as runGenerateConversationSchedules } from "../../../engine/modes/chat/schedules/schedule.service";
 import { llmApi } from "../../../shared/api/llm-api";
 import { storageApi } from "../../../shared/api/storage-api";
+import { invokeTauri } from "../../../shared/api/tauri-client";
+import { spotifyApi } from "../../../shared/api/integration-utility-api";
+import { spriteApi } from "../../../shared/api/image-generation-api";
+import { exportApi } from "../../../shared/api/export-api";
 import { filterLanguageGenerationConnections } from "../../../shared/lib/connection-filters";
 import { getConnectedChatDisplayName } from "../../../shared/lib/chat-display";
 import {
@@ -420,7 +423,7 @@ export function ChatSettingsDrawer({
   const spotifyPlaylistsQuery = useQuery({
     queryKey: ["spotify", "playlists", 50],
     queryFn: () =>
-      api.get<{
+      spotifyApi.playlists<{
         playlists: Array<{
           id: string;
           name: string;
@@ -428,7 +431,7 @@ export function ChatSettingsDrawer({
           trackCount: number | null;
           owned: boolean | null;
         }>;
-      }>("/spotify/playlists?limit=50"),
+      }>({ limit: 50 }),
     enabled: open && isGame && gameUseSpotifyMusic && gameSpotifySourceType === "playlist",
     staleTime: 60_000,
     retry: false,
@@ -580,7 +583,7 @@ export function ChatSettingsDrawer({
   const chatSpriteQueries = useQueries({
     queries: chatSpriteSubjects.map((subject) => ({
       queryKey: ["sprites", subject.id],
-      queryFn: () => api.get<SpriteInfo[]>(`/sprites/${subject.id}`),
+      queryFn: () => spriteApi.list<SpriteInfo[]>(subject.id),
       enabled: !!subject.id,
       staleTime: 5 * 60_000,
     })),
@@ -665,7 +668,11 @@ export function ChatSettingsDrawer({
     if (msg?.id && firstMesConfirm.alternateGreetings.length > 0) {
       for (const greeting of firstMesConfirm.alternateGreetings) {
         if (greeting.trim()) {
-          await api.post(`/chats/${chat.id}/messages/${msg.id}/swipes`, { content: greeting, silent: true });
+          await invokeTauri("chat_message_add_swipe", {
+            chatId: chat.id,
+            messageId: msg.id,
+            body: { content: greeting, silent: true },
+          });
         }
       }
       qc.invalidateQueries({ queryKey: chatKeys.messages(chat.id) });
@@ -906,7 +913,10 @@ export function ChatSettingsDrawer({
     if (wasRemoving && agentId === "secret-plot-driver") {
       let shouldWarn: boolean;
       try {
-        const res = await api.get<{ memory: Record<string, unknown> }>(`/agents/memory/${agentId}/${chat.id}`);
+        const res = await invokeTauri<{ memory: Record<string, unknown> }>("agent_memory_get", {
+          agentType: agentId,
+          chatId: chat.id,
+        });
         shouldWarn = hasSecretPlotMemory(res.memory);
       } catch {
         shouldWarn = true;
@@ -937,7 +947,7 @@ export function ChatSettingsDrawer({
             metadataSaved = true;
             // When removing an agent that stores persistent memory, clean it up after metadata is saved.
             if (isRemoving && agentId === "secret-plot-driver") {
-              await api.delete(`/agents/memory/${agentId}/${chat.id}`);
+              await invokeTauri("agent_memory_clear", { agentType: agentId, chatId: chat.id });
             }
           },
         },
@@ -1038,8 +1048,8 @@ export function ChatSettingsDrawer({
           }
 
           try {
-            const presetFull = await api.get<{ choiceBlocks?: unknown[] }>(`/prompts/${presetId}/full`);
-            if ((presetFull.choiceBlocks?.length ?? 0) > 0) {
+            const choiceBlocks = await storageApi.list("prompt-variables", { filters: { presetId } });
+            if ((choiceBlocks?.length ?? 0) > 0) {
               setChoiceModalPresetId(presetId);
             } else {
               setChoiceModalPresetId(null);
@@ -1428,10 +1438,10 @@ export function ChatSettingsDrawer({
 
   const handleExportPreset = () => {
     if (!selectedChatPreset) return;
-    api.download(
-      `/chat-presets/${selectedChatPreset.id}/export`,
-      `${selectedChatPreset.name}.marinara-chat-preset.json`,
-    );
+    exportApi.triggerDownload({
+      blob: new Blob([JSON.stringify(selectedChatPreset, null, 2)], { type: "application/json" }),
+      filename: `${selectedChatPreset.name}.marinara-chat-preset.json`,
+    });
   };
 
   const handleImportClick = () => {

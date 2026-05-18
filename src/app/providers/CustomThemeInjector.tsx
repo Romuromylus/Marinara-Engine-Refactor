@@ -5,7 +5,7 @@
 import { useEffect } from "react";
 import { useThemes } from "../../features/settings/hooks/use-themes";
 import { useExtensions } from "../../features/settings/hooks/use-extensions";
-import { api } from "../../shared/api/api-client";
+import { storageApi } from "../../shared/api/storage-api";
 
 type ExtensionGlobal = typeof globalThis & {
   __marinaraExtensionApis?: Map<string, unknown>;
@@ -163,49 +163,12 @@ export function CustomThemeInjector() {
             return el;
           },
 
-          // Call native Marinara routes while denying sensitive extension/admin paths.
-          request: async (path: string, options?: RequestInit) => {
-            const normalized = path.startsWith("/") ? path : `/${path}`;
-            const url = new URL(normalized, window.location.origin);
-            const apiPath = url.pathname;
-            const denied =
-              apiPath === "/extensions" ||
-              apiPath.startsWith("/extensions/") ||
-              apiPath === "/admin" ||
-              apiPath.startsWith("/admin/");
-            if (denied) {
-              const message = `request denied: extensions cannot reach ${apiPath}`;
-              console.warn(`[Extension:${ext.name}] ${message}`);
-              return Promise.reject(new Error(message));
-            }
-            const method = (options?.method ?? "GET").toUpperCase();
-            let body: unknown = undefined;
-            if (options?.body instanceof FormData) {
-              body = options.body;
-            } else if (typeof options?.body === "string" && options.body.trim()) {
-              try {
-                body = JSON.parse(options.body);
-              } catch {
-                body = options.body;
-              }
-            } else {
-              body = options?.body ?? undefined;
-            }
-
-            const result =
-              method === "POST"
-                ? await api.post(apiPath, body)
-                : method === "PUT"
-                  ? await api.put(apiPath, body)
-                  : method === "PATCH"
-                    ? await api.patch(apiPath, body)
-                    : method === "DELETE"
-                      ? await api.delete(apiPath)
-                      : await api.get(apiPath);
-            return new Response(JSON.stringify(result), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            });
+          storage: {
+            list: storageApi.list,
+            get: storageApi.get,
+            create: storageApi.create,
+            update: storageApi.update,
+            delete: storageApi.delete,
           },
 
           // addEventListener with auto-cleanup

@@ -13,7 +13,8 @@ import type { Chat } from "../../../engine/contracts/types/chat";
 import { chatBackgroundMetadataToUrl } from "../../../shared/lib/backgrounds";
 import { llmApi } from "../../../shared/api/llm-api";
 import { storageApi } from "../../../shared/api/storage-api";
-import { ApiError } from "../../../shared/api/api-client";
+import { integrationGateway } from "../../../shared/api/integration-gateway";
+import { ApiError } from "../../../shared/api/api-errors";
 import { useAgentStore, type PendingCardUpdate } from "../../../shared/stores/agent.store";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
@@ -409,7 +410,7 @@ export function useGenerate() {
           // Summary refresh should never block an otherwise valid generation.
         });
         for await (const event of startGeneration(
-          { storage: storageApi, llm: llmApi },
+          { storage: storageApi, llm: llmApi, integrations: integrationGateway },
           args,
           controller.signal,
         ) as AsyncGenerator<StreamEvent>) {
@@ -471,7 +472,7 @@ export function useGenerate() {
       useAgentStore.getState().setProcessing(true);
       try {
         const results = await retryGenerationAgents(
-          { storage: storageApi, llm: llmApi },
+          { storage: storageApi, llm: llmApi, integrations: integrationGateway },
           { chatId, agentTypes, options },
         );
         for (const result of results) {

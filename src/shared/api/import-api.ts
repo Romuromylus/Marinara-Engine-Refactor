@@ -1,4 +1,5 @@
 import { formDataToJson } from "./file-payload";
+import { Channel } from "@tauri-apps/api/core";
 import { invokeTauri } from "./tauri-client";
 
 export interface ImportFilePayload {
@@ -6,11 +7,7 @@ export interface ImportFilePayload {
   fields?: Record<string, string | number | boolean | null | undefined>;
 }
 
-export async function importJson<T>(path: string, payload: unknown): Promise<T> {
-  return invokeImportCommand(path, payload);
-}
-
-export async function importFile<T>(path: string, payload: ImportFilePayload | File): Promise<T> {
+async function filePayload(payload: ImportFilePayload | File): Promise<Record<string, unknown>> {
   const file = payload instanceof File ? payload : payload.file;
   const fields = payload instanceof File ? undefined : payload.fields;
   const formData = new FormData();
@@ -18,84 +15,88 @@ export async function importFile<T>(path: string, payload: ImportFilePayload | F
     if (value !== null && value !== undefined) formData.append(key, String(value));
   }
   formData.append("file", file, file.name);
-  return invokeImportCommand<T>(path, await formDataToJson(formData));
+  return formDataToJson(formData);
 }
 
-function invokeImportCommand<T>(path: string, payload: unknown): Promise<T> {
-  switch (path) {
-    case "/import/marinara":
-      return invokeTauri<T>("import_marinara", { envelope: payload });
-    case "/import/marinara-file":
-      return invokeTauri<T>("import_marinara_file", { body: payload });
-    case "/import/st-character":
-      return invokeTauri<T>("import_st_character", { body: payload });
-    case "/import/st-character/batch":
-      return invokeTauri<T>("import_st_character_batch", { body: payload });
-    case "/import/st-character/inspect":
-      return invokeTauri<T>("import_st_character_inspect", { body: payload });
-    case "/import/st-chat":
-      return invokeTauri<T>("import_st_chat", { body: payload });
-    case "/import/st-chat-into-group":
-      return invokeTauri<T>("import_st_chat_into_group", { body: payload });
-    case "/import/st-preset":
-      return invokeTauri<T>("import_st_preset", { payload });
-    case "/import/st-lorebook":
-      return invokeTauri<T>("import_st_lorebook", { payload });
-    case "/import/st-bulk/scan":
-      return invokeTauri<T>("import_st_bulk_scan", { payload });
-    case "/import/st-bulk/run":
-      return invokeTauri<T>("import_st_bulk_run", { payload });
-    case "/import/list-directory": {
-      const input = payload && typeof payload === "object" ? (payload as { path?: unknown }) : {};
-      return invokeTauri<T>("import_list_directory", { path: typeof input.path === "string" ? input.path : "" });
-    }
-    default:
-      throw new Error(`Unknown import command: ${path}`);
-  }
+async function filesPayload(payload: File[] | FormData): Promise<Record<string, unknown>> {
+  if (payload instanceof FormData) return formDataToJson(payload);
+  const form = new FormData();
+  payload.forEach((file) => form.append("files", file, file.name));
+  return formDataToJson(form);
 }
 
 export const importApi = {
-  marinara: <T>(envelope: unknown) => importJson<T>("/import/marinara", envelope),
-  marinaraFile: <T>(file: File) => importFile<T>("/import/marinara-file", file),
-  stCharacterJson: <T>(payload: unknown) => importJson<T>("/import/st-character", payload),
-  stCharacterFile: <T>(payload: ImportFilePayload) => importFile<T>("/import/st-character", payload),
-  stCharacterBatch: <T>(payload: ImportFilePayload | File[] | FormData) => {
-    if (payload instanceof FormData) {
-      return formDataToJson(payload).then((body) => invokeImportCommand<T>("/import/st-character/batch", body));
-    }
-    if (Array.isArray(payload)) {
-      const form = new FormData();
-      payload.forEach((file) => form.append("files", file, file.name));
-      return formDataToJson(form).then((body) => invokeImportCommand<T>("/import/st-character/batch", body));
-    }
-    return importFile<T>("/import/st-character/batch", payload);
+  marinara: <T>(envelope: unknown) => invokeTauri<T>("import_marinara", { envelope }),
+  marinaraFile: async <T>(file: File) => invokeTauri<T>("import_marinara_file", { body: await filePayload(file) }),
+  stCharacterJson: <T>(body: unknown) => invokeTauri<T>("import_st_character", { body }),
+  stCharacterFile: async <T>(payload: ImportFilePayload) =>
+    invokeTauri<T>("import_st_character", { body: await filePayload(payload) }),
+  stCharacterBatch: async <T>(payload: ImportFilePayload | File[] | FormData) => {
+    const body = Array.isArray(payload) || payload instanceof FormData ? await filesPayload(payload) : await filePayload(payload);
+    return invokeTauri<T>("import_st_character_batch", { body });
   },
-  stCharacterInspect: <T>(payload: File[] | FormData) => {
-    const form = payload instanceof FormData ? payload : new FormData();
-    if (Array.isArray(payload)) payload.forEach((file) => form.append("files", file, file.name));
-    return formDataToJson(form).then((body) => invokeImportCommand<T>("/import/st-character/inspect", body));
-  },
-  stChat: <T>(file: File) => importFile<T>("/import/st-chat", file),
-  stChatIntoGroup: <T>(chatId: string, file: File) =>
-    importFile<T>("/import/st-chat-into-group", { file, fields: { chatId } }),
-  stPreset: <T>(payload: unknown) => importJson<T>("/import/st-preset", payload),
-  stLorebook: <T>(payload: unknown) => importJson<T>("/import/st-lorebook", payload),
-  stBulkScan: <T>(payload: unknown) => importJson<T>("/import/st-bulk/scan", payload),
-  stBulkRun: <T>(payload: unknown) => importJson<T>("/import/st-bulk/run", payload),
+  stCharacterInspect: async <T>(payload: File[] | FormData) =>
+    invokeTauri<T>("import_st_character_inspect", { body: await filesPayload(payload) }),
+  stChat: async <T>(file: File) => invokeTauri<T>("import_st_chat", { body: await filePayload(file) }),
+  stChatIntoGroup: async <T>(chatId: string, file: File) =>
+    invokeTauri<T>("import_st_chat_into_group", {
+      body: await filePayload({ file, fields: { chatId } }),
+    }),
+  stPreset: <T>(payload: unknown) => invokeTauri<T>("import_st_preset", { payload }),
+  stLorebook: <T>(payload: unknown) => invokeTauri<T>("import_st_lorebook", { payload }),
+  stBulkScan: <T>(payload: unknown) => invokeTauri<T>("import_st_bulk_scan", { payload }),
+  stBulkRun: <T>(payload: unknown) => invokeTauri<T>("import_st_bulk_run", { payload }),
   stBulkRunEvents: async function* (
     payload: unknown,
     signal?: AbortSignal,
   ): AsyncGenerator<{ type: string; data: unknown }> {
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    const events = await invokeTauri<Array<{ type?: unknown; data?: unknown; text?: unknown; [key: string]: unknown }>>(
-      "import_st_bulk_run_events",
-      { payload },
-    );
-    for (const event of events) {
-      if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-      const type = typeof event.type === "string" ? event.type : "message";
-      yield { type, data: "data" in event ? event.data : "text" in event ? event.text : event };
+    const queue: Array<{ type?: unknown; data?: unknown; text?: unknown; [key: string]: unknown }> = [];
+    let completed = false;
+    let failure: unknown = null;
+    let wake: (() => void) | null = null;
+    const notify = () => {
+      wake?.();
+      wake = null;
+    };
+    const abort = () => {
+      failure = new DOMException("The operation was aborted.", "AbortError");
+      notify();
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    const onEvent = new Channel<(typeof queue)[number]>((event) => {
+      queue.push(event);
+      if (event.type === "done" || event.type === "error") completed = true;
+      notify();
+    });
+    const command = invokeTauri<void>("import_st_bulk_run_events", { payload, onEvent }).catch((error) => {
+      failure = error;
+      completed = true;
+      notify();
+    });
+
+    try {
+      while (!completed || queue.length > 0) {
+        if (failure) throw failure;
+        if (queue.length === 0) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          continue;
+        }
+        const event = queue.shift()!;
+        const type = typeof event.type === "string" ? event.type : "message";
+        yield { type, data: "data" in event ? event.data : "text" in event ? event.text : event };
+      }
+      await command;
+      if (failure) throw failure;
+    } finally {
+      signal?.removeEventListener("abort", abort);
     }
   },
-  listDirectory: <T>(path: string) => importJson<T>("/import/list-directory", { path }),
+  listDirectory: <T>(path: string, options?: { pickerSelected?: boolean }) =>
+    invokeTauri<T>("import_list_directory", {
+      path,
+      pickerSelected: options?.pickerSelected ?? false,
+    }),
 };

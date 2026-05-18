@@ -1,5 +1,8 @@
 use super::shared::*;
 use super::*;
+use marinara_security::is_allowed_outbound_url;
+
+const MAX_BINARY_RESPONSE_BYTES: u64 = 25 * 1024 * 1024;
 
 pub(crate) async fn http_json(url: &str) -> AppResult<Value> {
     let client = reqwest::Client::builder()
@@ -28,6 +31,11 @@ pub(crate) async fn http_json(url: &str) -> AppResult<Value> {
 }
 
 pub(crate) async fn http_binary(url: &str, fallback_mime: &str) -> AppResult<Value> {
+    if !is_allowed_outbound_url(url, true) {
+        return Err(AppError::invalid_input(format!(
+            "Outbound URL is not allowed: {url}"
+        )));
+    }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()
@@ -50,14 +58,41 @@ pub(crate) async fn http_binary(url: &str, fallback_mime: &str) -> AppResult<Val
         .and_then(|value| value.to_str().ok())
         .unwrap_or(fallback_mime)
         .to_string();
+    let normalized_mime = mime_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if !allowed_binary_mime(&normalized_mime) {
+        return Err(AppError::invalid_input(format!(
+            "Unsupported remote content type: {mime_type}"
+        )));
+    }
+    if response.content_length().unwrap_or(0) > MAX_BINARY_RESPONSE_BYTES {
+        return Err(AppError::invalid_input("Remote file is too large"));
+    }
     let bytes = response
         .bytes()
         .await
         .map_err(|error| AppError::new("upstream_body_error", error.to_string()))?;
+    if bytes.len() as u64 > MAX_BINARY_RESPONSE_BYTES {
+        return Err(AppError::invalid_input("Remote file is too large"));
+    }
     Ok(json!({
         "base64": general_purpose::STANDARD.encode(bytes),
         "mimeType": mime_type
     }))
+}
+
+fn allowed_binary_mime(mime_type: &str) -> bool {
+    mime_type.starts_with("image/")
+        || mime_type.starts_with("audio/")
+        || mime_type.starts_with("video/")
+        || matches!(
+            mime_type,
+            "application/octet-stream" | "binary/octet-stream"
+        )
 }
 
 pub(crate) async fn gifs_search(route: &ParsedPath) -> AppResult<Value> {

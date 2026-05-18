@@ -7,7 +7,8 @@ import { usePresets, useDeletePreset, useDuplicatePreset, useSetDefaultPreset } 
 import { useUpdateChat, useUpdateChatMetadata } from "../../chats/hooks/use-chats";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
+import { storageApi } from "../../../shared/api/storage-api";
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
 import { ChoiceSelectionModal } from "./ChoiceSelectionModal";
 import { Plus, Download, FileText, Trash2, Check, Copy, Search, Code2, Hash, Star } from "lucide-react";
@@ -73,8 +74,8 @@ export function PresetsPanel() {
           }
 
           try {
-            const presetFull = await api.get<{ choiceBlocks?: unknown[] }>(`/prompts/${newId}/full`);
-            if ((presetFull.choiceBlocks?.length ?? 0) > 0) {
+            const choiceBlocks = await storageApi.list("prompt-variables", { filters: { presetId: newId } });
+            if (choiceBlocks.length > 0) {
               setChoiceModalPresetId(newId);
             } else {
               setChoiceModalPresetId(null);
@@ -115,7 +116,7 @@ export function PresetsPanel() {
     if (selectedPresetIds.size === 0) return;
     setExportingSelected(true);
     try {
-      await api.downloadPost("/prompts/export-bulk", { ids: [...selectedPresetIds] }, "marinara-presets.zip");
+      exportApi.triggerDownload(await exportApi.promptsBulk([...selectedPresetIds]));
       toast.success(`Exported ${selectedPresetIds.size} preset${selectedPresetIds.size === 1 ? "" : "s"}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to export presets");

@@ -2524,6 +2524,8 @@ name = "marinara-assets"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
+ "image",
  "marinara-core",
  "marinara-security",
  "marinara-storage",

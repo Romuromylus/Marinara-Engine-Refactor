@@ -1,4 +1,5 @@
 use super::*;
+use std::path::Component;
 
 fn bool_option(value: Option<&Value>) -> Option<bool> {
     match value {
@@ -65,24 +66,24 @@ fn bump_imported(imported: &mut Value, key: &str) {
 }
 
 struct BulkImportProgress<'a> {
-    events: Option<&'a mut Vec<Value>>,
+    emit: Option<&'a mut dyn FnMut(Value) -> AppResult<()>>,
     current: usize,
     total: usize,
 }
 
 impl<'a> BulkImportProgress<'a> {
-    fn new(events: Option<&'a mut Vec<Value>>, total: usize) -> Self {
+    fn new(emit: Option<&'a mut dyn FnMut(Value) -> AppResult<()>>, total: usize) -> Self {
         Self {
-            events,
+            emit,
             current: 0,
             total,
         }
     }
 
-    fn emit_item(&mut self, category: &str, item: &Path, imported: &Value) {
+    fn emit_item(&mut self, category: &str, item: &Path, imported: &Value) -> AppResult<()> {
         self.current += 1;
-        if let Some(events) = self.events.as_deref_mut() {
-            events.push(json!({
+        if let Some(emit) = self.emit.as_deref_mut() {
+            emit(json!({
                 "type": "progress",
                 "data": {
                     "category": category,
@@ -91,14 +92,16 @@ impl<'a> BulkImportProgress<'a> {
                     "total": self.total,
                     "imported": imported
                 }
-            }));
+            }))?;
         }
+        Ok(())
     }
 
-    fn emit_done(&mut self, result: &Value) {
-        if let Some(events) = self.events.as_deref_mut() {
-            events.push(json!({ "type": "done", "data": result }));
+    fn emit_done(&mut self, result: &Value) -> AppResult<()> {
+        if let Some(emit) = self.emit.as_deref_mut() {
+            emit(json!({ "type": "done", "data": result }))?;
         }
+        Ok(())
     }
 }
 
@@ -140,12 +143,31 @@ fn path_from_id(data_dir: &Path, category: &str, id: &str) -> AppResult<PathBuf>
     let relative = id
         .strip_prefix(&prefix)
         .ok_or_else(|| AppError::invalid_input(format!("Invalid {category} import id")))?;
-    if relative.contains("..") {
+    let candidate = Path::new(relative);
+    if candidate.is_absolute()
+        || candidate.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
         return Err(AppError::invalid_input(
             "Import id must not contain parent path segments",
         ));
     }
-    Ok(data_dir.join(relative))
+    let base = data_dir.canonicalize().map_err(AppError::from)?;
+    let path = base
+        .join(candidate)
+        .canonicalize()
+        .map_err(AppError::from)?;
+    if path.starts_with(&base) {
+        Ok(path)
+    } else {
+        Err(AppError::invalid_input(
+            "Import id resolves outside the SillyTavern data directory",
+        ))
+    }
 }
 
 fn list_files(dir: &Path, extensions: &[&str], recursive: bool) -> Vec<PathBuf> {
@@ -188,25 +210,22 @@ fn scan_item(category: &str, data_dir: &Path, path: &Path) -> Value {
 }
 
 pub(super) fn scan_st_folder(body: Value) -> AppResult<Value> {
-    let root = body
-        .get("folderPath")
-        .and_then(Value::as_str)
-        .filter(|path| !path.trim().is_empty())
-        .ok_or_else(|| AppError::invalid_input("folderPath is required"))?;
-    let root = PathBuf::from(root);
-    if !root.exists() {
-        return Ok(json!({
-            "success": false,
-            "error": "Folder does not exist",
-            "characters": [],
-            "chats": [],
-            "groupChats": [],
-            "presets": [],
-            "lorebooks": [],
-            "backgrounds": [],
-            "personas": []
-        }));
-    }
+    let root = match resolve_import_folder(&body) {
+        Ok(root) => root,
+        Err(error) => {
+            return Ok(json!({
+                "success": false,
+                "error": error.message,
+                "characters": [],
+                "chats": [],
+                "groupChats": [],
+                "presets": [],
+                "lorebooks": [],
+                "backgrounds": [],
+                "personas": []
+            }));
+        }
+    };
     let Some(data_dir) = resolve_st_data_dir(&root) else {
         return Ok(json!({
             "success": false,
@@ -536,14 +555,9 @@ fn copy_background_file(state: &AppState, path: &Path) -> AppResult<Value> {
 fn run_st_bulk_import_inner(
     state: &AppState,
     body: Value,
-    event_sink: Option<&mut Vec<Value>>,
+    event_sink: Option<&mut dyn FnMut(Value) -> AppResult<()>>,
 ) -> AppResult<Value> {
-    let root = body
-        .get("folderPath")
-        .and_then(Value::as_str)
-        .filter(|path| !path.trim().is_empty())
-        .ok_or_else(|| AppError::invalid_input("folderPath is required"))?;
-    let root = PathBuf::from(root);
+    let root = resolve_import_folder(&body)?;
     let data_dir = resolve_st_data_dir(&root)
         .ok_or_else(|| AppError::invalid_input("Could not find SillyTavern data directory"))?;
     let options = body.get("options").cloned().unwrap_or_else(|| json!({}));
@@ -558,7 +572,7 @@ fn run_st_bulk_import_inner(
 
     for id in selected_ids(&options, "characters") {
         let path = path_from_id(&data_dir, "characters", &id)?;
-        progress.emit_item("Characters", &path, &imported);
+        progress.emit_item("Characters", &path, &imported)?;
         let filename = path
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
@@ -586,7 +600,7 @@ fn run_st_bulk_import_inner(
 
     for id in selected_ids(&options, "lorebooks") {
         let path = path_from_id(&data_dir, "lorebooks", &id)?;
-        progress.emit_item("Lorebooks", &path, &imported);
+        progress.emit_item("Lorebooks", &path, &imported)?;
         let result = fs::read(&path)
             .map_err(AppError::from)
             .and_then(|bytes| parse_object(&bytes))
@@ -605,7 +619,7 @@ fn run_st_bulk_import_inner(
 
     for id in selected_ids(&options, "presets") {
         let path = path_from_id(&data_dir, "presets", &id)?;
-        progress.emit_item("Presets", &path, &imported);
+        progress.emit_item("Presets", &path, &imported)?;
         let result = fs::read(&path)
             .map_err(AppError::from)
             .and_then(|bytes| parse_object(&bytes))
@@ -626,7 +640,7 @@ fn run_st_bulk_import_inner(
 
     for id in selected_ids(&options, "personas") {
         let path = path_from_id(&data_dir, "personas", &id)?;
-        progress.emit_item("Personas", &path, &imported);
+        progress.emit_item("Personas", &path, &imported)?;
         match import_persona_file(state, &path) {
             Ok(_) => bump_imported(&mut imported, "personas"),
             Err(error) => errors.push(Value::String(format!(
@@ -639,7 +653,7 @@ fn run_st_bulk_import_inner(
 
     for id in selected_ids(&options, "backgrounds") {
         let path = path_from_id(&data_dir, "backgrounds", &id)?;
-        progress.emit_item("Backgrounds", &path, &imported);
+        progress.emit_item("Backgrounds", &path, &imported)?;
         match copy_background_file(state, &path) {
             Ok(_) => bump_imported(&mut imported, "backgrounds"),
             Err(error) => errors.push(Value::String(format!(
@@ -652,7 +666,7 @@ fn run_st_bulk_import_inner(
 
     for id in selected_ids(&options, "chats") {
         let path = path_from_id(&data_dir, "chats", &id)?;
-        progress.emit_item("Chats", &path, &imported);
+        progress.emit_item("Chats", &path, &imported)?;
         let result = fs::read_to_string(&path)
             .map_err(AppError::from)
             .and_then(|text| {
@@ -670,7 +684,7 @@ fn run_st_bulk_import_inner(
 
     for id in selected_ids(&options, "groupChats") {
         let path = path_from_id(&data_dir, "groupChats", &id)?;
-        progress.emit_item("Group chats", &path, &imported);
+        progress.emit_item("Group chats", &path, &imported)?;
         let result = fs::read_to_string(&path)
             .map_err(AppError::from)
             .and_then(|text| {
@@ -703,7 +717,7 @@ fn run_st_bulk_import_inner(
         "imported": imported,
         "errors": errors
     });
-    progress.emit_done(&result);
+    progress.emit_done(&result)?;
     Ok(result)
 }
 
@@ -711,20 +725,19 @@ pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Val
     run_st_bulk_import_inner(state, body, None)
 }
 
-pub(super) fn run_st_bulk_import_events(state: &AppState, body: Value) -> AppResult<Vec<Value>> {
-    let mut events = Vec::new();
-    let result = run_st_bulk_import_inner(state, body, Some(&mut events));
-    match result {
-        Ok(_) => Ok(events),
-        Err(error) => {
-            events.push(json!({
-                "type": "error",
-                "data": {
-                    "error": error.message,
-                    "code": error.code
-                }
-            }));
-            Ok(events)
-        }
+pub(super) fn run_st_bulk_import_channel(
+    state: &AppState,
+    body: Value,
+    mut emit: impl FnMut(Value) -> AppResult<()>,
+) -> AppResult<()> {
+    match run_st_bulk_import_inner(state, body, Some(&mut emit)) {
+        Ok(_) => Ok(()),
+        Err(error) => emit(json!({
+            "type": "error",
+            "data": {
+                "error": error.message,
+                "code": error.code
+            }
+        })),
     }
 }

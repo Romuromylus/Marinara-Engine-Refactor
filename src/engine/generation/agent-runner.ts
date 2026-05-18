@@ -1,4 +1,5 @@
 import { BUILT_IN_TOOLS, type AgentContext, type AgentResult } from "../contracts/types/agent";
+import type { IntegrationGateway } from "../capabilities/integrations";
 import type { LlmGateway, LlmMessage } from "../capabilities/llm";
 import type { StorageGateway } from "../capabilities/storage";
 import type {
@@ -48,6 +49,7 @@ export interface GenerationAgentRuntime {
 interface AgentDeps {
   storage: StorageGateway;
   llm: LlmGateway;
+  integrations: IntegrationGateway;
 }
 
 function llmProvider(llm: LlmGateway, connectionId: string | null): BaseLLMProvider {
@@ -348,11 +350,12 @@ async function searchLorebookTool(storage: StorageGateway, input: GenerationAgen
 }
 
 async function executeBuiltInTool(
-  storage: StorageGateway,
+  deps: Pick<AgentDeps, "storage" | "integrations">,
   input: GenerationAgentRuntimeInput,
   agent: JsonRecord,
   call: LLMToolCall,
 ): Promise<unknown> {
+  const { storage, integrations } = deps;
   const toolName = call.function?.name || call.name;
   const args = toolArguments(call);
   const chatId = requireChatId(input);
@@ -455,10 +458,10 @@ async function executeBuiltInTool(
       return { success: true, key, value };
     }
     case "spotify_get_current_playback":
-      return storage.request("GET", `/spotify/player?agentId=${encodeURIComponent(spotifyAgentId(agent))}`);
+      return integrations.spotify.player({ agentId: spotifyAgentId(agent) });
     case "spotify_get_playlists": {
       const limit = Math.max(1, Math.min(50, Math.trunc(numberArg(args, "limit", 20))));
-      return storage.request("GET", `/spotify/playlists?agentId=${encodeURIComponent(spotifyAgentId(agent))}&limit=${limit}`);
+      return integrations.spotify.playlists({ agentId: spotifyAgentId(agent), limit });
     }
     case "spotify_get_playlist_tracks": {
       const playlistId = stringArg(args, "playlistId");
@@ -472,10 +475,10 @@ async function executeBuiltInTool(
       };
       const offset = numberArg(args, "offset", Number.NaN);
       if (Number.isFinite(offset)) body.offset = Math.max(0, Math.trunc(offset));
-      return storage.request("POST", "/spotify/playlist-tracks", body);
+      return integrations.spotify.playlistTracks(body);
     }
     case "spotify_search":
-      return storage.request("POST", "/spotify/search-tracks", {
+      return integrations.spotify.searchTracks({
         agentId: spotifyAgentId(agent),
         query: stringArg(args, "query"),
         limit: Math.max(1, Math.min(50, Math.trunc(numberArg(args, "limit", 10)))),
@@ -488,10 +491,10 @@ async function executeBuiltInTool(
       if (uris.length > 0) body.uris = uris;
       else if (uri.startsWith("spotify:track:")) body.uri = uri;
       else body.contextUri = uri;
-      return storage.request("PUT", "/spotify/player/play", body);
+      return integrations.spotify.play(body);
     }
     case "spotify_set_volume":
-      return storage.request("PUT", "/spotify/player/volume", {
+      return integrations.spotify.volume({
         agentId: spotifyAgentId(agent),
         volume: Math.max(0, Math.min(100, Math.trunc(numberArg(args, "volume", 50)))),
       });
@@ -506,7 +509,7 @@ function spotifyAgentId(agent: JsonRecord): string {
 }
 
 function buildAgentToolContext(
-  storage: StorageGateway,
+  deps: Pick<AgentDeps, "storage" | "integrations">,
   input: GenerationAgentRuntimeInput,
   agent: JsonRecord,
   settings: Record<string, unknown>,
@@ -528,10 +531,10 @@ function buildAgentToolContext(
     executeToolCall: async (call: LLMToolCall) => {
       const toolName = call.function?.name || call.name;
       if (BUILT_IN_TOOL_MAP.has(toolName)) {
-        return stringifyToolResult(await executeBuiltInTool(storage, input, agent, call));
+        return stringifyToolResult(await executeBuiltInTool(deps, input, agent, call));
       }
       return stringifyToolResult(
-        await storage.request("POST", "/custom-tools/execute", {
+        await deps.integrations.customTools.execute({
           toolName,
           arguments: toolArguments(call),
         }),
@@ -579,7 +582,7 @@ async function resolveAgents(deps: AgentDeps, input: GenerationAgentRuntimeInput
       provider: llmProvider(deps.llm, connectionId),
       model,
       maxParallelJobs: typeof settings.maxParallelJobs === "number" ? settings.maxParallelJobs : undefined,
-      toolContext: buildAgentToolContext(deps.storage, input, agent, settings, customTools),
+      toolContext: buildAgentToolContext(deps, input, agent, settings, customTools),
     });
   }
   return resolved;

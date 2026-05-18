@@ -79,7 +79,8 @@ import {
 import { cn, generateClientId, getAvatarCropStyle, type AvatarCrop } from "../../../shared/lib/utils";
 import { extractColorsFromImage } from "../../../shared/lib/avatar-color-extraction";
 import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import { ColorPicker } from "../../../shared/components/ui/ColorPicker";
 import { TrackerCardColorControls } from "../../../shared/components/ui/TrackerCardColorControls";
 import { ExpandedTextarea } from "../../../shared/components/ui/ExpandedTextarea";
@@ -676,9 +677,9 @@ export function CharacterEditor() {
           if (!characterId) return;
           setExportDialogOpen(false);
           if (format === "compatible-png") {
-            void api.download(`/characters/${characterId}/export-png`, "character.png");
+            void exportApi.characterPng(characterId).then(exportApi.triggerDownload);
           } else {
-            void api.download(`/characters/${characterId}/export?format=${format}`);
+            void exportApi.character(characterId, format).then(exportApi.triggerDownload);
           }
         }}
       />
@@ -3166,12 +3167,12 @@ function LorebookTab({ characterId, formData }: { characterId: string | null; fo
     if (!characterId) return;
     setImporting(true);
     try {
-      const result = await api.post<{
+      const result = await invokeTauri<{
         success: boolean;
         lorebookId: string;
         entriesImported: number;
         reimported?: boolean;
-      }>(`/characters/${characterId}/embedded-lorebook/import`);
+      }>("character_embedded_lorebook_import", { id: characterId });
       qc.invalidateQueries({ queryKey: lorebookKeys.all });
       if (result.lorebookId) {
         qc.invalidateQueries({ queryKey: ["characters", "detail", characterId] });

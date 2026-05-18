@@ -14,12 +14,23 @@ export type StorageEntity =
   | "extensions"
   | "gallery"
   | "game-assets"
+  | "game-checkpoints"
   | "game-state"
+  | "game-state-snapshots"
   | "knowledge-sources"
+  | "agent-memory"
+  | "agent-runs"
+  | "character-versions"
+  | "lorebook-entries"
+  | "lorebook-folders"
   | "lorebooks"
+  | "messages"
   | "personas"
   | "persona-groups"
+  | "prompt-groups"
   | "prompt-overrides"
+  | "prompt-sections"
+  | "prompt-variables"
   | "prompts"
   | "regex-scripts"
   | "themes";
@@ -38,6 +49,17 @@ export interface StorageGateway {
   create<T = unknown>(entity: StorageEntity | string, value: Record<string, unknown>): Promise<T>;
   update<T = unknown>(entity: StorageEntity | string, id: string, patch: Record<string, unknown>): Promise<T>;
   delete(entity: StorageEntity | string, id: string): Promise<{ deleted: boolean }>;
-  request<T = unknown>(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", operation: string, payload?: unknown): Promise<T>;
-  call<T = unknown>(operation: string, payload?: unknown): Promise<T>;
+  listChatMessages<T = unknown>(chatId: string, options?: Omit<StorageListOptions, "filters">): Promise<T[]>;
+  createChatMessage<T = unknown>(chatId: string, value: Record<string, unknown>): Promise<T>;
+  updateChatMessage<T = unknown>(messageId: string, patch: Record<string, unknown>): Promise<T>;
+  deleteChatMessage(messageId: string): Promise<{ deleted: boolean }>;
+  patchChatMessageExtra<T = unknown>(messageId: string, patch: Record<string, unknown>): Promise<T>;
+  addChatMessageSwipe<T = unknown>(chatId: string, messageId: string, content: string): Promise<T>;
+  patchChatMetadata<T = unknown>(chatId: string, patch: Record<string, unknown>): Promise<T>;
+  patchChatSummaries<T = unknown>(chatId: string, patch: Record<string, unknown>): Promise<T>;
+  listChatMemories<T = unknown>(chatId: string): Promise<T[]>;
+  getWorldState<T = unknown>(chatId: string): Promise<T | null>;
+  listLorebookEntries<T = unknown>(lorebookId: string): Promise<T[]>;
+  createLorebookEntries<T = unknown>(lorebookId: string, entries: Array<Record<string, unknown>>): Promise<T[]>;
+  promptFull<T = unknown>(presetId: string): Promise<T | null>;
 }

@@ -69,7 +69,6 @@ commands/
   agents.rs
   app_settings.rs
   assets.rs
-  backup.rs
   bot_browser.rs
   characters.rs
   chat.rs
@@ -90,7 +89,6 @@ commands/
   prompts.rs
   regex_scripts.rs
   roleplay.rs
-  sidecar.rs
   spotify.rs
   themes.rs
   translation.rs
@@ -106,7 +104,6 @@ Typed event helpers. Events should be centrally named so frontend subscriptions 
 events/
   mod.rs
   generation.rs
-  sidecar.rs
   imports.rs
   game.rs
   haptic.rs
@@ -149,7 +146,7 @@ Rules:
 - Do not expose repository records directly when a narrower command DTO is safer.
 - Do not put service methods or persistence behavior in DTO modules.
 - Shared primitives such as IDs, pagination, timestamps, and app errors belong in `core`.
-- Shared sync protocol DTOs belong in `sync-protocol`.
+- Sync protocol DTOs are deferred with sync and do not belong in the active app graph.
 
 ## `core`
 
@@ -220,11 +217,11 @@ Rules:
 
 ## `storage`
 
-Durable storage and migrations.
+Durable storage for the fresh Tauri app.
 
 The Tauri desktop app uses raw file storage only. Do not introduce SQLite, SQLx, libsql, or another database for local app data. Do not implement legacy SQLite import.
 
-Preserve compatibility with the current file-native model wherever practical: `storage/manifest.json` plus one JSON snapshot per logical table under `storage/tables/`.
+Use the current file-native model: `storage/manifest.json` plus one JSON snapshot per logical table under `storage/tables/`. Runtime compatibility for old profile backups, old archives, or old install layouts is intentionally excluded; write a separate migration script if old data conversion is needed later.
 
 ```text
 src/
@@ -232,7 +229,6 @@ src/
   manager.rs
   manifest.rs
   migrations.rs
-  backup.rs
   file_store/
     mod.rs
     atomic_write.rs
@@ -262,12 +258,10 @@ Responsibilities:
 
 - load and save `DATA_DIR/storage`
 - store one JSON snapshot per logical table plus a manifest
-- read existing file-native table snapshots from current installs
 - read current file-native JSON/table snapshots
 - repository APIs for each domain
-- backups and restores
 - atomic writes
-- storage version migrations
+- storage version migrations for the current Tauri data model
 
 Do not let services read or write files directly when repository methods are appropriate.
 Do not recreate a generic SQL query layer in Rust. Prefer explicit repository methods and small domain-specific indexes where needed.
@@ -296,7 +290,6 @@ src/
     cohere.rs
     image_generation.rs
     claude_subscription.rs
-    local_sidecar.rs
   images/
     mod.rs
     stability.rs
@@ -655,7 +648,7 @@ Responsibilities:
 
 Imports, exports, and migration tools.
 
-Keep import code explicit by workflow. Do not build a generic importer framework before it is needed. Rust owns file/folder access, path tokens, parsing, validation, backup import/export, and persistence; React keeps picker triggers, drag/drop UI, review dialogs, and progress display.
+Keep import code explicit by workflow. Do not build a generic importer framework before it is needed. Rust owns file/folder access, path tokens, parsing, validation, current profile package import/export, and persistence; React keeps picker triggers, drag/drop UI, review dialogs, and progress display.
 
 ```text
 src/
@@ -773,69 +766,9 @@ Responsibilities:
 - gated update application
 - remote apply safety
 
-## `sync-protocol`
+## Deferred Sync
 
-Shared sync protocol types used by the Tauri app and the Docker sync server.
-
-```text
-src/
-  lib.rs
-  protocol.rs
-  collections.rs
-  operations.rs
-  heads.rs
-  cursors.rs
-  blobs.rs
-  conflicts.rs
-  devices.rs
-  encryption.rs
-```
-
-Responsibilities:
-
-- sync message DTOs
-- collection names
-- operation envelopes
-- device identity payloads
-- blob references
-- conflict descriptors
-- versioned protocol negotiation
-
-## `sync-client`
-
-Tauri-side client for optional self-hosted sync.
-
-```text
-src/
-  lib.rs
-  service.rs
-  config.rs
-  auth.rs
-  device.rs
-  scheduler.rs
-  queue.rs
-  websocket.rs
-  push.rs
-  pull.rs
-  blobs.rs
-  conflicts.rs
-  snapshots.rs
-```
-
-Responsibilities:
-
-- server pairing
-- device registration
-- bearer token storage through `security`
-- local change queue
-- push/pull scheduling
-- WebSocket heads subscription
-- blob upload/download
-- conflict creation and resolution
-
-## `sync-server`
-
-Optional Docker-deployable sync service. See [Sync Server And Docker Deployment](./09-sync-server.md).
+Sync protocol, sync client, and Docker sync server work are outside the active Tauri migration. Do not add sync runtime code, settings UI, queue status, pairing, or conflict-review surfaces until sync is intentionally reopened.
 
 ```text
 sync-server/

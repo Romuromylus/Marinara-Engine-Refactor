@@ -77,7 +77,7 @@ Recommendation: define Marinara's own `ChatProvider` trait first. Use `genai` or
 | --- | --- | --- |
 | Image decoding/resizing | `image` | Avatar/background/gallery validation and thumbnails. |
 | PNG chunks | `png`, `crc32fast` | Character card metadata if existing JS PNG parser is ported. |
-| ZIP archives | `zip` | Backups and imports. |
+| ZIP packages | `zip` | Current profile packages and workflow imports. |
 | Audio metadata | evaluate per need | Frontend still plays audio. Rust may only manage files/cache. |
 
 ## Sidecar And Processes

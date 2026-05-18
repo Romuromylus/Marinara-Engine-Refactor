@@ -248,20 +248,6 @@ pub(crate) fn list_sprites(state: &AppState, character_id: &str) -> AppResult<Va
     Ok(Value::Array(items))
 }
 
-pub(crate) fn sprite_file(
-    state: &AppState,
-    character_id: &str,
-    filename: &str,
-) -> AppResult<Value> {
-    validate_safe_segment(character_id, "character ID")?;
-    validate_safe_segment(filename, "sprite filename")?;
-    let path = sprites_dir(state, character_id).join(filename);
-    if !path.is_file() || !is_sprite_file(&path) {
-        return Err(AppError::not_found("Sprite file was not found"));
-    }
-    sprite_info_from_path(&path)
-}
-
 pub(crate) fn upload_sprite(state: &AppState, character_id: &str, body: Value) -> AppResult<Value> {
     validate_safe_segment(character_id, "character ID")?;
     let expression = body

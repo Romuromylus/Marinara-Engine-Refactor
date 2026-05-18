@@ -5,7 +5,7 @@
 import type { SelectiveLogic } from "../../contracts/types/lorebook.js";
 import { isPatternSafe } from "./regex-safety.js";
 
-/** Pluggable executor for compiled regex test calls. Server passes a vm-timeout-bounded executor. */
+/** Pluggable executor for compiled regex test calls. Runtime-specific callers can add extra guards. */
 export type RegexExecutor = (regex: RegExp, text: string) => boolean;
 
 const defaultRegexExecutor: RegexExecutor = (regex, text) => regex.test(text);
@@ -14,11 +14,9 @@ export interface KeywordMatchOptions {
   useRegex: boolean;
   matchWholeWords: boolean;
   caseSensitive: boolean;
-  /** Optional override for executing user-supplied regex patterns. Server injects a
-   *  vm.runInNewContext-bounded executor so a pathological pattern that survived the
-   *  static safety check can still be aborted. Only applied to the `useRegex` path —
-   *  the matchWholeWords branch builds its regex from escaped-literal text and cannot
-   *  ReDoS, so it skips the executor (and its per-call vm overhead). */
+  /** Optional override for executing user-supplied regex patterns. Only applied
+   *  to the `useRegex` path; the matchWholeWords branch builds its regex from
+   *  escaped-literal text and skips the executor. */
   regexExecutor?: RegexExecutor;
 }
 

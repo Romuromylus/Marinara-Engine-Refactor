@@ -2,10 +2,12 @@ import type { Chat } from "../../../engine/contracts/types/chat";
 import type { CombatAttack, CombatEnemy, CombatInitState, CombatMechanic, CombatPartyMember, EncounterSettings } from "../../../engine/contracts/types/combat-encounter";
 import type { Combatant, CombatPlayerAction, GameActiveState, GameCheckpoint, GameMap, GameNpc, GameSetupConfig, HudWidget, SessionSummary } from "../../../engine/contracts/types/game";
 import type { RPGAttributes } from "../../../engine/contracts/types/game-state";
-import { api, ApiError, type JsonRepairRequest } from "../../../shared/api/api-client";
+import { ApiError, type JsonRepairRequest } from "../../../shared/api/api-errors";
 import { gameAssetsApi } from "../../../shared/api/assets-api";
+import { imageGenerationApi } from "../../../shared/api/image-generation-api";
 import { spotifyApi } from "../../../shared/api/integration-utility-api";
 import { llmApi } from "../../../shared/api/llm-api";
+import { storageApi } from "../../../shared/api/storage-api";
 import { resolveCombatRound } from "../../../engine/modes/game/mechanics/combat.service";
 import { rollDice as rollGameDice } from "../../../engine/modes/game/mechanics/dice.service";
 import { rollEncounter as rollGameEncounter, rollEnemyCount } from "../../../engine/modes/game/mechanics/encounter.service";
@@ -164,20 +166,30 @@ function chatMeta(chat: Chat | null | undefined): Record<string, unknown> {
 }
 
 async function getChat(chatId: string): Promise<Chat> {
-  return api.get<Chat>(`/chats/${encodeURIComponent(chatId)}`);
+  const chat = await storageApi.get<Chat>("chats", chatId);
+  if (!chat) throw new Error(`Chat ${chatId} was not found.`);
+  return chat;
 }
 
 async function patchChatMetadata(chatId: string, patch: Record<string, unknown>): Promise<Chat> {
-  return api.patch<Chat>(`/chats/${encodeURIComponent(chatId)}/metadata`, patch);
+  const chat = await getChat(chatId);
+  return storageApi.update<Chat>("chats", chatId, { metadata: { ...chatMeta(chat), ...patch } });
 }
 
 async function patchChat(chatId: string, patch: Record<string, unknown>): Promise<Chat> {
-  return api.patch<Chat>(`/chats/${encodeURIComponent(chatId)}`, patch);
+  return storageApi.update<Chat>("chats", chatId, patch);
 }
 
 async function listMessages(chatId: string, limit?: number): Promise<ChatMessage[]> {
-  const query = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
-  return api.get<ChatMessage[]>(`/chats/${encodeURIComponent(chatId)}/messages${query}`);
+  return storageApi.list<ChatMessage>("messages", { filters: { chatId }, limit });
+}
+
+async function createChatRecord(value: Record<string, unknown>): Promise<Chat> {
+  return storageApi.create<Chat>("chats", value);
+}
+
+async function createChatMessage(chatId: string, value: Record<string, unknown>): Promise<ChatMessage> {
+  return storageApi.create<ChatMessage>("messages", { ...value, chatId });
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -414,7 +426,7 @@ function gameSetupMetadataPatch(config: GameSetupConfig): Record<string, unknown
     gameSceneConnectionId: config.sceneConnectionId ?? null,
     gameImageConnectionId: config.imageConnectionId ?? null,
     enableSpriteGeneration: Boolean(config.enableSpriteGeneration),
-    gameEnableSpotifyDj: Boolean(config.enableSpotifyDj),
+    gameUseSpotifyMusic: Boolean(config.enableSpotifyDj),
     gameSpotifySourceType: config.spotifySourceType ?? null,
     gameSpotifyPlaylistId: config.spotifyPlaylistId ?? null,
     gameSpotifyPlaylistName: config.spotifyPlaylistName ?? null,
@@ -735,7 +747,7 @@ export const gameApi = {
       return { sessionChat, gameId };
     }
     const chatPatch = gameSetupChatPatch(data.setupConfig, data.connectionId ?? null);
-    const sessionChat = await api.post<Chat>("/chats", {
+    const sessionChat = await createChatRecord({
       name: data.name || "New Game",
       mode: "game",
       characterIds: data.partyCharacterIds ?? chatPatch.characterIds ?? [],
@@ -863,7 +875,7 @@ export const gameApi = {
   },
 
   async startSession(data: { gameId: string; connectionId?: string }): Promise<StartSessionResponse> {
-    const chats = await api.get<Chat[]>("/chats");
+    const chats = await storageApi.list<Chat>("chats");
     const existing = chats.filter((chat) => chatMeta(chat).gameId === data.gameId).sort((a, b) => gameSessionSortValue(a) - gameSessionSortValue(b));
     const sessionNumber = existing.length + 1;
     const previousMeta = chatMeta(existing[existing.length - 1]);
@@ -890,7 +902,7 @@ export const gameApi = {
         recap = buildSessionCarryoverContext(summaries);
       }
     }
-    const sessionChat = await api.post<Chat>("/chats", {
+    const sessionChat = await createChatRecord({
       name: `Game Session ${sessionNumber}`,
       mode: "game",
       characterIds: [],
@@ -907,7 +919,7 @@ export const gameApi = {
       },
     });
     if (recap.trim()) {
-      await api.post(`/chats/${encodeURIComponent(sessionChat.id)}/messages`, {
+      await createChatMessage(sessionChat.id, {
         role: "system",
         characterId: null,
         content: `[session-recap]\n${recap.trim()}`,
@@ -1012,7 +1024,7 @@ export const gameApi = {
         },
       }));
     const entries = Array.isArray(parsed.entries) && parsed.entries.length ? parsed.entries : fallbackEntries;
-    const lorebook = await api.post<{ id: string }>("/lorebooks", {
+    const lorebook = await storageApi.create<{ id: string }>("lorebooks", {
       name: `Game Session ${data.sessionNumber} Lore`,
       description: "Generated from local game session state.",
       category: "game",
@@ -1023,7 +1035,7 @@ export const gameApi = {
     let entryCount = 0;
     for (const [index, rawEntry] of entries.entries()) {
       const entry = asRecord(rawEntry);
-      await api.post("/lorebook-entries", {
+      await storageApi.create("lorebook-entries", {
         lorebookId: lorebook.id,
         name: typeof entry.name === "string" ? entry.name : "Session Lore",
         content: typeof entry.content === "string" ? entry.content : "",
@@ -1178,7 +1190,7 @@ export const gameApi = {
   },
 
   async gameSessions(gameId: string): Promise<Chat[]> {
-    const chats = await api.get<Chat[]>("/chats");
+    const chats = await storageApi.list<Chat>("chats");
     return chats.filter((chat) => chatMeta(chat).gameId === gameId);
   },
 
@@ -1289,19 +1301,19 @@ export const gameApi = {
   },
 
   async listCheckpoints(chatId: string) {
-    const all = await api.get<GameCheckpoint[]>("/game-checkpoints");
+    const all = await storageApi.list<GameCheckpoint>("game-checkpoints");
     return all.filter((checkpoint) => (checkpoint as { chatId?: string }).chatId === chatId);
   },
 
   async createCheckpoint(data: { chatId: string; label: string; triggerType: string }) {
     const chat = await getChat(data.chatId);
-    const snapshot = await api.post<{ id: string }>("/game-state-snapshots", {
+    const snapshot = await storageApi.create<{ id: string }>("game-state-snapshots", {
       chatId: data.chatId,
       messageId: null,
       gameState: (chat as { gameState?: unknown }).gameState ?? {},
       metadata: chatMeta(chat),
     });
-    const record = await api.post<{ id: string }>("/game-checkpoints", {
+    const record = await storageApi.create<{ id: string }>("game-checkpoints", {
       chatId: data.chatId,
       snapshotId: snapshot.id,
       messageId: "",
@@ -1317,21 +1329,26 @@ export const gameApi = {
   },
 
   async loadCheckpoint(data: { chatId: string; checkpointId: string }) {
-    const checkpoint = await api.get<{ id: string; chatId?: string; label?: string; snapshotId?: string }>(`/game-checkpoints/${encodeURIComponent(data.checkpointId)}`);
+    const checkpoint = await storageApi.get<{ id: string; chatId?: string; label?: string; snapshotId?: string }>(
+      "game-checkpoints",
+      data.checkpointId,
+    );
+    if (!checkpoint) throw new Error("Checkpoint was not found.");
     if (checkpoint.chatId !== data.chatId) throw new Error("Checkpoint does not belong to this chat.");
     if (!checkpoint.snapshotId) throw new Error("Checkpoint is missing its state snapshot.");
-    const snapshot = await api.get<{
+    const snapshot = await storageApi.get<{
       id: string;
       chatId?: string;
       gameState?: unknown;
       metadata?: Record<string, unknown>;
-    }>(`/game-state-snapshots/${encodeURIComponent(checkpoint.snapshotId)}`);
+    }>("game-state-snapshots", checkpoint.snapshotId);
+    if (!snapshot) throw new Error("Checkpoint snapshot was not found.");
     if (snapshot.chatId !== data.chatId) throw new Error("Checkpoint snapshot does not belong to this chat.");
-    await api.patch(`/chats/${encodeURIComponent(data.chatId)}`, {
+    await patchChat(data.chatId, {
       gameState: snapshot.gameState ?? {},
       metadata: snapshot.metadata ?? {},
     });
-    const message = await api.post<{ id: string }>(`/chats/${encodeURIComponent(data.chatId)}/messages`, {
+    const message = await createChatMessage(data.chatId, {
       role: "system",
       characterId: null,
       content: `[Checkpoint restored: ${checkpoint.label || "Checkpoint"}]`,
@@ -1340,7 +1357,7 @@ export const gameApi = {
   },
 
   async deleteCheckpoint(id: string) {
-    const result = await api.delete<{ deleted?: boolean }>(`/game-checkpoints/${encodeURIComponent(id)}`);
+    const result = await storageApi.delete("game-checkpoints", id);
     return { ok: Boolean(result.deleted) };
   },
 
@@ -1371,7 +1388,7 @@ export const gameApi = {
       }
     }
     const clean = raw.replace(/\[party-turn\]/gi, "").trim();
-    await api.post(`/chats/${encodeURIComponent(input.chatId)}/messages`, {
+    await createChatMessage(input.chatId, {
       role: "assistant",
       characterId: null,
       content: `[party-turn]\n${clean}`,
@@ -1569,11 +1586,13 @@ export const gameApi = {
 
     for (const item of preview.items) {
       if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-      const image = await api.post<{ base64: string; mimeType: string; image?: string }>(
-        "/images/generate",
-        { connectionId: imageConnectionId, prompt: item.prompt, width: item.width, height: item.height },
-        { signal },
-      );
+      if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+      const image = await imageGenerationApi.generate<{ base64: string; mimeType: string; image?: string }>({
+        connectionId: imageConnectionId,
+        prompt: item.prompt,
+        width: item.width,
+        height: item.height,
+      });
       if (item.kind === "background") {
         const key = typeof record.backgroundTag === "string" ? record.backgroundTag : "generated-background";
         const tag = await uploadGeneratedAsset("backgrounds", "generated", generatedAssetSlug(key), image.base64, image.mimeType);

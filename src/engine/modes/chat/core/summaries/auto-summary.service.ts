@@ -161,7 +161,7 @@ async function resolveSummaryConnection(
 }
 
 async function loadScopedMessages(storage: StorageGateway, chatId: string): Promise<ConversationSummaryMessage[]> {
-  const rows = await storage.request<unknown>("GET", `/chats/${encodeURIComponent(chatId)}/messages`);
+  const rows = await storage.listChatMessages<unknown>(chatId);
   const messages = Array.isArray(rows) ? rows.filter((row): row is JsonRecord => !!row && typeof row === "object" && !Array.isArray(row)) : [];
   let startIndex = 0;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -614,7 +614,7 @@ export async function backfillConversationSummaries(
   });
 
   if (Object.keys(result.newlyGeneratedDays).length > 0 || Object.keys(result.newlyConsolidatedWeeks).length > 0) {
-    await capabilities.storage.request("PATCH", `/chats/${encodeURIComponent(input.chatId)}/summaries`, {
+    await capabilities.storage.patchChatSummaries(input.chatId, {
       daySummaries: result.newlyGeneratedDays,
       weekSummaries: result.newlyConsolidatedWeeks,
     });

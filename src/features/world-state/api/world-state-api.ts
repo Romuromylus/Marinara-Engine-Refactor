@@ -1,12 +1,20 @@
 import type { GameState } from "../../../engine/contracts/types/game-state";
-import { api } from "../../../shared/api/api-client";
+import { storageApi } from "../../../shared/api/storage-api";
 
 export type WorldState = GameState;
 export type WorldStatePatch = Record<string, unknown>;
 
 export const worldStateApi = {
-  get: (chatId: string, init?: RequestInit) =>
-    api.get<WorldState | null>(`/world-state/${encodeURIComponent(chatId)}`, init),
-  patch: (chatId: string, patch: WorldStatePatch, init?: RequestInit) =>
-    api.patch<WorldState>(`/world-state/${encodeURIComponent(chatId)}`, patch, init),
+  get: async (chatId: string, init?: RequestInit) => {
+    if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+    const chat = await storageApi.get<{ gameState?: WorldState }>("chats", chatId);
+    return chat?.gameState ?? null;
+  },
+  patch: async (chatId: string, patch: WorldStatePatch, init?: RequestInit) => {
+    if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+    const chat = await storageApi.get<{ gameState?: WorldState }>("chats", chatId);
+    const next = { ...((chat?.gameState ?? {}) as Record<string, unknown>), ...patch } as unknown as WorldState;
+    await storageApi.update("chats", chatId, { gameState: next });
+    return next;
+  },
 };

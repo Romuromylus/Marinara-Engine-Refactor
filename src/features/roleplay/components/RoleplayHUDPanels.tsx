@@ -23,7 +23,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "../../../shared/lib/utils";
-import { api } from "../../../shared/api/api-client";
+import { npcAvatarApi } from "../../../shared/api/avatar-api";
 import { useAgentConfigs, useUpdateAgent, type AgentConfigRow } from "../../agents/hooks/use-agents";
 import type { CharacterStat, CustomTrackerField, InventoryItem, PresentCharacter, QuestProgress } from "../../../engine/contracts/types/game-state";
 
@@ -548,10 +548,7 @@ export function CharactersPanel({
       reader.onload = async () => {
         const dataUrl = reader.result as string;
         try {
-          const res = await api.post<{ avatarPath: string }>(`/avatars/npc/${chatId}`, {
-            name: char.name,
-            avatar: dataUrl,
-          });
+          const res = await npcAvatarApi.upload(chatId, char.name, dataUrl);
           const next = [...characters];
           next[idx] = { ...char, avatarPath: res.avatarPath };
           onUpdate(next);

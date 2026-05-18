@@ -43,14 +43,12 @@ src-tauri/
     roleplay/
     game/
     assets/
-    sidecar/
     import/
     integrations/
     updates/
-    sync-client/
-    sync-protocol/
-  sync-server/
 ```
+
+Sidecar and sync crates/services are outside the active app structure for this migration.
 
 ## Frontend Layout
 
@@ -152,7 +150,6 @@ Do not create a giant central contracts crate. Rust domain crates are the source
 commands -> services -> repositories
 commands -> domain DTOs
 services -> domain DTOs, core, storage, security
-sync-client -> sync-protocol, storage, security
 frontend -> shared/api -> Tauri commands
 frontend -> generated TypeScript bindings
 domain DTOs -> no app crate dependencies

@@ -2,7 +2,7 @@
 // Hooks: Installed Extensions
 // ──────────────────────────────────────────────
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../shared/api/api-client";
+import { storageApi } from "../../../shared/api/storage-api";
 import type { CreateExtensionInput, UpdateExtensionInput } from "../../../engine/contracts/schemas/extension.schema";
 import type { InstalledExtension } from "../../../engine/contracts/types/extension";
 
@@ -14,7 +14,7 @@ export const extensionKeys = {
 export function useExtensions() {
   return useQuery({
     queryKey: extensionKeys.list(),
-    queryFn: () => api.get<InstalledExtension[]>("/extensions"),
+    queryFn: () => storageApi.list<InstalledExtension>("extensions"),
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -25,7 +25,8 @@ export function useExtensions() {
 export function useCreateExtension() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateExtensionInput) => api.post<InstalledExtension>("/extensions", data),
+    mutationFn: (data: CreateExtensionInput) =>
+      storageApi.create<InstalledExtension>("extensions", data as Record<string, unknown>),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: extensionKeys.all });
     },
@@ -36,7 +37,7 @@ export function useUpdateExtension() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & UpdateExtensionInput) =>
-      api.patch<InstalledExtension>(`/extensions/${id}`, data),
+      storageApi.update<InstalledExtension>("extensions", id, data as Record<string, unknown>),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: extensionKeys.all });
     },
@@ -46,7 +47,7 @@ export function useUpdateExtension() {
 export function useDeleteExtension() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/extensions/${id}`),
+    mutationFn: (id: string) => storageApi.delete("extensions", id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: extensionKeys.all });
     },

@@ -42,7 +42,7 @@ import { useApplyRegex } from "../../../shared/hooks/use-apply-regex";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useTranslate } from "../../../shared/hooks/use-translate";
-import { api } from "../../../shared/api/api-client";
+import { storageApi } from "../../../shared/api/storage-api";
 import { ttsService } from "../../../shared/lib/tts-service";
 import { useTTSConfig } from "../../../shared/hooks/use-tts";
 import { buildTTSMessageText, resolveTTSVoiceForSpeaker } from "../../../shared/lib/tts-dialogue";
@@ -853,7 +853,9 @@ export const ChatMessage = memo(function ChatMessage({
           ),
         };
       });
-      await api.patch(`/chats/${message.chatId}/messages/${message.id}/extra`, { attachments: updated });
+      await storageApi.patchChatMessageExtra(message.id, {
+        attachments: updated,
+      });
       qc.invalidateQueries({ queryKey: msgKey });
     },
     [extra.attachments, message.chatId, message.id, qc],

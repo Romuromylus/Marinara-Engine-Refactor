@@ -385,16 +385,16 @@ async function requireChat(storage: StorageGateway, chatId: string): Promise<Jso
 }
 
 async function messagesForChat(storage: StorageGateway, chatId: string): Promise<StoredMessage[]> {
-  const rows = await storage.request<unknown>("GET", `/chats/${encodeURIComponent(chatId)}/messages`);
+  const rows = await storage.listChatMessages<unknown>(chatId);
   return Array.isArray(rows) ? rows.filter(isRecord) : [];
 }
 
 async function createChatMessage(storage: StorageGateway, chatId: string, message: JsonRecord): Promise<void> {
-  await storage.request("POST", `/chats/${encodeURIComponent(chatId)}/messages`, message);
+  await storage.createChatMessage(chatId, message);
 }
 
 async function patchChatMetadata(storage: StorageGateway, chatId: string, patch: JsonRecord): Promise<void> {
-  await storage.request("PATCH", `/chats/${encodeURIComponent(chatId)}/metadata`, patch);
+  await storage.patchChatMetadata(chatId, patch);
 }
 
 async function cleanOriginScenePointers(storage: StorageGateway, originChatId: string): Promise<void> {
@@ -408,7 +408,7 @@ async function cleanOriginScenePointers(storage: StorageGateway, originChatId: s
 async function deleteChatWithMessages(storage: StorageGateway, chatId: string): Promise<void> {
   for (const message of await messagesForChat(storage, chatId)) {
     if (message.id) {
-      await storage.request("DELETE", `/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(message.id)}`);
+      await storage.deleteChatMessage(message.id);
     }
   }
   await storage.delete("chats", chatId);

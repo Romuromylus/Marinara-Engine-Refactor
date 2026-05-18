@@ -64,6 +64,18 @@ pub(crate) fn llm_request_from_body(
                     .get("name")
                     .and_then(Value::as_str)
                     .map(str::to_string),
+                images: message
+                    .get("images")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .filter(|value| !value.trim().is_empty())
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 tool_call_id: message
                     .get("tool_call_id")
                     .and_then(Value::as_str)
@@ -87,19 +99,6 @@ pub(crate) fn llm_request_from_body(
 pub(crate) async fn llm_complete(state: &AppState, body: Value) -> AppResult<Value> {
     let content = marinara_llm::complete(llm_request_from_body(state, body)?).await?;
     Ok(Value::String(content))
-}
-
-pub(crate) async fn llm_stream_events(state: &AppState, body: Value) -> AppResult<Vec<Value>> {
-    let result = marinara_llm::complete_rich(llm_request_from_body(state, body)?).await?;
-    let mut events = vec![json!({ "type": "start" })];
-    if !result.content.is_empty() {
-        events.push(json!({ "type": "token", "text": result.content, "data": result.content }));
-    }
-    for tool_call in result.tool_calls {
-        events.push(json!({ "type": "tool_call", "data": tool_call }));
-    }
-    events.push(json!({ "type": "done" }));
-    Ok(events)
 }
 
 pub(crate) async fn llm_stream_channel(
@@ -186,10 +185,29 @@ pub(crate) async fn connection_models(state: &AppState, id: &str) -> AppResult<V
 
 fn provider_model_catalog(provider: &str) -> Vec<Value> {
     let ids: &[&str] = match provider {
+        "openai_chatgpt" => &[
+            "gpt-5.2",
+            "gpt-5.1",
+            "gpt-5",
+            "gpt-5.3-codex",
+            "gpt-5.2-codex",
+            "gpt-5.1-codex",
+            "gpt-5-codex",
+            "gpt-4o",
+            "chatgpt-4o-latest",
+        ],
         "anthropic" => &[
             "claude-3-5-sonnet-latest",
             "claude-3-5-haiku-latest",
             "claude-3-opus-latest",
+        ],
+        "claude_subscription" => &[
+            "claude-opus-4-7",
+            "claude-opus-4-6",
+            "claude-sonnet-4-6",
+            "claude-opus-4-5",
+            "claude-sonnet-4-5",
+            "claude-haiku-4-5",
         ],
         "google" | "google_vertex" => &["gemini-1.5-pro", "gemini-1.5-flash", "text-embedding-004"],
         "openrouter" => &[
@@ -228,6 +246,9 @@ async fn fetch_provider_models(connection: &Value) -> AppResult<Vec<Value>> {
         .unwrap_or("openai");
     if provider == "image_generation" {
         return fetch_image_models(connection).await;
+    }
+    if provider == "openai_chatgpt" || provider == "claude_subscription" {
+        return Ok(provider_model_catalog(provider));
     }
     if provider == "ollama" {
         return fetch_ollama_models(connection).await;

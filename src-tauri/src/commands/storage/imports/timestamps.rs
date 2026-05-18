@@ -27,8 +27,10 @@ fn parse_trusted_timestamp(value: Option<&Value>) -> Option<String> {
                     } else {
                         number
                     };
-                    return chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis.round() as i64)
-                        .map(|time| time.to_rfc3339());
+                    return chrono::DateTime::<chrono::Utc>::from_timestamp_millis(
+                        millis.round() as i64
+                    )
+                    .map(|time| time.to_rfc3339());
                 }
             }
             chrono::DateTime::parse_from_rfc3339(trimmed)
@@ -64,7 +66,10 @@ pub(super) fn timestamp_overrides_from_value(value: Option<&Value>) -> Option<(S
     }
 }
 
-fn timestamp_overrides_from_body_and_payload(body: &Value, payload: &Value) -> Option<(String, String)> {
+fn timestamp_overrides_from_body_and_payload(
+    body: &Value,
+    payload: &Value,
+) -> Option<(String, String)> {
     timestamp_overrides_from_value(
         body.get("timestampOverrides")
             .or_else(|| body.get("__timestampOverrides")),
@@ -86,7 +91,8 @@ fn timestamp_overrides_from_body_and_payload(body: &Value, payload: &Value) -> O
 }
 
 pub(super) fn apply_timestamp_overrides(record: &mut Value, body: &Value, payload: &Value) {
-    let Some((created_at, updated_at)) = timestamp_overrides_from_body_and_payload(body, payload) else {
+    let Some((created_at, updated_at)) = timestamp_overrides_from_body_and_payload(body, payload)
+    else {
         return;
     };
     if let Some(object) = record.as_object_mut() {

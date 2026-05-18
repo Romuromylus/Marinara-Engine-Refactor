@@ -13,9 +13,11 @@ import {
 import { cn } from "../../../shared/lib/utils";
 import { useExtensions, useCreateExtension, useDeleteExtension, useUpdateExtension } from "../hooks/use-extensions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ADMIN_SECRET_STORAGE_KEY, api } from "../../../shared/api/api-client";
+import { gameAssetsApi } from "../../../shared/api/assets-api";
 import { importApi } from "../../../shared/api/import-api";
 import { profileApi } from "../../../shared/api/profile-api";
+import { backgroundsApi, fontsApi } from "../../../shared/api/settings-assets-api";
+import { storageApi } from "../../../shared/api/storage-api";
 import { chatBackgroundMetadataToUrl, chatBackgroundUrlToMetadata } from "../../../shared/lib/backgrounds";
 import { filePathToAssetUrl, resolveManagedLocalAssetUrl, userBackgroundUrl } from "../../../shared/api/local-file-api";
 import React, { useRef, useState, useCallback, useEffect } from "react";
@@ -126,6 +128,8 @@ const EXPUNGE_SCOPE_OPTIONS: Array<{ id: ExpungeScope; label: string; descriptio
     description: "Backgrounds, avatars, sprites, gallery items, fonts, and knowledge-source files.",
   },
 ];
+
+const ADMIN_SECRET_STORAGE_KEY = "marinara-admin-secret";
 
 const ROLEPLAY_AVATAR_STYLE_OPTIONS: Array<{ id: RoleplayAvatarStyle; label: string; desc: string }> = [
   {
@@ -479,13 +483,13 @@ function GeneralSettings() {
     setAssetUploading(true);
     try {
       const uploads = await Promise.allSettled(
-        assetFiles.map((file) => {
-          const form = new FormData();
-          form.append("category", assetCategory);
-          form.append("subcategory", folder);
-          form.append("file", file, file.name);
-          return api.upload<{ tag: string; path: string; manifestCount: number }>("/game-assets/upload", form);
-        }),
+        assetFiles.map((file) =>
+          gameAssetsApi.upload({
+            file,
+            category: assetCategory,
+            subcategory: folder,
+          }),
+        ),
       );
       const succeeded = uploads.filter((result) => result.status === "fulfilled").length;
       const failed = uploads.length - succeeded;
@@ -806,7 +810,7 @@ function GeneralSettings() {
           {GAME_ASSET_CATEGORIES.map((folder) => (
             <button
               key={folder.id}
-              onClick={() => api.post("/game-assets/open-folder", { subfolder: folder.id }).catch(() => {})}
+              onClick={() => gameAssetsApi.openFolder(folder.id).catch(() => {})}
               className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--secondary)] px-3 py-1.5 text-[0.6875rem] font-medium capitalize text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
             >
               <FolderOpen size="0.75rem" />
@@ -965,7 +969,7 @@ function AppearanceSettings() {
   // Custom fonts — query is pre-warmed in App.tsx, no fetch here
   const { data: customFonts } = useQuery<CustomFontFace[]>({
     queryKey: ["custom-fonts"],
-    queryFn: () => api.get("/fonts"),
+    queryFn: () => fontsApi.list<CustomFontFace[]>(),
     staleTime: Infinity,
   });
   const customFontOptions = React.useMemo(() => {
@@ -983,9 +987,7 @@ function AppearanceSettings() {
   const queryClient = useQueryClient();
   const googleFontMutation = useMutation({
     mutationFn: (family: string) =>
-      api.post<{ filename: string; family: string; url: string; files?: CustomFontFace[] }>("/fonts/google/download", {
-        family,
-      }),
+      fontsApi.downloadGoogle<{ filename: string; family: string; url: string; files?: CustomFontFace[] }>(family),
     onSuccess: (data) => {
       toast.success(`Installed "${data.family}"`);
       setGoogleFontName("");
@@ -1077,7 +1079,7 @@ function AppearanceSettings() {
           </p>
         )}
         <button
-          onClick={() => api.post("/fonts/open-folder").catch(() => {})}
+          onClick={() => fontsApi.openFolder().catch(() => {})}
           className="mt-1 inline-flex items-center gap-1.5 self-start rounded-lg bg-[var(--secondary)] px-3 py-1.5 text-[0.6875rem] font-medium text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
         >
           <FolderOpen size="0.75rem" />
@@ -1742,9 +1744,8 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
   const { data: backgrounds } = useQuery({
     queryKey: ["backgrounds"],
     queryFn: async () => {
-      const rows = await api.get<Array<BackgroundLibraryItem & { name?: string; type?: string; isDirectory?: boolean }>>(
-        "/backgrounds",
-      );
+      const rows =
+        await backgroundsApi.list<Array<BackgroundLibraryItem & { name?: string; type?: string; isDirectory?: boolean }>>();
       return rows
         .filter((row) => row.type !== "folder" && row.isDirectory !== true)
         .map((row) => {
@@ -1764,11 +1765,11 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
 
   const { data: allTags } = useQuery({
     queryKey: ["background-tags"],
-    queryFn: () => api.get<string[]>("/backgrounds/tags"),
+    queryFn: () => backgroundsApi.tags<string[]>(),
   });
 
   const deleteBg = useMutation({
-    mutationFn: (filename: string) => api.delete(`/backgrounds/${filename}`),
+    mutationFn: (filename: string) => backgroundsApi.delete(filename),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["backgrounds"] });
       qc.invalidateQueries({ queryKey: ["background-tags"] });
@@ -1777,7 +1778,7 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
 
   const updateTags = useMutation({
     mutationFn: ({ filename, tags }: { filename: string; tags: string[] }) =>
-      api.patch(`/backgrounds/${filename}/tags`, { tags }),
+      backgroundsApi.updateTags(filename, tags),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["backgrounds"] });
       qc.invalidateQueries({ queryKey: ["background-tags"] });
@@ -1786,10 +1787,7 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
 
   const renameBg = useMutation({
     mutationFn: ({ filename, name }: { filename: string; name: string }) =>
-      api.patch<{ success: boolean; oldFilename: string; filename: string; url: string }>(
-        `/backgrounds/${filename}/rename`,
-        { name },
-      ),
+      backgroundsApi.rename<{ success: boolean; oldFilename: string; filename: string; url: string }>(filename, name),
     onSuccess: (data) => {
       const oldUrl = chatBackgroundMetadataToUrl(data.oldFilename);
       if (selected === oldUrl) {
@@ -1806,11 +1804,7 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
     setUploading(true);
     try {
       const uploads = await Promise.allSettled(
-        files.map((file) => {
-          const formData = new FormData();
-          formData.append("file", file);
-          return api.upload<BackgroundUploadResponse>("/backgrounds/upload", formData);
-        }),
+        files.map((file) => backgroundsApi.upload<BackgroundUploadResponse>(file)),
       );
       const successfulUploads = uploads
         .filter((result): result is PromiseFulfilledResult<BackgroundUploadResponse> => result.status === "fulfilled")
@@ -2156,7 +2150,7 @@ function ThemesSettings() {
         importedThemeCss = text;
       }
 
-      const latestThemes = await api.get<Theme[]>("/themes");
+      const latestThemes = await storageApi.list<Theme>("themes");
       const duplicate = findDuplicateTheme(latestThemes, importedThemeName, importedThemeCss);
       if (duplicate) {
         toast.success(`Theme "${duplicate.name}" is already installed`);

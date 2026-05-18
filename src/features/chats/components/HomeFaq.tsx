@@ -57,7 +57,7 @@ const HOME_FAQ_ITEMS: HomeFaqItem[] = [
     id: "blank-page-localhost",
     category: "Setup",
     question: "The app window is blank or stuck loading. What should I try?",
-    answer: "This is usually cached frontend state or a failed local startup, not an old server URL problem.",
+    answer: "This is usually cached frontend state or a failed Tauri startup.",
     bullets: [
       "Use Settings > Advanced > Refresh App if the UI is still reachable.",
       "Relaunch Marinara from the desktop app shortcut.",

@@ -9,7 +9,6 @@ import { useConnections } from "../../connections/hooks/use-connections";
 import { useLorebooks, useCreateLorebook, lorebookKeys } from "../hooks/use-lorebooks";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { Loader2, Wand2, CheckCircle, AlertCircle, ChevronDown, BookOpen, Plus } from "lucide-react";
-import { api } from "../../../shared/api/api-client";
 import type { Lorebook } from "../../../engine/contracts/types/lorebook";
 import { ProfessorMariWorkingWindow } from "../../../shared/components/ui/ProfessorMariWorkingWindow";
 import { generateLorebookMaker } from "../../../engine/generation/makers";
@@ -200,7 +199,6 @@ export function LorebookMakerModal({ open, onClose }: Props) {
 
       const lbId = (result as Lorebook)?.id;
 
-      // Now bulk-create entries via direct API call
       if (lbId && generated.entries?.length) {
         const entriesToCreate = generated.entries.map((e) => ({
           lorebookId: lbId,
@@ -213,7 +211,7 @@ export function LorebookMakerModal({ open, onClose }: Props) {
           order: e.order ?? 100,
         }));
 
-        await api.post(`/lorebooks/${lbId}/entries/bulk`, { entries: entriesToCreate });
+        await Promise.all(entriesToCreate.map((entry) => storageApi.create("lorebook-entries", entry)));
         // Invalidate so entries appear immediately
         qc.invalidateQueries({ queryKey: lorebookKeys.entries(lbId) });
       }

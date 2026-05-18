@@ -113,6 +113,7 @@ export const spotifyApi = {
 };
 
 export const knowledgeSourcesApi = {
+  list: <T = unknown>() => invokeTauri<T>("knowledge_sources_list"),
   upload: (file: File) => {
     return fileToUploadPayload(file).then((payload) =>
       invokeTauri("knowledge_source_upload", {
@@ -120,6 +121,8 @@ export const knowledgeSourcesApi = {
       }),
     );
   },
+  delete: <T = unknown>(id: string) => invokeTauri<T>("knowledge_source_delete", { id }),
+  text: <T = unknown>(id: string) => invokeTauri<T>("knowledge_source_text", { id }),
 };
 
 export const connectionsUtilityApi = {

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { ApiError } from "./api-client";
+import { ApiError } from "./api-errors";
 
 function normalize(error: unknown): ApiError {
   if (error instanceof ApiError) return error;

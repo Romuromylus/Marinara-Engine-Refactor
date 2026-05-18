@@ -25,6 +25,15 @@ export const PROVIDERS: Record<APIProvider, ProviderDefinition> = {
     usesAuthHeader: true,
     apiKeyHeader: null,
   },
+  openai_chatgpt: {
+    id: "openai_chatgpt",
+    name: "OpenAI (ChatGPT)",
+    defaultBaseUrl: "",
+    modelsEndpoint: "",
+    supportsStreaming: true,
+    usesAuthHeader: false,
+    apiKeyHeader: null,
+  },
   anthropic: {
     id: "anthropic",
     name: "Anthropic",
@@ -33,6 +42,15 @@ export const PROVIDERS: Record<APIProvider, ProviderDefinition> = {
     supportsStreaming: true,
     usesAuthHeader: false,
     apiKeyHeader: "x-api-key",
+  },
+  claude_subscription: {
+    id: "claude_subscription",
+    name: "Claude (Subscription)",
+    defaultBaseUrl: "",
+    modelsEndpoint: "",
+    supportsStreaming: true,
+    usesAuthHeader: false,
+    apiKeyHeader: null,
   },
   google: {
     id: "google",
@@ -119,7 +137,9 @@ export const PROVIDERS: Record<APIProvider, ProviderDefinition> = {
 
 export const TAURI_RUNTIME_PROVIDERS: readonly APIProvider[] = [
   "openai",
+  "openai_chatgpt",
   "anthropic",
+  "claude_subscription",
   "google",
   "google_vertex",
   "mistral",

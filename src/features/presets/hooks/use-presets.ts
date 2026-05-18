@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { previewGenerationPrompt } from "../../../engine/generation/prompt-preview";
 import { storageApi } from "../../../shared/api/storage-api";
-import { api } from "../../../shared/api/api-client";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import type { PromptPreset, PromptGroup, PromptSection, ChoiceBlock, GenerationParameters, ChatMLMessage } from "../../../engine/contracts/types/prompt";
 
 // ── Query Keys ──
@@ -22,6 +22,64 @@ export const presetKeys = {
   default: () => [...presetKeys.all, "default"] as const,
 };
 
+type PromptNestedKind = "groups" | "sections" | "variables";
+
+const promptNestedEntity: Record<PromptNestedKind, string> = {
+  groups: "prompt-groups",
+  sections: "prompt-sections",
+  variables: "prompt-variables",
+};
+
+const promptOrderField: Record<PromptNestedKind, string> = {
+  groups: "groupOrder",
+  sections: "sectionOrder",
+  variables: "variableOrder",
+};
+
+async function listPromptNested<T>(presetId: string, kind: PromptNestedKind): Promise<T[]> {
+  return storageApi.list<T>(promptNestedEntity[kind], { filters: { presetId } });
+}
+
+async function createPromptNested<T>(
+  presetId: string,
+  kind: PromptNestedKind,
+  data: Record<string, unknown>,
+): Promise<T> {
+  return storageApi.create<T>(promptNestedEntity[kind], { ...data, presetId });
+}
+
+async function updatePromptNested<T>(
+  kind: PromptNestedKind,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<T> {
+  return storageApi.update<T>(promptNestedEntity[kind], id, data);
+}
+
+async function deletePromptNested(kind: PromptNestedKind, id: string) {
+  return storageApi.delete(promptNestedEntity[kind], id);
+}
+
+async function reorderPromptNested<T>(
+  presetId: string,
+  kind: PromptNestedKind,
+  ids: string[],
+): Promise<T[]> {
+  const entity = promptNestedEntity[kind];
+  await Promise.all(
+    ids.map((id, index) =>
+      storageApi.update(entity, id, {
+        order: index,
+        sortOrder: index,
+      }),
+    ),
+  );
+  await storageApi.update("prompts", presetId, {
+    [promptOrderField[kind]]: ids,
+  });
+  return listPromptNested<T>(presetId, kind);
+}
+
 // ═══════════════════════════════════════════════
 //  Presets
 // ═══════════════════════════════════════════════
@@ -29,7 +87,7 @@ export const presetKeys = {
 export function usePresets() {
   return useQuery({
     queryKey: presetKeys.list(),
-    queryFn: () => api.get<PromptPreset[]>("/prompts"),
+    queryFn: () => storageApi.list<PromptPreset>("prompts"),
     staleTime: 5 * 60_000,
   });
 }
@@ -37,7 +95,7 @@ export function usePresets() {
 export function usePreset(id: string | null) {
   return useQuery({
     queryKey: presetKeys.detail(id ?? ""),
-    queryFn: () => api.get<PromptPreset>(`/prompts/${id}`),
+    queryFn: () => storageApi.get<PromptPreset>("prompts", id!),
     enabled: !!id,
     staleTime: 5 * 60_000,
   });
@@ -47,13 +105,12 @@ export function usePreset(id: string | null) {
 export function usePresetFull(id: string | null) {
   return useQuery({
     queryKey: presetKeys.full(id ?? ""),
-    queryFn: () =>
-      api.get<{
-        preset: PromptPreset;
-        sections: PromptSection[];
-        groups: PromptGroup[];
-        choiceBlocks: ChoiceBlock[];
-      }>(`/prompts/${id}/full`),
+    queryFn: async () => ({
+      preset: (await storageApi.get<PromptPreset>("prompts", id!))!,
+      sections: await listPromptNested<PromptSection>(id!, "sections"),
+      groups: await listPromptNested<PromptGroup>(id!, "groups"),
+      choiceBlocks: await listPromptNested<ChoiceBlock>(id!, "variables"),
+    }),
     enabled: !!id,
     staleTime: 5 * 60_000,
     refetchOnMount: "always",
@@ -63,7 +120,10 @@ export function usePresetFull(id: string | null) {
 export function useDefaultPreset() {
   return useQuery({
     queryKey: presetKeys.default(),
-    queryFn: () => api.get<PromptPreset | null>("/prompts/default"),
+    queryFn: async () => {
+      const presets = await storageApi.list<PromptPreset>("prompts");
+      return presets.find((preset) => (preset as PromptPreset & { default?: boolean }).isDefault || (preset as PromptPreset & { default?: boolean }).default) ?? null;
+    },
     staleTime: 5 * 60_000,
   });
 }
@@ -71,7 +131,7 @@ export function useDefaultPreset() {
 export function useCreatePreset() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post<PromptPreset>("/prompts", data),
+    mutationFn: (data: Record<string, unknown>) => storageApi.create<PromptPreset>("prompts", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: presetKeys.list() });
     },
@@ -82,7 +142,7 @@ export function useUpdatePreset() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & Record<string, unknown>) =>
-      api.patch<PromptPreset>(`/prompts/${id}`, data),
+      storageApi.update<PromptPreset>("prompts", id, data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.list() });
       qc.invalidateQueries({ queryKey: presetKeys.detail(variables.id) });
@@ -94,7 +154,7 @@ export function useUpdatePreset() {
 export function useDeletePreset() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/prompts/${id}`),
+    mutationFn: (id: string) => storageApi.delete("prompts", id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: presetKeys.all });
     },
@@ -104,7 +164,7 @@ export function useDeletePreset() {
 export function useDuplicatePreset() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<PromptPreset>(`/prompts/${id}/duplicate`),
+    mutationFn: (id: string) => invokeTauri<PromptPreset>("storage_duplicate", { entity: "prompts", id }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: presetKeys.list() });
     },
@@ -114,7 +174,21 @@ export function useDuplicatePreset() {
 export function useSetDefaultPreset() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<PromptPreset>(`/prompts/${id}/set-default`),
+    mutationFn: async (id: string) => {
+      const prompts = await storageApi.list<PromptPreset>("prompts");
+      let selected: PromptPreset | null = null;
+      await Promise.all(
+        prompts.map(async (prompt) => {
+          const isDefault = prompt.id === id;
+          const updated = await storageApi.update<PromptPreset>("prompts", prompt.id, {
+            isDefault,
+            default: isDefault,
+          });
+          if (isDefault) selected = updated;
+        }),
+      );
+      return selected!;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: presetKeys.list() });
       qc.invalidateQueries({ queryKey: presetKeys.default() });
@@ -129,7 +203,7 @@ export function useSetDefaultPreset() {
 export function usePresetGroups(presetId: string | null) {
   return useQuery({
     queryKey: presetKeys.groups(presetId ?? ""),
-    queryFn: () => api.get<PromptGroup[]>(`/prompts/${presetId}/groups`),
+    queryFn: () => listPromptNested<PromptGroup>(presetId!, "groups"),
     enabled: !!presetId,
   });
 }
@@ -138,7 +212,7 @@ export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ presetId, ...data }: { presetId: string } & Record<string, unknown>) =>
-      api.post<PromptGroup>(`/prompts/${presetId}/groups`, data),
+      createPromptNested<PromptGroup>(presetId, "groups", data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.groups(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -149,8 +223,10 @@ export function useCreateGroup() {
 export function useUpdateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ presetId, groupId, ...data }: { presetId: string; groupId: string } & Record<string, unknown>) =>
-      api.patch<PromptGroup>(`/prompts/${presetId}/groups/${groupId}`, data),
+    mutationFn: ({ presetId, groupId, ...data }: { presetId: string; groupId: string } & Record<string, unknown>) => {
+      void presetId;
+      return updatePromptNested<PromptGroup>("groups", groupId, data);
+    },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.groups(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -161,8 +237,7 @@ export function useUpdateGroup() {
 export function useDeleteGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ presetId, groupId }: { presetId: string; groupId: string }) =>
-      api.delete(`/prompts/${presetId}/groups/${groupId}`),
+    mutationFn: ({ groupId }: { presetId: string; groupId: string }) => deletePromptNested("groups", groupId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.groups(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.sections(variables.presetId) });
@@ -175,7 +250,7 @@ export function useReorderGroups() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ presetId, groupIds }: { presetId: string; groupIds: string[] }) =>
-      api.put(`/prompts/${presetId}/groups/reorder`, { groupIds }),
+      reorderPromptNested<PromptGroup>(presetId, "groups", groupIds),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.groups(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -190,7 +265,7 @@ export function useReorderGroups() {
 export function usePresetSections(presetId: string | null) {
   return useQuery({
     queryKey: presetKeys.sections(presetId ?? ""),
-    queryFn: () => api.get<PromptSection[]>(`/prompts/${presetId}/sections`),
+    queryFn: () => listPromptNested<PromptSection>(presetId!, "sections"),
     enabled: !!presetId,
   });
 }
@@ -199,7 +274,7 @@ export function useCreateSection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ presetId, ...data }: { presetId: string } & Record<string, unknown>) =>
-      api.post<PromptSection>(`/prompts/${presetId}/sections`, data),
+      createPromptNested<PromptSection>(presetId, "sections", data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.sections(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -210,8 +285,10 @@ export function useCreateSection() {
 export function useUpdateSection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ presetId, sectionId, ...data }: { presetId: string; sectionId: string } & Record<string, unknown>) =>
-      api.patch<PromptSection>(`/prompts/${presetId}/sections/${sectionId}`, data),
+    mutationFn: ({ presetId, sectionId, ...data }: { presetId: string; sectionId: string } & Record<string, unknown>) => {
+      void presetId;
+      return updatePromptNested<PromptSection>("sections", sectionId, data);
+    },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.sections(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -222,8 +299,7 @@ export function useUpdateSection() {
 export function useDeleteSection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ presetId, sectionId }: { presetId: string; sectionId: string }) =>
-      api.delete(`/prompts/${presetId}/sections/${sectionId}`),
+    mutationFn: ({ sectionId }: { presetId: string; sectionId: string }) => deletePromptNested("sections", sectionId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.sections(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -235,7 +311,7 @@ export function useReorderSections() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ presetId, sectionIds }: { presetId: string; sectionIds: string[] }) =>
-      api.put(`/prompts/${presetId}/sections/reorder`, { sectionIds }),
+      reorderPromptNested<PromptSection>(presetId, "sections", sectionIds),
     onMutate: async ({ presetId, sectionIds }) => {
       await qc.cancelQueries({ queryKey: presetKeys.full(presetId) });
       const prev = qc.getQueryData(presetKeys.full(presetId)) as any;
@@ -264,7 +340,7 @@ export function useReorderSections() {
 export function usePresetVariables(presetId: string | null) {
   return useQuery({
     queryKey: presetKeys.choiceBlocks(presetId ?? ""),
-    queryFn: () => api.get<ChoiceBlock[]>(`/prompts/${presetId}/variables`),
+    queryFn: () => listPromptNested<ChoiceBlock>(presetId!, "variables"),
     enabled: !!presetId,
   });
 }
@@ -273,7 +349,7 @@ export function useCreateVariable() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ presetId, ...data }: { presetId: string } & Record<string, unknown>) =>
-      api.post<ChoiceBlock>(`/prompts/${presetId}/variables`, data),
+      createPromptNested<ChoiceBlock>(presetId, "variables", data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.choiceBlocks(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -288,8 +364,10 @@ export function useUpdateVariable() {
       presetId,
       variableId,
       ...data
-    }: { presetId: string; variableId: string } & Record<string, unknown>) =>
-      api.patch<ChoiceBlock>(`/prompts/${presetId}/variables/${variableId}`, data),
+    }: { presetId: string; variableId: string } & Record<string, unknown>) => {
+      void presetId;
+      return updatePromptNested<ChoiceBlock>("variables", variableId, data);
+    },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.choiceBlocks(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -300,8 +378,8 @@ export function useUpdateVariable() {
 export function useDeleteVariable() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ presetId, variableId }: { presetId: string; variableId: string }) =>
-      api.delete(`/prompts/${presetId}/variables/${variableId}`),
+    mutationFn: ({ variableId }: { presetId: string; variableId: string }) =>
+      deletePromptNested("variables", variableId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: presetKeys.choiceBlocks(variables.presetId) });
       qc.invalidateQueries({ queryKey: presetKeys.full(variables.presetId) });
@@ -313,7 +391,7 @@ export function useReorderVariables() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ presetId, variableIds }: { presetId: string; variableIds: string[] }) =>
-      api.put(`/prompts/${presetId}/variables/reorder`, { variableIds }),
+      reorderPromptNested<ChoiceBlock>(presetId, "variables", variableIds),
     onMutate: async ({ presetId, variableIds }) => {
       await qc.cancelQueries({ queryKey: presetKeys.full(presetId) });
       const prev = qc.getQueryData(presetKeys.full(presetId)) as any;

@@ -20,7 +20,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "../../../shared/lib/utils";
-import { api } from "../../../shared/api/api-client";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import type { AgentFailure } from "../../../shared/lib/agent-failures";
 import { TrackerPanelIcon } from "../../../shared/components/ui/TrackerPanelIcon";
 import { worldStateApi } from "../../world-state/api/world-state-api";
@@ -195,7 +195,7 @@ export function RoleplayHUD({
     }
     worldStateApi.patch(chatId, { ...cleared, manual: true, clearOverrides: true }).catch(() => {});
     // Clear committed agent runs & memory from DB + reset client state
-    api.delete(`/agents/runs/${chatId}`).catch(() => {});
+    invokeTauri("agent_runs_clear_for_chat", { chatId }).catch(() => {});
     resetAgentStore();
   }, [chatId, setGameState, resetAgentStore]);
 

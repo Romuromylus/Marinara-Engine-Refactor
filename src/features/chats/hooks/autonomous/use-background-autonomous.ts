@@ -6,20 +6,21 @@
 // The active chat's autonomous messaging is handled by ConversationView.
 
 import { useEffect, useRef } from "react";
-import type { Chat } from "../../../engine/contracts/types/chat";
-import type { AvatarCropValue } from "../../../shared/lib/utils";
+import type { Chat } from "../../../../engine/contracts/types/chat";
+import type { AvatarCropValue } from "../../../../shared/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { startGeneration } from "../../../engine/generation/start-generation";
-import { checkConversationAutonomous, getConversationBusyDelay, recordAssistantActivity } from "../../../engine/modes/chat/autonomous/autonomous.service";
-import { llmApi } from "../../../shared/api/llm-api";
-import { storageApi } from "../../../shared/api/storage-api";
-import { api } from "../../../shared/api/api-client";
-import { useChatStore } from "../../../shared/stores/chat.store";
-import { useUIStore } from "../../../shared/stores/ui.store";
-import { playNotificationPing } from "../../../shared/lib/notification-sound";
-import { chatKeys } from "../../chats/hooks/use-chats";
-import { characterKeys } from "../../characters/hooks/use-characters";
+import { startGeneration } from "../../../../engine/generation/start-generation";
+import { checkConversationAutonomous, getConversationBusyDelay, recordAssistantActivity } from "../../../../engine/modes/chat/autonomous/autonomous.service";
+import { llmApi } from "../../../../shared/api/llm-api";
+import { storageApi } from "../../../../shared/api/storage-api";
+import { integrationGateway } from "../../../../shared/api/integration-gateway";
+import { invokeTauri } from "../../../../shared/api/tauri-client";
+import { useChatStore } from "../../../../shared/stores/chat.store";
+import { useUIStore } from "../../../../shared/stores/ui.store";
+import { playNotificationPing } from "../../../../shared/lib/notification-sound";
+import { chatKeys } from "../use-chats";
+import { characterKeys } from "../../../characters/hooks/use-characters";
 
 interface RawChat {
   id: string;
@@ -62,13 +63,6 @@ export function useBackgroundAutonomousPolling() {
     const poll = async () => {
       if (!mountedRef.current) return;
 
-      // Skip API calls while tab is hidden to prevent a burst of requests on return.
-      // Server-side inactivity tracking is unaffected; the next visible poll picks up correctly.
-      if (document.hidden) {
-        schedulePoll();
-        return;
-      }
-
       const activeChatId = useChatStore.getState().activeChatId;
 
       // Fetch the current chat list directly from the API each tick.
@@ -76,7 +70,7 @@ export function useBackgroundAutonomousPolling() {
       // cause frequent timer restarts.
       let allChats: RawChat[];
       try {
-        allChats = await api.get<RawChat[]>("/chats");
+        allChats = await storageApi.list<RawChat>("chats");
       } catch {
         schedulePoll();
         return;
@@ -133,7 +127,7 @@ export function useBackgroundAutonomousPolling() {
                 }
 
                 // Drain the TS generation engine; tokens aren't displayed for background chats.
-                for await (const _event of startGeneration({ storage: storageApi, llm: llmApi }, {
+                for await (const _event of startGeneration({ storage: storageApi, llm: llmApi, integrations: integrationGateway }, {
                   chatId: chat.id,
                   connectionId: null,
                   streaming: useUIStore.getState().enableStreaming,
@@ -151,8 +145,10 @@ export function useBackgroundAutonomousPolling() {
                 // message isn't there even though it was saved.
                 qc.resetQueries({ queryKey: chatKeys.messages(chat.id) });
                 qc.invalidateQueries({ queryKey: characterKeys.list() });
-                void api
-                  .post<Chat>(`/chats/${chat.id}/autonomous-unread`, { characterId })
+                void invokeTauri<Chat>("chat_autonomous_unread_mark", {
+                  chatId: chat.id,
+                  body: { characterId },
+                })
                   .then((updatedChat) => {
                     qc.setQueryData(chatKeys.detail(chat.id), updatedChat);
                     qc.invalidateQueries({ queryKey: chatKeys.list() });
@@ -167,7 +163,7 @@ export function useBackgroundAutonomousPolling() {
                 let charAvatarCrop: AvatarCropValue | null = null;
                 try {
                   // Find the triggering character's name
-                  const charRow = await api.get<RawCharacter>(`/characters/${characterId}`);
+                  const charRow = await storageApi.get<RawCharacter>("characters", characterId);
                   if (charRow) {
                     const data = typeof charRow.data === "string" ? JSON.parse(charRow.data) : charRow.data;
                     if (data?.name) charName = data.name;

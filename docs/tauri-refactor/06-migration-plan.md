@@ -123,16 +123,16 @@ Exit criteria:
 
 1. Implement `core` config and app data paths.
 2. Implement raw file-backed `storage`.
-3. Preserve `storage/manifest.json` and `storage/tables/*.json` compatibility where practical.
+3. Use the current Tauri `storage/manifest.json` and `storage/tables/*.json` layout.
 4. Implement atomic JSON writes.
 5. Implement table manifest and per-table snapshots.
 6. Implement first repositories: app settings, chats, messages, characters, connections.
-7. Implement backup/export/import skeleton.
+7. Implement current-format profile package export/import and workflow-specific imports.
 
 Exit criteria:
 
 - Basic CRUD persists to raw files.
-- Existing file-native snapshots remain readable where practical.
+- Current Tauri file-native snapshots remain readable.
 - No SQLite, database, or legacy SQLite importer exists.
 - Atomic write and repository tests exist.
 
@@ -221,12 +221,12 @@ Exit criteria:
 - Game mode can start, advance turns, checkpoint, restore, and generate assets.
 - Large game modules are split by ownership.
 
-## Phase 11: Assets, Media, Imports, Backups, Updates
+## Phase 11: Assets, Media, Imports, Current Profile Packages, Updates
 
 1. Port avatars, backgrounds, default backgrounds, gallery, fonts, generated image storage, and thumbnails if needed.
 2. Port SillyTavern scanners/importers.
 3. Port character card PNG import/export.
-4. Port profile backup export/import.
+4. Port current-format profile package export/import. Do not add old backup/archive compatibility to runtime code.
 5. Port update check/apply flow.
 6. Add progress/cancel events for long-running jobs.
 
@@ -283,23 +283,6 @@ Exit criteria:
 - No direct secrets are in frontend storage.
 - Capabilities and command permissions are reviewed.
 
-## Phase 15: Optional Sync Server
+## Phase 15: Deferred Sync Server
 
-Sync is last. Earlier phases should only preserve stable IDs, timestamps, manifest versions, and clear blob references.
-
-1. Add `sync-protocol`.
-2. Add Tauri-side `sync-client`.
-3. Add sync settings/status UI.
-4. Implement single-user sync server with raw metadata files and local filesystem blobs.
-5. Add metadata push/pull for core domains.
-6. Add blob upload/download.
-7. Add WebSocket heads broadcast.
-8. Add conflict review UI.
-9. Add PostgreSQL and S3/MinIO production mode.
-10. Add OpenAPI docs and deployment guide.
-
-Exit criteria:
-
-- Desktop app remains usable without sync.
-- Sync can be enabled per install.
-- Conflicts are not silently overwritten.
+Sync is intentionally outside the active Tauri migration. Do not add sync protocol crates, Tauri sync clients, settings/status UI, queues, pairing, blob sync, or conflict review until sync is reopened as its own project.

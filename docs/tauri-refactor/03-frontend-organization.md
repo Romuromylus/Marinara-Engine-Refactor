@@ -67,7 +67,6 @@ shared/
     events.ts
     bindings.ts
     errors.ts
-    legacy-route-map.ts
   components/
     ui/
     overlays/
@@ -368,22 +367,10 @@ Sidecar is deferred by scope and has no active frontend feature surface in the T
 ### `features/sync`
 
 ```text
-sync/
-  components/
-    SyncSettingsPanel.tsx
-    SyncStatusIndicator.tsx
-    DeviceList.tsx
-    ConflictReviewPanel.tsx
-    SyncServerHelp.tsx
-  hooks/
-    useSyncSettings.ts
-    useSyncStatus.ts
-    useSyncConflicts.ts
-  stores/
-    sync.store.ts
+Sync is deferred by scope and has no active frontend feature surface in the Tauri app.
 ```
 
-Frontend sync code displays state and conflict review only. Rust owns pairing tokens, device auth, sync queues, blob transfer, and merge application.
+Do not keep sync settings, pairing, queue, or conflict review UI in the active app until sync is intentionally reopened.
 
 ### `features/spotify`
 

@@ -81,7 +81,7 @@ export async function* reviewPromptPreset(
 }
 
 async function assemblePromptReviewView(storage: StorageGateway, presetId: string): Promise<string> {
-  const full = await storage.request<JsonRecord>("GET", `/prompts/${encodeURIComponent(presetId)}/full`).catch(() => null);
+  const full = await storage.promptFull<JsonRecord>(presetId).catch(() => null);
   const preset = full && isRecord(full.preset) ? full.preset : {};
   const groups = Array.isArray(full?.groups) ? full.groups.filter(isRecord) : [];
   const choiceBlocks = Array.isArray(full?.choiceBlocks) ? full.choiceBlocks.filter(isRecord) : [];

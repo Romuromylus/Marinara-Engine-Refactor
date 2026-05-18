@@ -11,6 +11,8 @@ pub struct LlmMessage {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
+    pub images: Vec<String>,
+    #[serde(default)]
     pub tool_call_id: Option<String>,
     #[serde(default)]
     pub tool_calls: Option<Value>,
@@ -95,7 +97,10 @@ fn base_url(provider: &str, configured: &str) -> String {
     match provider {
         "anthropic" => "https://api.anthropic.com".to_string(),
         "google" | "google_vertex" => "https://generativelanguage.googleapis.com".to_string(),
+        "mistral" => "https://api.mistral.ai/v1".to_string(),
+        "cohere" => "https://api.cohere.ai/compatibility/v1".to_string(),
         "openrouter" => "https://openrouter.ai/api/v1".to_string(),
+        "nanogpt" => "https://nano-gpt.com/api/v1".to_string(),
         "xai" => "https://api.x.ai/v1".to_string(),
         _ => "https://api.openai.com/v1".to_string(),
     }
@@ -103,6 +108,55 @@ fn base_url(provider: &str, configured: &str) -> String {
 
 fn temperature(parameters: &Value) -> Option<f64> {
     parameters.get("temperature").and_then(Value::as_f64)
+}
+
+fn param_f64(parameters: &Value, keys: &[&str]) -> Option<f64> {
+    keys.iter()
+        .find_map(|key| parameters.get(*key).and_then(Value::as_f64))
+}
+
+fn param_i64(parameters: &Value, keys: &[&str]) -> Option<i64> {
+    keys.iter()
+        .find_map(|key| parameters.get(*key).and_then(Value::as_i64))
+}
+
+fn param_string(parameters: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        parameters
+            .get(*key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+fn stop_sequences(parameters: &Value) -> Option<Vec<String>> {
+    let value = parameters
+        .get("stop")
+        .or_else(|| parameters.get("stopSequences"))
+        .or_else(|| parameters.get("stop_sequences"))?;
+    if let Some(stop) = value.as_str().map(str::trim).filter(|value| !value.is_empty()) {
+        return Some(vec![stop.to_string()]);
+    }
+    let stops = value
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    (!stops.is_empty()).then_some(stops)
+}
+
+fn data_url_image(value: &str) -> Option<(&str, &str)> {
+    let (meta, data) = value.split_once(',')?;
+    let mime = meta.strip_prefix("data:")?.split(';').next()?;
+    if !meta.to_ascii_lowercase().contains(";base64") || !mime.starts_with("image/") || data.is_empty() {
+        return None;
+    }
+    Some((mime, data))
 }
 
 fn max_tokens(parameters: &Value, fallback: u64) -> u64 {
@@ -149,6 +203,7 @@ async fn complete_openai_compatible_rich(request: LlmRequest) -> AppResult<LlmCo
     if let Some(temp) = temperature(&request.parameters) {
         body["temperature"] = json!(temp);
     }
+    apply_openai_parameters(&mut body, &request.parameters);
     let client = reqwest::Client::new();
     let mut req = client.post(url).json(&body);
     if !request.connection.api_key.trim().is_empty() {
@@ -182,6 +237,7 @@ async fn stream_openai_compatible(
     if let Some(temp) = temperature(&request.parameters) {
         body["temperature"] = json!(temp);
     }
+    apply_openai_parameters(&mut body, &request.parameters);
     let client = reqwest::Client::new();
     let mut req = client.post(url).json(&body);
     if !request.connection.api_key.trim().is_empty() {
@@ -255,7 +311,18 @@ fn process_openai_sse_block(
 fn openai_message(message: &LlmMessage) -> Value {
     let mut object = serde_json::Map::new();
     object.insert("role".to_string(), json!(message.role));
-    object.insert("content".to_string(), json!(message.content));
+    if message.images.is_empty() {
+        object.insert("content".to_string(), json!(message.content));
+    } else {
+        let mut content = Vec::new();
+        if !message.content.is_empty() {
+            content.push(json!({ "type": "text", "text": message.content }));
+        }
+        for image in &message.images {
+            content.push(json!({ "type": "image_url", "image_url": { "url": image } }));
+        }
+        object.insert("content".to_string(), Value::Array(content));
+    }
     if let Some(name) = message.name.as_ref().filter(|value| !value.trim().is_empty()) {
         object.insert("name".to_string(), json!(name));
     }
@@ -272,6 +339,41 @@ fn openai_message(message: &LlmMessage) -> Value {
     Value::Object(object)
 }
 
+fn apply_openai_parameters(body: &mut Value, parameters: &Value) {
+    if let Some(top_p) = param_f64(parameters, &["topP", "top_p"]) {
+        body["top_p"] = json!(top_p);
+    }
+    if let Some(frequency_penalty) = param_f64(parameters, &["frequencyPenalty", "frequency_penalty"]) {
+        body["frequency_penalty"] = json!(frequency_penalty);
+    }
+    if let Some(presence_penalty) = param_f64(parameters, &["presencePenalty", "presence_penalty"]) {
+        body["presence_penalty"] = json!(presence_penalty);
+    }
+    if let Some(seed) = param_i64(parameters, &["seed"]) {
+        body["seed"] = json!(seed);
+    }
+    if let Some(stop) = stop_sequences(parameters) {
+        body["stop"] = json!(stop);
+    }
+    if let Some(format) = param_string(parameters, &["responseFormat", "response_format"]) {
+        body["response_format"] = json!({ "type": format });
+    }
+    if let Some(extra) = parameters.get("customParameters").or_else(|| parameters.get("custom_params")) {
+        if let Some(entries) = extra.as_object() {
+            for (key, value) in entries {
+                if !body.get(key).is_some() {
+                    body[key] = value.clone();
+                }
+            }
+        }
+    }
+    if let Some(openrouter) = parameters.get("openrouter").or_else(|| parameters.get("openRouter")) {
+        if !openrouter.is_null() {
+            body["provider"] = openrouter.clone();
+        }
+    }
+}
+
 async fn complete_anthropic(request: LlmRequest) -> AppResult<String> {
     let base = base_url(&request.connection.provider, &request.connection.base_url);
     let url = format!("{base}/v1/messages");
@@ -283,7 +385,27 @@ async fn complete_anthropic(request: LlmRequest) -> AppResult<String> {
             system.push(message.content);
         } else {
             let role = if message.role == "assistant" { "assistant" } else { "user" };
-            messages.push(json!({ "role": role, "content": message.content }));
+            if message.images.is_empty() {
+                messages.push(json!({ "role": role, "content": message.content }));
+            } else {
+                let mut content = Vec::new();
+                if !message.content.is_empty() {
+                    content.push(json!({ "type": "text", "text": message.content }));
+                }
+                for image in &message.images {
+                    if let Some((media_type, data)) = data_url_image(image) {
+                        content.push(json!({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data
+                            }
+                        }));
+                    }
+                }
+                messages.push(json!({ "role": role, "content": content }));
+            }
         }
     }
     let mut body = json!({
@@ -296,6 +418,15 @@ async fn complete_anthropic(request: LlmRequest) -> AppResult<String> {
     }
     if let Some(temp) = temperature(&request.parameters) {
         body["temperature"] = json!(temp);
+    }
+    if let Some(top_p) = param_f64(&request.parameters, &["topP", "top_p"]) {
+        body["top_p"] = json!(top_p);
+    }
+    if let Some(top_k) = param_i64(&request.parameters, &["topK", "top_k"]) {
+        body["top_k"] = json!(top_k);
+    }
+    if let Some(stop) = stop_sequences(&request.parameters) {
+        body["stop_sequences"] = json!(stop);
     }
     let response = reqwest::Client::new()
         .post(url)
@@ -328,16 +459,34 @@ async fn complete_google(request: LlmRequest) -> AppResult<String> {
         .filter(|message| message.role != "system")
         .map(|message| {
             let role = if message.role == "assistant" { "model" } else { "user" };
-            json!({ "role": role, "parts": [{ "text": message.content }] })
+            let mut parts = Vec::new();
+            if !message.content.is_empty() {
+                parts.push(json!({ "text": message.content }));
+            }
+            for image in &message.images {
+                if let Some((mime_type, data)) = data_url_image(image) {
+                    parts.push(json!({ "inlineData": { "mimeType": mime_type, "data": data } }));
+                }
+            }
+            json!({ "role": role, "parts": parts })
         })
         .collect();
-    let body = json!({
+    let mut body = json!({
         "contents": contents,
         "generationConfig": {
             "temperature": temperature(&request.parameters).unwrap_or(0.7),
             "maxOutputTokens": max_tokens(&request.parameters, 1024),
         }
     });
+    if let Some(top_p) = param_f64(&request.parameters, &["topP", "top_p"]) {
+        body["generationConfig"]["topP"] = json!(top_p);
+    }
+    if let Some(top_k) = param_i64(&request.parameters, &["topK", "top_k"]) {
+        body["generationConfig"]["topK"] = json!(top_k);
+    }
+    if let Some(stop) = stop_sequences(&request.parameters) {
+        body["generationConfig"]["stopSequences"] = json!(stop);
+    }
     let response = reqwest::Client::new()
         .post(url)
         .json(&body)

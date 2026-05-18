@@ -7,13 +7,13 @@ import { backfillConversationSummaries } from "../../../engine/modes/chat/core/s
 import { appendChatSummaryEntryToMetadata } from "../../../engine/shared/text/chat-summary-entries";
 import { llmApi } from "../../../shared/api/llm-api";
 import { storageApi } from "../../../shared/api/storage-api";
-import { api } from "../../../shared/api/api-client";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useAgentStore } from "../../../shared/stores/agent.store";
 import { useGameStateStore } from "../../world-state/stores/world-state.store";
 import { useEncounterStore } from "../../../shared/stores/encounter.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
-import { ApiError } from "../../../shared/api/api-client";
+import { ApiError } from "../../../shared/api/api-errors";
 import { lorebookKeys } from "../../lorebooks/hooks/use-lorebooks";
 import type { Chat, ChatMemoryChunk, ConversationNote, Message, MessageSwipe, DaySummaryEntry, WeekSummaryEntry } from "../../../engine/contracts/types/chat";
 
@@ -169,13 +169,12 @@ export function useChatMessages(chatId: string | null, pageSize: number = 0, ena
   return useInfiniteQuery({
     queryKey: chatKeys.messages(chatId ?? ""),
     queryFn: ({ pageParam, signal }) => {
-      const params = new URLSearchParams();
-      if (pageSize > 0) params.set("limit", String(pageSize));
-      if (pageParam) params.set("before", pageParam);
-      const qs = params.toString();
       if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
       return storageApi
-        .request<Message[]>("GET", `/chats/${chatId}/messages${qs ? `?${qs}` : ""}`)
+        .listChatMessages<Message>(chatId!, {
+          ...(pageSize > 0 ? { limit: pageSize } : {}),
+          ...(pageParam ? { before: pageParam } : {}),
+        })
         .then((messages) =>
           chatId ? messages.map((message) => preserveRecentMessageContentEdit(chatId, message)) : messages,
         );
@@ -207,7 +206,7 @@ export function useChatMessageCount(chatId: string | null) {
 export function useChatMemories(chatId: string | null, enabled = true) {
   return useQuery({
     queryKey: chatKeys.memories(chatId ?? ""),
-    queryFn: () => api.get<ChatMemoryChunk[]>(`/chats/${chatId}/memories`),
+    queryFn: () => invokeTauri<ChatMemoryChunk[]>("chat_memories_list", { chatId }),
     enabled: !!chatId && enabled,
     staleTime: 10_000,
   });
@@ -216,7 +215,7 @@ export function useChatMemories(chatId: string | null, enabled = true) {
 export function useDeleteChatMemory(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (memoryId: string) => api.delete(`/chats/${chatId}/memories/${memoryId}`),
+    mutationFn: (memoryId: string) => invokeTauri("chat_memory_delete", { chatId, memoryId }),
     onSuccess: () => {
       if (chatId) qc.invalidateQueries({ queryKey: chatKeys.memories(chatId) });
     },
@@ -226,7 +225,7 @@ export function useDeleteChatMemory(chatId: string | null) {
 export function useClearChatMemories(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.delete(`/chats/${chatId}/memories`),
+    mutationFn: () => invokeTauri("chat_memories_clear", { chatId }),
     onSuccess: () => {
       if (chatId) qc.invalidateQueries({ queryKey: chatKeys.memories(chatId) });
     },
@@ -236,7 +235,7 @@ export function useClearChatMemories(chatId: string | null) {
 export function useRefreshChatMemories(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<{ rebuilt: number }>(`/chats/${chatId}/memories/refresh`),
+    mutationFn: () => invokeTauri<{ rebuilt: number }>("chat_memories_refresh", { chatId }),
     onSuccess: () => {
       if (chatId) qc.invalidateQueries({ queryKey: chatKeys.memories(chatId) });
     },
@@ -247,7 +246,8 @@ export function useExportChatMemories(chatId: string | null) {
   return useMutation({
     mutationFn: async () => {
       if (!chatId) throw new Error("No chat selected.");
-      await api.download(`/chats/${chatId}/memories/export`, "memory-recall.marinara.json");
+      const payload = await invokeTauri("chat_memories_export", { chatId });
+      downloadTextFile(JSON.stringify(payload, null, 2), "memory-recall.marinara.json", "application/json;charset=utf-8");
     },
   });
 }
@@ -264,7 +264,7 @@ export function useImportChatMemories(chatId: string | null) {
       if (!chatId) throw new Error("No chat selected.");
       const text = await file.text();
       const payload = JSON.parse(text) as unknown;
-      return api.post<ChatMemoryRecallImportResult>(`/chats/${chatId}/memories/import`, payload);
+      return invokeTauri<ChatMemoryRecallImportResult>("chat_memories_import", { chatId, body: payload });
     },
     onSuccess: () => {
       if (chatId) qc.invalidateQueries({ queryKey: chatKeys.memories(chatId) });
@@ -275,7 +275,7 @@ export function useImportChatMemories(chatId: string | null) {
 export function useChatNotes(chatId: string | null) {
   return useQuery({
     queryKey: chatKeys.notes(chatId ?? ""),
-    queryFn: () => api.get<ConversationNote[]>(`/chats/${chatId}/notes`),
+    queryFn: () => invokeTauri<ConversationNote[]>("chat_notes_list", { chatId }),
     enabled: !!chatId,
     staleTime: 10_000,
   });
@@ -284,7 +284,7 @@ export function useChatNotes(chatId: string | null) {
 export function useDeleteChatNote(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (noteId: string) => api.delete(`/chats/${chatId}/notes/${noteId}`),
+    mutationFn: (noteId: string) => invokeTauri("chat_note_delete", { chatId, noteId }),
     onSuccess: () => {
       if (chatId) qc.invalidateQueries({ queryKey: chatKeys.notes(chatId) });
     },
@@ -294,7 +294,7 @@ export function useDeleteChatNote(chatId: string | null) {
 export function useClearChatNotes(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.delete(`/chats/${chatId}/notes`),
+    mutationFn: () => invokeTauri("chat_notes_clear", { chatId }),
     onSuccess: () => {
       if (chatId) qc.invalidateQueries({ queryKey: chatKeys.notes(chatId) });
     },
@@ -388,7 +388,7 @@ export function useDeleteChat() {
 export function useDeleteChatGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (groupId: string) => api.delete(`/chats/group/${groupId}`),
+    mutationFn: (groupId: string) => invokeTauri("chat_group_delete", { groupId }),
     onMutate: async (groupId) => {
       await qc.cancelQueries({ queryKey: chatKeys.list() });
       const previous = qc.getQueryData<Chat[]>(chatKeys.list());
@@ -448,7 +448,7 @@ export function useUpdateChatMetadata() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...metadata }: { id: string; [key: string]: unknown }) =>
-      storageApi.request<Chat>("PATCH", `/chats/${id}/metadata`, metadata),
+      storageApi.patchChatMetadata<Chat>(id, metadata),
     onSuccess: (data, vars) => {
       // Write the saved response straight into the detail cache. Plain
       // invalidation alone leaves stale data in place when no observer is
@@ -471,7 +471,7 @@ export function useMarkAutonomousUnread() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, characterId, count }: { chatId: string; characterId?: string | null; count?: number }) =>
-      api.post<Chat>(`/chats/${chatId}/autonomous-unread`, { characterId: characterId ?? null, count }),
+      invokeTauri<Chat>("chat_autonomous_unread_mark", { chatId, body: { characterId: characterId ?? null, count } }),
     onSuccess: (data, vars) => {
       if (data) {
         qc.setQueryData(chatKeys.detail(vars.chatId), data);
@@ -484,7 +484,7 @@ export function useMarkAutonomousUnread() {
 export function useClearAutonomousUnread() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.delete<Chat>(`/chats/${chatId}/autonomous-unread`),
+    mutationFn: (chatId: string) => invokeTauri<Chat>("chat_autonomous_unread_clear", { chatId }),
     onSuccess: (data, chatId) => {
       if (data) {
         qc.setQueryData(chatKeys.detail(chatId), data);
@@ -505,7 +505,7 @@ export function useUpdateChatSummaries() {
       id: string;
       daySummaries?: Record<string, DaySummaryEntry>;
       weekSummaries?: Record<string, WeekSummaryEntry>;
-    }) => storageApi.request<Chat>("PATCH", `/chats/${id}/summaries`, body),
+    }) => storageApi.patchChatSummaries<Chat>(id, body),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: chatKeys.detail(vars.id) });
     },
@@ -528,7 +528,7 @@ export function useCreateMessage(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { role: string; content: string; characterId?: string | null }) =>
-      storageApi.request<Message>("POST", `/chats/${chatId}/messages`, data),
+      storageApi.createChatMessage<Message>(chatId!, data),
     onSuccess: () => {
       if (chatId) {
         qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
@@ -543,7 +543,7 @@ export function useCreateMessage(chatId: string | null) {
 export function useDeleteMessage(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (messageId: string) => storageApi.request("DELETE", `/chats/${chatId}/messages/${messageId}`),
+    mutationFn: (messageId: string) => storageApi.deleteChatMessage(messageId),
     onSuccess: () => {
       if (chatId) {
         qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
@@ -557,7 +557,7 @@ export function useDeleteMessage(chatId: string | null) {
 export function useDeleteMessages(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (messageIds: string[]) => api.post(`/chats/${chatId}/messages/bulk-delete`, { messageIds }),
+    mutationFn: (messageIds: string[]) => invokeTauri("chat_messages_bulk_delete", { chatId, messageIds }),
     onSuccess: () => {
       if (chatId) {
         qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
@@ -573,7 +573,7 @@ export function useUpdateMessage(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
-      storageApi.request<Message>("PATCH", `/chats/${chatId}/messages/${messageId}`, { content }),
+      storageApi.updateChatMessage<Message>(messageId, { content }),
     onMutate: async ({ messageId, content }) => {
       if (!chatId) return;
       // Cancel in-flight refetches (e.g. from generation events) so they
@@ -624,7 +624,7 @@ export function useUpdateMessageExtra(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ messageId, extra }: { messageId: string; extra: Record<string, unknown> }) =>
-      storageApi.request<Message>("PATCH", `/chats/${chatId}/messages/${messageId}/extra`, extra),
+      storageApi.patchChatMessageExtra<Message>(messageId, extra),
     onMutate: async ({ messageId, extra }) => {
       if (!chatId) return;
       await qc.cancelQueries({ queryKey: chatKeys.messages(chatId) });
@@ -757,7 +757,7 @@ async function resolveSummaryConnectionId(chat: Chat): Promise<string> {
 async function generateLlmChatSummary(chatId: string, contextSize?: number): Promise<{ summary: string }> {
   const [chat, allMessages] = await Promise.all([
     storageApi.get<Chat>("chats", chatId),
-    storageApi.request<Message[]>("GET", `/chats/${encodeURIComponent(chatId)}/messages`),
+    storageApi.listChatMessages<Message>(chatId),
   ]);
   if (!chat) throw new Error("Chat was not found.");
   const storedContextSize = Number((chat.metadata as { summaryContextSize?: unknown } | null)?.summaryContextSize);
@@ -806,7 +806,7 @@ async function generateLlmChatSummary(chatId: string, contextSize?: number): Pro
     },
   );
 
-  await storageApi.request("PATCH", `/chats/${encodeURIComponent(chatId)}/metadata`, {
+  await storageApi.patchChatMetadata(chatId, {
     summary: appended.summary,
     summaryEntries: appended.entries,
     summaryContextSize: limit,
@@ -850,7 +850,7 @@ export function useExportChat() {
           if (!chat) throw new Error("Chat was not found.");
           return chat;
         }),
-        storageApi.request<Message[]>("GET", `/chats/${chatId}/messages`),
+        storageApi.listChatMessages<Message>(chatId),
       ]);
       const filename = chatExportFilename(chat, format);
       if (format === "text") {
@@ -876,7 +876,7 @@ export function useBulkExportChats() {
               if (!chat) throw new Error("Chat was not found.");
               return chat;
             }),
-            storageApi.request<Message[]>("GET", `/chats/${chatId}/messages`),
+            storageApi.listChatMessages<Message>(chatId),
           ]);
           return { chat, messages };
         }),
@@ -906,7 +906,7 @@ export function useBranchChat() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, upToMessageId }: { chatId: string; upToMessageId?: string }) =>
-      api.post<Chat>(`/chats/${chatId}/branch`, { upToMessageId }),
+      invokeTauri<Chat>("chat_branch", { chatId, upToMessageId: upToMessageId ?? null }),
     onSuccess: (newChat, { chatId }) => {
       qc.invalidateQueries({ queryKey: chatKeys.list() });
       qc.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
@@ -938,7 +938,7 @@ export function useGenerateSummary() {
 export function useExpungeData() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (scopes: ExpungeScope[]) => api.post<{ success: boolean }>("/admin/expunge", { confirm: true, scopes }),
+    mutationFn: (scopes: ExpungeScope[]) => invokeTauri<{ success: boolean }>("admin_expunge_command", { scopes }),
     onSuccess: async () => {
       await resetClientAfterExpunge(qc);
     },
@@ -949,7 +949,7 @@ export function useExpungeData() {
 export function useClearAllData() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<{ success: boolean }>("/admin/clear-all", { confirm: true }),
+    mutationFn: () => invokeTauri<{ success: boolean }>("admin_clear_all_command"),
     onSuccess: async () => {
       await resetClientAfterExpunge(qc);
     },
@@ -960,7 +960,7 @@ export function useClearAllData() {
 export function useSwipes(chatId: string | null, messageId: string | null) {
   return useQuery({
     queryKey: [...chatKeys.all, "swipes", messageId ?? ""],
-    queryFn: () => api.get<MessageSwipe[]>(`/chats/${chatId}/messages/${messageId}/swipes`),
+    queryFn: () => invokeTauri<MessageSwipe[]>("chat_message_swipes", { chatId, messageId }),
     enabled: !!chatId && !!messageId,
   });
 }
@@ -970,7 +970,7 @@ export function useSetActiveSwipe(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ messageId, index }: { messageId: string; index: number }) =>
-      api.put<Message | null>(`/chats/${chatId}/messages/${messageId}/active-swipe`, { index }),
+      invokeTauri<Message | null>("chat_message_set_active_swipe", { chatId, messageId, index }),
     onMutate: async ({ messageId, index }) => {
       if (!chatId) return;
       await qc.cancelQueries({ queryKey: chatKeys.messages(chatId), exact: true });
@@ -1005,7 +1005,7 @@ export function useDeleteSwipe(chatId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ messageId, index }: { messageId: string; index: number }) =>
-      api.delete<Message>(`/chats/${chatId}/messages/${messageId}/swipes/${index}`),
+      invokeTauri<Message>("chat_message_delete_swipe", { chatId, messageId, index: String(index) }),
     onSuccess: (_data, { messageId }) => {
       if (!chatId) return;
       qc.invalidateQueries({ queryKey: chatKeys.messages(chatId) });
@@ -1020,7 +1020,7 @@ export function useConnectChat() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, targetChatId }: { chatId: string; targetChatId: string }) =>
-      api.post<{ connected: boolean }>(`/chats/${chatId}/connect`, { targetChatId }),
+      invokeTauri<{ connected: boolean }>("chat_connect", { chatId, targetChatId }),
     onSuccess: (_data, { chatId, targetChatId }) => {
       qc.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
       qc.invalidateQueries({ queryKey: chatKeys.detail(targetChatId) });
@@ -1033,7 +1033,7 @@ export function useConnectChat() {
 export function useDisconnectChat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.post<{ disconnected: boolean }>(`/chats/${chatId}/disconnect`, {}),
+    mutationFn: (chatId: string) => invokeTauri<{ disconnected: boolean }>("chat_disconnect", { chatId }),
     onSuccess: (_data, chatId) => {
       qc.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
       qc.invalidateQueries({ queryKey: chatKeys.list() });

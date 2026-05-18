@@ -60,7 +60,7 @@ import {
 import { cn } from "../../../shared/lib/utils";
 import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
 import { DraftNumberInput } from "../../../shared/components/ui/DraftNumberInput";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
 import { connectionsUtilityApi } from "../../../shared/api/integration-utility-api";
 import { reviewPromptPreset } from "../../../engine/generation/prompt-reviewer";
 import { llmApi } from "../../../shared/api/llm-api";
@@ -354,7 +354,10 @@ export function PresetEditor() {
             <Save size="0.8125rem" /> Save
           </button>
           <button
-            onClick={() => api.download(`/prompts/${presetDetailId}/export`)}
+            onClick={async () => {
+              if (!presetDetailId) return;
+              exportApi.triggerDownload(await exportApi.prompt(presetDetailId));
+            }}
             className="rounded-xl p-2 text-[var(--muted-foreground)] transition-all hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
             title="Export preset"
           >

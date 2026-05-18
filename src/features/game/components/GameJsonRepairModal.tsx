@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Braces, CheckCircle2, Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
-import type { JsonRepairRequest } from "../../../shared/api/api-client";
+import type { JsonRepairRequest } from "../../../shared/api/api-errors";
 import { applyGameJsonRepair } from "../api/game-api";
 import { cn } from "../../../shared/lib/utils";
 import { Modal } from "../../../shared/components/ui/Modal";

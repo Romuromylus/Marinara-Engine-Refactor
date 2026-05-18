@@ -12,7 +12,8 @@ import type { EchoChamberSide } from "../../../shared/stores/ui.store";
 import { useAgentConfigs } from "../../agents/hooks/use-agents";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useChat } from "../../chats/hooks/use-chats";
-import { api } from "../../../shared/api/api-client";
+import { invokeTauri } from "../../../shared/api/tauri-client";
+import { storageApi } from "../../../shared/api/storage-api";
 import { cn } from "../../../shared/lib/utils";
 
 const MESSAGE_INTERVAL_MS = 30_000; // 30 s between reveals
@@ -117,10 +118,10 @@ export function EchoChamberPanel({ hiddenOnMobile = false }: EchoChamberPanelPro
       clearEchoMessages();
     }
 
-    api
-      .get<Array<{ characterName: string; reaction: string; timestamp: number }>>(
-        `/agents/echo-messages/${activeChatId}`,
-      )
+    storageApi
+      .list<{ characterName: string; reaction: string; timestamp: number }>("agent-runs", {
+        filters: { chatId: activeChatId, resultType: "echo_message" },
+      })
       .then((msgs) => {
         if (useAgentStore.getState().echoLoadedChatId !== activeChatId) return; // stale
         if (msgs.length > 0) {
@@ -269,7 +270,7 @@ export function EchoChamberPanel({ hiddenOnMobile = false }: EchoChamberPanelPro
                 setEchoVisibleCount(0);
                 setEchoBaseline(0);
                 try {
-                  await api.delete(`/agents/echo-messages/${activeChatId}`);
+                  await invokeTauri("agent_echo_messages_clear", { chatId: activeChatId });
                 } catch {
                   /* best-effort */
                 }

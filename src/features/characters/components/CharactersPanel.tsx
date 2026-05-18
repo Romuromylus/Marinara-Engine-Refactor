@@ -15,7 +15,8 @@ import {
 } from "../hooks/use-characters";
 import { useUpdateChat, useCreateMessage, chatKeys } from "../../chats/hooks/use-chats";
 import { useStartChatFromCharacter } from "../hooks/use-start-chat-from-character";
-import { api } from "../../../shared/api/api-client";
+import { exportApi } from "../../../shared/api/export-api";
+import { invokeTauri } from "../../../shared/api/tauri-client";
 import { showConfirmDialog } from "../../../shared/lib/app-dialogs";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { ContextMenu, type ContextMenuItem } from "../../../shared/components/ui/ContextMenu";
@@ -451,11 +452,7 @@ export function CharactersPanel() {
       setExportingSelected(true);
       setExportDialogOpen(false);
       try {
-        await api.downloadPost(
-          "/characters/export-bulk",
-          { ids: [...selectedCharacterIds], format },
-          format === "compatible" ? "compatible-characters.zip" : "marinara-characters.zip",
-        );
+        exportApi.triggerDownload(await exportApi.charactersBulk([...selectedCharacterIds], format));
         toast.success(`Exported ${selectedCharacterIds.size} character${selectedCharacterIds.size === 1 ? "" : "s"}`);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to export characters");
@@ -1365,9 +1362,10 @@ export function CharactersPanel() {
                   if (msg?.id && firstMesConfirm.alternateGreetings.length > 0) {
                     for (const greeting of firstMesConfirm.alternateGreetings) {
                       if (greeting.trim()) {
-                        await api.post(`/chats/${activeChat!.id}/messages/${msg.id}/swipes`, {
-                          content: greeting,
-                          silent: true,
+                        await invokeTauri("chat_message_add_swipe", {
+                          chatId: activeChat!.id,
+                          messageId: msg.id,
+                          body: { content: greeting, silent: true },
                         });
                       }
                     }

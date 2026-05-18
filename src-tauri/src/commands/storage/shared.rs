@@ -25,47 +25,6 @@ impl ParsedPath {
     }
 }
 
-pub(crate) fn collection_root(
-    state: &AppState,
-    method: &str,
-    collection: &str,
-    body: Value,
-) -> AppResult<Value> {
-    match method {
-        "GET" => list_collection(state, collection, None),
-        "POST" => state
-            .storage
-            .create(collection, with_entity_defaults(collection, body)),
-        _ => Err(AppError::new(
-            "method_not_allowed",
-            format!("{method} is not allowed for /{collection}"),
-        )),
-    }
-}
-
-pub(crate) fn collection_item_or_action(
-    state: &AppState,
-    method: &str,
-    collection: &str,
-    id: &str,
-    _action: Option<&str>,
-    body: Value,
-) -> AppResult<Value> {
-    match method {
-        "GET" => get_required(state, collection, id),
-        "PATCH" => state.storage.patch(collection, id, body),
-        "PUT" => state.storage.upsert_with_id(collection, id, body),
-        "DELETE" => {
-            let deleted = state.storage.delete(collection, id)?;
-            Ok(json!({ "deleted": deleted }))
-        }
-        _ => Err(AppError::new(
-            "method_not_allowed",
-            format!("{method} is not allowed for /{collection}/{id}"),
-        )),
-    }
-}
-
 pub(crate) fn list_collection(
     state: &AppState,
     collection: &str,
@@ -102,95 +61,11 @@ pub(crate) fn list_collection(
     Ok(Value::Array(rows))
 }
 
-pub(crate) fn reorder_collection(
-    state: &AppState,
-    collection: &str,
-    ids_field: &str,
-    body: Value,
-) -> AppResult<Value> {
-    let ids = string_array_from_value(body.get(ids_field));
-    for (index, id) in ids.iter().enumerate() {
-        if state.storage.get(collection, id)?.is_some() {
-            state.storage.patch(
-                collection,
-                id,
-                json!({ "sortOrder": index as i64, "order": index as i64 }),
-            )?;
-        }
-    }
-    list_collection(state, collection, None)
-}
-
-pub(crate) fn move_child_to_folder(
-    state: &AppState,
-    collection: &str,
-    id_field: &str,
-    folder_field: &str,
-    body: Value,
-) -> AppResult<Value> {
-    let id = body
-        .get(id_field)
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::invalid_input(format!("{id_field} is required")))?;
-    let folder_id = body.get(folder_field).cloned().unwrap_or(Value::Null);
-    let updated = state
-        .storage
-        .patch(collection, id, json!({ folder_field: folder_id }))?;
-    Ok(json!({ "ok": true, "item": updated }))
-}
-
-pub(crate) fn reorder_children(
-    state: &AppState,
-    collection: &str,
-    ids_field: &str,
-    folder_field: Option<&str>,
-    body: Value,
-) -> AppResult<Value> {
-    let ids = string_array_from_value(body.get(ids_field));
-    let folder_value = folder_field.and_then(|field| body.get(field).cloned());
-    for (index, id) in ids.iter().enumerate() {
-        if state.storage.get(collection, id)?.is_none() {
-            continue;
-        }
-        let mut patch = json!({ "sortOrder": index as i64, "order": index as i64 });
-        if let (Some(field), Some(value)) = (folder_field, folder_value.clone()) {
-            patch[field] = value;
-        }
-        state.storage.patch(collection, id, patch)?;
-    }
-    Ok(json!({ "ok": true, "orderedIds": ids }))
-}
-
 pub(crate) fn get_required(state: &AppState, collection: &str, id: &str) -> AppResult<Value> {
     state
         .storage
         .get(collection, id)?
         .ok_or_else(|| AppError::not_found(format!("{collection}/{id} was not found")))
-}
-
-pub(crate) fn handle_singleton(
-    state: &AppState,
-    method: &str,
-    collection: &str,
-    key: &str,
-    body: Value,
-) -> AppResult<Value> {
-    match method {
-        "GET" => Ok(state
-            .storage
-            .get(collection, key)?
-            .unwrap_or_else(|| json!({ "id": key, "value": null }))),
-        "PUT" | "PATCH" | "POST" => state.storage.upsert_with_id(collection, key, body),
-        "DELETE" => {
-            let deleted = state.storage.delete(collection, key)?;
-            Ok(json!({ "deleted": deleted }))
-        }
-        _ => Err(AppError::new(
-            "method_not_allowed",
-            "Unsupported singleton method",
-        )),
-    }
 }
 
 pub(crate) fn with_entity_defaults(collection: &str, body: Value) -> Value {
@@ -351,10 +226,6 @@ pub(crate) fn with_entity_defaults(collection: &str, body: Value) -> Value {
         _ => {}
     }
     Value::Object(object)
-}
-
-pub(crate) fn with_chat_defaults(body: Value) -> Value {
-    with_entity_defaults("chats", body)
 }
 
 pub(crate) fn duplicate_record(state: &AppState, collection: &str, id: &str) -> AppResult<Value> {

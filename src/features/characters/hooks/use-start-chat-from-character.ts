@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../shared/api/api-client";
+import { storageApi } from "../../../shared/api/storage-api";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { chatKeys, useCreateChat } from "../../chats/hooks/use-chats";
 import { useApplyChatPreset, useChatPresets } from "../../chat-presets/hooks/use-chat-presets";
@@ -49,7 +49,7 @@ export function useStartChatFromCharacter() {
 
             if (mode === "roleplay" && firstMessage?.trim()) {
               try {
-                const msg = await api.post<{ id: string }>(`/chats/${chat.id}/messages`, {
+                const msg = await storageApi.createChatMessage<{ id: string }>(chat.id, {
                   role: "assistant",
                   content: firstMessage,
                   characterId,
@@ -58,10 +58,7 @@ export function useStartChatFromCharacter() {
                 if (msg?.id && alternateGreetings?.length) {
                   for (const greeting of alternateGreetings) {
                     if (greeting.trim()) {
-                      await api.post(`/chats/${chat.id}/messages/${msg.id}/swipes`, {
-                        content: greeting,
-                        silent: true,
-                      });
+                      await storageApi.addChatMessageSwipe(chat.id, msg.id, greeting);
                     }
                   }
                 }

@@ -55,7 +55,7 @@ flowchart TB
   Events["src-tauri/src/events<br/>typed event emitters"]
   Core["core<br/>errors, config, IDs, event bus"]
   Security["security<br/>secrets, paths, safe fetch"]
-  Storage["storage<br/>repositories, backups, migrations"]
+  Storage["storage<br/>repositories, current Tauri data migrations"]
 
   LLM["llm<br/>providers, images, embeddings"]
   Generation["generation<br/>prompt + streaming pipeline"]
@@ -65,19 +65,15 @@ flowchart TB
   Roleplay["roleplay<br/>scene, sprites, encounters"]
   Game["game<br/>turns, mechanics, world"]
   Assets["assets<br/>avatars, gallery, fonts"]
-  Sidecar["sidecar<br/>models, runtime, process"]
-  Imports["import<br/>ST import, backups, profiles"]
+  Imports["import<br/>ST import, current profile packages"]
   Integrations["integrations<br/>spotify, haptic, tts, translation, bot browser"]
   Updates["updates<br/>check + apply"]
-  SyncClient["sync-client<br/>queue, push, pull, conflicts"]
-  SyncProtocol["sync-protocol<br/>sync DTOs"]
 
   Commands --> Generation
   Commands --> Chat
   Commands --> Game
   Commands --> Roleplay
   Commands --> Integrations
-  Commands --> SyncClient
   Events --> Core
 
   Generation --> LLM
@@ -226,7 +222,7 @@ flowchart TB
 
   Metadata --> CRDT["CRDT or append-only log<br/>chats, messages, characters, lorebooks, game notes"]
   Settings --> LWW["LWW + revision history<br/>UI prefs, haptic, TTS, translation, generation params"]
-  Files --> CAS["Content-addressed blobs<br/>avatars, gallery, sprites, backgrounds, backups"]
+  Files --> CAS["Content-addressed blobs<br/>avatars, gallery, sprites, backgrounds, current profile packages"]
   Secrets --> NoSync["Do not sync by default<br/>API keys, OAuth refresh tokens"]
   LocalOnly --> Ignore["Never sync<br/>sidecar binaries, runtime installs, temp logs"]
 ```

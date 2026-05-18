@@ -155,38 +155,6 @@ pub(crate) fn export_prompt(state: &AppState, preset_id: &str) -> AppResult<Valu
     preset_export_envelope(state, &preset)
 }
 
-pub(crate) fn preview_prompt(state: &AppState, preset_id: &str, body: Value) -> AppResult<Value> {
-    let preset = get_required(state, "prompts", preset_id)?;
-    let chat_id = body.get("chatId").and_then(Value::as_str).unwrap_or("");
-    let mut messages = Vec::new();
-    if let Some(system) = preset
-        .get("systemPrompt")
-        .or_else(|| preset.get("system"))
-        .or_else(|| preset.get("prompt"))
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-    {
-        messages.push(json!({ "role": "system", "content": system }));
-    }
-    if !chat_id.is_empty() {
-        for message in super::chats::messages_for_chat(state, chat_id)? {
-            messages.push(json!({
-                "role": message.get("role").and_then(Value::as_str).unwrap_or("user"),
-                "content": message.get("content").and_then(Value::as_str).unwrap_or("")
-            }));
-        }
-    }
-    if messages.is_empty() {
-        messages.push(json!({ "role": "system", "content": preset.get("name").and_then(Value::as_str).unwrap_or("Prompt preset") }));
-    }
-    let message_count = messages.len();
-    Ok(json!({
-        "messages": messages,
-        "parameters": preset.get("parameters").cloned().unwrap_or_else(|| json!({})),
-        "messageCount": message_count
-    }))
-}
-
 pub(crate) fn export_lorebook(
     state: &AppState,
     lorebook_id: &str,

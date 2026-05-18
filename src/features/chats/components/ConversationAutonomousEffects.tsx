@@ -5,7 +5,7 @@ import { useChatStore } from "../../../shared/stores/chat.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { playNotificationPing } from "../../../shared/lib/notification-sound";
 import { generateClientId } from "../../../shared/lib/utils";
-import { useAutonomousMessaging } from "../../autonomous/hooks/use-autonomous-messaging";
+import { useAutonomousMessaging } from "../hooks/autonomous/use-autonomous-messaging";
 import type { CharacterMap } from "./chat-area.types";
 
 type ConversationAutonomousEffectsProps = {

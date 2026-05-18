@@ -96,7 +96,9 @@ fn import_profile(state: &AppState, body: Value) -> AppResult<Value> {
     let collections = data
         .get("collections")
         .and_then(Value::as_object)
-        .ok_or_else(|| AppError::invalid_input("Native profile export must contain data.collections"))?;
+        .ok_or_else(|| {
+            AppError::invalid_input("Native profile export must contain data.collections")
+        })?;
     import_profile_collections(state, data, collections)
 }
 
@@ -123,7 +125,10 @@ fn import_profile_collections(
 fn profile_collections(state: &AppState) -> AppResult<Map<String, Value>> {
     let mut collections = Map::new();
     for collection in PROFILE_COLLECTIONS {
-        collections.insert((*collection).to_string(), Value::Array(state.storage.list(collection)?));
+        collections.insert(
+            (*collection).to_string(),
+            Value::Array(state.storage.list(collection)?),
+        );
     }
     Ok(collections)
 }
@@ -178,7 +183,9 @@ fn restore_profile_assets(state: &AppState, raw_assets: Option<&Value>) -> AppRe
         let relative = safe_profile_asset_path(path)?;
         let bytes = general_purpose::STANDARD
             .decode(base64.trim())
-            .map_err(|error| AppError::invalid_input(format!("Invalid profile asset data: {error}")))?;
+            .map_err(|error| {
+                AppError::invalid_input(format!("Invalid profile asset data: {error}"))
+            })?;
         let target = state.data_dir.join(relative);
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
