@@ -517,6 +517,7 @@ function gameCarryoverPatch(meta: Record<string, unknown>) {
     "gameJournal",
     "gameSessionLorebookId",
     "gameSessionLorebookEntryCount",
+    "gameJournal",
   ];
   return Object.fromEntries(keys.filter((key) => key in meta).map((key) => [key, meta[key]]));
 }
@@ -943,7 +944,7 @@ export const gameApi = {
         gameActiveState: "exploration",
         gamePreviousSessionSummaries: summaries,
         gameSessionCarryover: buildSessionCarryoverContext(summaries),
-        gameJournal: createJournal(),
+        gameJournal: journalFromMeta(previousMeta),
       },
     });
     if (recap.trim()) {

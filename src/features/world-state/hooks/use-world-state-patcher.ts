@@ -268,7 +268,12 @@ export function patchGameStateField(chatId: string, field: GameStatePatchField, 
   const store = useGameStateStore.getState();
   if (store.isRefreshing) return;
   const prev = getCurrentGameStateForChat(chatId);
-  const nextState = { ...(prev ?? createEmptyGameState(chatId)), [field]: value } as GameState;
+  const nextState = {
+    ...(prev ?? createEmptyGameState(chatId)),
+    messageId: "",
+    swipeIndex: 0,
+    [field]: value,
+  } as GameState;
   store.setGameState(nextState);
   queuePatch(chatId, field, value);
 }
