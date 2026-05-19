@@ -5,14 +5,14 @@ import { useUIStore } from "../../shared/stores/ui.store";
 import { cn } from "../../shared/lib/utils";
 
 const RIGHT_PANEL_BUTTONS = [
-  { panel: "bot-browser" as const, icon: Bot, label: "Browser", color: "from-cyan-400 to-blue-500" },
-  { panel: "characters" as const, icon: Users, label: "Characters", color: "from-pink-400 to-rose-500" },
-  { panel: "lorebooks" as const, icon: BookOpen, label: "Lorebooks", color: "from-amber-400 to-orange-500" },
-  { panel: "presets" as const, icon: FileText, label: "Presets", color: "from-purple-400 to-violet-500" },
-  { panel: "connections" as const, icon: Link, label: "Connections", color: "from-sky-400 to-blue-500" },
-  { panel: "agents" as const, icon: Sparkles, label: "Agents", color: "from-pink-300 to-purple-400" },
-  { panel: "personas" as const, icon: User, label: "Personas", color: "from-emerald-400 to-teal-500" },
-  { panel: "settings" as const, icon: Settings, label: "Settings", color: "from-zinc-400 to-zinc-500" },
+  { panel: "bot-browser" as const, icon: Bot, label: "Browser", activeClass: "text-cyan-500", hoverClass: "hover:text-cyan-300", underlineClass: "from-cyan-500 to-blue-500" },
+  { panel: "characters" as const, icon: Users, label: "Characters", activeClass: "text-rose-500", hoverClass: "hover:text-rose-300", underlineClass: "from-pink-500 to-rose-500" },
+  { panel: "lorebooks" as const, icon: BookOpen, label: "Lorebooks", activeClass: "text-amber-500", hoverClass: "hover:text-amber-300", underlineClass: "from-amber-500 to-orange-500" },
+  { panel: "presets" as const, icon: FileText, label: "Presets", activeClass: "text-violet-500", hoverClass: "hover:text-violet-300", underlineClass: "from-purple-500 to-violet-500" },
+  { panel: "connections" as const, icon: Link, label: "Connections", activeClass: "text-sky-500", hoverClass: "hover:text-sky-300", underlineClass: "from-sky-500 to-blue-500" },
+  { panel: "agents" as const, icon: Sparkles, label: "Agents", activeClass: "text-pink-500", hoverClass: "hover:text-pink-300", underlineClass: "from-pink-500 to-purple-500" },
+  { panel: "personas" as const, icon: User, label: "Personas", activeClass: "text-emerald-500", hoverClass: "hover:text-emerald-300", underlineClass: "from-emerald-500 to-teal-500" },
+  { panel: "settings" as const, icon: Settings, label: "Settings", activeClass: "text-zinc-50", hoverClass: "hover:text-zinc-50", underlineClass: "from-zinc-50 to-zinc-300" },
 ] as const;
 
 function stopTitlebarDrag(event: ReactMouseEvent<HTMLElement>) {
@@ -33,7 +33,7 @@ export function PanelNavButtons({ className }: { className?: string }) {
       onMouseDown={stopTitlebarDrag}
       onDoubleClick={stopTitlebarDrag}
     >
-      {RIGHT_PANEL_BUTTONS.map(({ panel, icon: Icon, label, color }) => {
+      {RIGHT_PANEL_BUTTONS.map(({ panel, icon: Icon, label, activeClass, hoverClass, underlineClass }) => {
         const isActive = rightPanelOpen && rightPanel === panel;
         return (
           <button
@@ -43,10 +43,10 @@ export function PanelNavButtons({ className }: { className?: string }) {
             onMouseDown={stopTitlebarDrag}
             onDoubleClick={stopTitlebarDrag}
             className={cn(
-              "relative rounded-md p-1.5 transition-all duration-200 active:scale-95",
+              "mari-titlebar-action relative rounded-md p-1.5 transition-all duration-200",
               isActive
-                ? "bg-[var(--accent)] text-[var(--primary)] shadow-sm"
-                : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]/70 hover:text-[var(--primary)]",
+                ? cn(activeClass, "mari-titlebar-action-active [&>svg]:stroke-[2.3]")
+                : cn("text-[var(--muted-foreground)]", hoverClass),
             )}
             title={label}
             aria-label={label}
@@ -57,7 +57,7 @@ export function PanelNavButtons({ className }: { className?: string }) {
               <span
                 className={cn(
                   "absolute -bottom-0.5 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-gradient-to-r",
-                  color,
+                  underlineClass,
                 )}
               />
             )}

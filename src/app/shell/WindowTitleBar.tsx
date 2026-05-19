@@ -141,7 +141,7 @@ export function WindowTitleBar() {
       onDoubleClick={toggleMaximizeFromDragRegion}
     >
       {platform === "darwin" && controls}
-      <div className="mari-chat-title-controls flex h-full shrink-0 items-center gap-1.5 pl-2.5 pr-2">
+      <div className="mari-chat-title-controls flex h-full shrink-0 items-center gap-1.5 pl-2.5 pr-0">
         <button
           type="button"
           onClick={toggleSidebar}
@@ -149,23 +149,26 @@ export function WindowTitleBar() {
           onDoubleClick={(event) => event.stopPropagation()}
           data-tour="sidebar-toggle"
           className={cn(
-            "relative rounded-md p-1.5 transition-all duration-200 active:scale-95",
+            "mari-titlebar-action relative rounded-md p-1.5 transition-all duration-200",
             sidebarOpen
-              ? "bg-[var(--accent)] text-[var(--primary)] shadow-sm"
-              : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]/70 hover:text-[var(--primary)]",
+              ? "mari-titlebar-action-active text-[color-mix(in_srgb,var(--primary)_54%,var(--muted-foreground))] [&>svg]:stroke-[2.3]"
+              : "text-[var(--muted-foreground)] hover:text-[var(--primary)]",
           )}
           title={sidebarOpen ? "Close chats" : "Open chats"}
           aria-label={sidebarOpen ? "Close chats" : "Open chats"}
           aria-pressed={sidebarOpen}
         >
           {sidebarOpen ? <PanelLeftClose size="0.875rem" /> : <PanelLeft size="0.875rem" />}
+          {sidebarOpen && (
+            <span className="absolute -bottom-0.5 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500" />
+          )}
         </button>
         <button
           type="button"
           onClick={goHome}
           onMouseDown={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
-          className="rounded-md p-1.5 text-[var(--muted-foreground)] transition-all duration-200 hover:bg-[var(--accent)]/70 hover:text-[var(--primary)] active:scale-95"
+          className="mari-titlebar-action rounded-md p-1.5 text-[var(--muted-foreground)] transition-all duration-200 hover:text-[var(--primary)]"
           title="Home"
           aria-label="Home"
         >
@@ -177,7 +180,7 @@ export function WindowTitleBar() {
         className="mari-titlebar-content flex h-full min-w-0 flex-1 items-center"
       >
         <div
-          className="mari-title-drag-region flex h-full min-w-0 flex-1 items-center justify-start px-3"
+          className="mari-title-drag-region flex h-full min-w-0 flex-1 items-center justify-start pl-2 pr-3"
           onMouseDown={startWindowDrag}
           onDoubleClick={toggleMaximizeFromDragRegion}
         >
