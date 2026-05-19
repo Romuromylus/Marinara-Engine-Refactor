@@ -9,7 +9,26 @@ import { Search, User, Globe, Wand2, MessageCircle } from "lucide-react";
 import { cn, getAvatarCropStyle } from "../../../shared/lib/utils";
 import { ContextMenu, type ContextMenuItem } from "../../../shared/components/ui/ContextMenu";
 
-type CharacterRow = { id: string; data: string; avatarPath: string | null; createdAt: string; updatedAt: string };
+type CharacterData = Record<string, unknown> & {
+  name?: string;
+  first_mes?: string;
+  alternate_greetings?: unknown;
+  extensions?: Record<string, unknown>;
+};
+
+type CharacterRow = { id: string; data: unknown; avatarPath: string | null; createdAt: string; updatedAt: string };
+
+function parseCharacterData(data: unknown): CharacterData | null {
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as CharacterData) : null;
+    } catch {
+      return null;
+    }
+  }
+  return data && typeof data === "object" && !Array.isArray(data) ? (data as CharacterData) : null;
+}
 
 export function BotBrowserPanel() {
   const { data: characters, isLoading } = useCharacters();
@@ -32,7 +51,8 @@ export function BotBrowserPanel() {
     return (characters as CharacterRow[]).reduce<
       { id: string; name: string; avatarPath: string | null; createdAt: string }[]
     >((acc, c) => {
-      const d = JSON.parse(c.data);
+      const d = parseCharacterData(c.data);
+      if (!d) return acc;
       if (d.extensions?.botBrowserSource) {
         acc.push({ id: c.id, name: d.name ?? "Unnamed", avatarPath: c.avatarPath, createdAt: c.createdAt });
       }
@@ -50,12 +70,12 @@ export function BotBrowserPanel() {
     (charId: string): { firstMes?: string; altGreetings: string[] } => {
       const raw = (characters as CharacterRow[] | undefined)?.find((c) => c.id === charId);
       if (!raw) return { altGreetings: [] };
-      try {
-        const d = JSON.parse(raw.data) as { first_mes?: string; alternate_greetings?: string[] };
-        return { firstMes: d.first_mes, altGreetings: d.alternate_greetings ?? [] };
-      } catch {
-        return { altGreetings: [] };
-      }
+      const d = parseCharacterData(raw.data);
+      if (!d) return { altGreetings: [] };
+      return {
+        firstMes: d.first_mes,
+        altGreetings: Array.isArray(d.alternate_greetings) ? d.alternate_greetings.filter((g): g is string => typeof g === "string") : [],
+      };
     },
     [characters],
   );
