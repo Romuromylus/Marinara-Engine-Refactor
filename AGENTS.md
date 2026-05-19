@@ -53,6 +53,8 @@ Use `updates/` to track bug reports, active bug ownership, current work, and sta
 - Report new bugs in `updates/unowned-bugs.md` when they do not have an owner.
 - Move a bug from `updates/unowned-bugs.md` into the correct `updates/people/*.md` file when someone starts fixing it.
 - Use the user's GitHub name to determine who is working on a bug.
+- If the user asks "who am I?" or asks how to track their bugs, check local identity first with `git config user.name`, then `git config user.email`, and use `gh auth status` when GitHub CLI is logged in.
+- Compare the identity against the existing files in `updates/people/` and choose the closest matching owner file instead of creating a new mapping for every Git username.
 - Map GitHub user `Coda` to Chai; this is the known confusing name.
 - Keep owner files updated with the bug status, next step, blockers, and resolution.
 

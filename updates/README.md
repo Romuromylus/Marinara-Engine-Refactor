@@ -4,7 +4,13 @@ Use this folder to report bugs, track active bug ownership, current work, and st
 
 New bugs start in `unowned-bugs.md` when no one owns them yet. When someone starts fixing a bug, move the bug entry into that person's file under `people/`.
 
-Use the user's GitHub name to determine who is working on a bug. The confusing mapping is `Coda` -> Chai.
+Use the user's GitHub name to determine who is working on a bug. If the user asks for their identity or how to track their bugs, check `git config user.name`, `git config user.email`, and `gh auth status` when GitHub CLI is logged in.
+
+After identifying the user, compare that identity against the files already listed in `people/` and choose the closest matching owner file. For example, local Git user `munimunigamer` should be tracked in `people/muni.md` because `muni.md` is the matching person file.
+
+Known mappings:
+
+- `Coda` -> Chai
 
 ## Files
 
@@ -18,6 +24,7 @@ Use the user's GitHub name to determine who is working on a bug. The confusing m
 - `people/xel.md`: Xel's owned bugs and current work.
 - `people/sunny.md`: Sunny's owned bugs and current work.
 - `people/tld.md`: TLD's owned bugs and current work.
+- `people/muni.md`: Muni's owned bugs and current work.
 
 ## Bug Entry Template
 
