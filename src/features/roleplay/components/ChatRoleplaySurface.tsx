@@ -674,6 +674,33 @@ export function ChatRoleplaySurface({
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const isConcludedScene = chatMeta.sceneStatus === "concluded";
+  const messageActions = isConcludedScene
+    ? {
+        onDelete: undefined,
+        onRegenerate: undefined,
+        onEdit: undefined,
+        onSetActiveSwipe: undefined,
+        onToggleConversationStart: undefined,
+        onToggleHiddenFromAI: undefined,
+        onBranch: undefined,
+        onCloneSceneFromHere: undefined,
+        multiSelectMode: false,
+        isSelected: false,
+        onToggleSelect: undefined,
+      }
+    : {
+        onDelete,
+        onRegenerate,
+        onEdit,
+        onSetActiveSwipe,
+        onToggleConversationStart,
+        onToggleHiddenFromAI,
+        onBranch,
+        onCloneSceneFromHere,
+        multiSelectMode,
+        isSelected: undefined,
+        onToggleSelect: onToggleSelectMessage,
+      };
   const hideEchoChamberOnMobile =
     sidebarOpen || rightPanelOpen || settingsOpen || filesOpen || galleryOpen || wizardOpen;
 
@@ -972,15 +999,15 @@ export function ChatRoleplaySurface({
                       {isRegenerating ? (
                         <RegeneratingMessageContent
                           msg={msg}
-                          onDelete={onDelete}
-                          onRegenerate={onRegenerate}
-                          onEdit={onEdit}
-                          onSetActiveSwipe={onSetActiveSwipe}
-                          onToggleConversationStart={onToggleConversationStart}
-                          onToggleHiddenFromAI={onToggleHiddenFromAI}
+                          onDelete={messageActions.onDelete}
+                          onRegenerate={messageActions.onRegenerate}
+                          onEdit={messageActions.onEdit}
+                          onSetActiveSwipe={messageActions.onSetActiveSwipe}
+                          onToggleConversationStart={messageActions.onToggleConversationStart}
+                          onToggleHiddenFromAI={messageActions.onToggleHiddenFromAI}
                           onPeekPrompt={onPeekPrompt}
-                          onBranch={onBranch}
-                          onCloneSceneFromHere={onCloneSceneFromHere}
+                          onBranch={messageActions.onBranch}
+                          onCloneSceneFromHere={messageActions.onCloneSceneFromHere}
                           isCloneSceneFromHereDisabled={isCloneSceneFromHereDisabled}
                           isLastAssistantMessage={msg.id === lastAssistantMessageId}
                           characterMap={characterMap}
@@ -992,23 +1019,23 @@ export function ChatRoleplaySurface({
                           isGrouped={isGrouped(i)}
                           groupChatMode={groupChatMode}
                           chatCharacterIds={chatCharIds}
-                          multiSelectMode={multiSelectMode}
-                          isSelected={selectedMessageIds.has(msg.id)}
-                          onToggleSelect={onToggleSelectMessage}
+                          multiSelectMode={messageActions.multiSelectMode}
+                          isSelected={messageActions.isSelected ?? selectedMessageIds.has(msg.id)}
+                          onToggleSelect={messageActions.onToggleSelect}
                         />
                       ) : (
                         <ChatMessage
                           message={msg}
                           isStreaming={false}
-                          onDelete={onDelete}
-                          onRegenerate={onRegenerate}
-                          onEdit={onEdit}
-                          onSetActiveSwipe={onSetActiveSwipe}
-                          onToggleConversationStart={onToggleConversationStart}
-                          onToggleHiddenFromAI={onToggleHiddenFromAI}
+                          onDelete={messageActions.onDelete}
+                          onRegenerate={messageActions.onRegenerate}
+                          onEdit={messageActions.onEdit}
+                          onSetActiveSwipe={messageActions.onSetActiveSwipe}
+                          onToggleConversationStart={messageActions.onToggleConversationStart}
+                          onToggleHiddenFromAI={messageActions.onToggleHiddenFromAI}
                           onPeekPrompt={onPeekPrompt}
-                          onBranch={onBranch}
-                          onCloneSceneFromHere={onCloneSceneFromHere}
+                          onBranch={messageActions.onBranch}
+                          onCloneSceneFromHere={messageActions.onCloneSceneFromHere}
                           isCloneSceneFromHereDisabled={isCloneSceneFromHereDisabled}
                           isLastAssistantMessage={msg.id === lastAssistantMessageId}
                           characterMap={characterMap}
@@ -1020,16 +1047,16 @@ export function ChatRoleplaySurface({
                           isGrouped={isGrouped(i)}
                           groupChatMode={groupChatMode}
                           chatCharacterIds={chatCharIds}
-                          multiSelectMode={multiSelectMode}
-                          isSelected={selectedMessageIds.has(msg.id)}
-                          onToggleSelect={onToggleSelectMessage}
+                          multiSelectMode={messageActions.multiSelectMode}
+                          isSelected={messageActions.isSelected ?? selectedMessageIds.has(msg.id)}
+                          onToggleSelect={messageActions.onToggleSelect}
                         />
                       )}
                     </div>
                   );
                 })}
 
-                {!isStreaming && <CyoaChoices messages={messages} />}
+                {!isConcludedScene && !isStreaming && <CyoaChoices messages={messages} />}
 
                 {isStreaming && !regenerateMessageId && (
                   <StreamingIndicator
@@ -1065,7 +1092,7 @@ export function ChatRoleplaySurface({
                     description={chatMeta.sceneDescription}
                   />
                 )}
-                {combatAgentEnabled && (
+                {!isConcludedScene && combatAgentEnabled && (
                   <div className="flex justify-center py-1">
                     <button
                       onClick={onStartEncounter}
@@ -1121,12 +1148,12 @@ export function ChatRoleplaySurface({
         galleryOpen={galleryOpen}
         wizardOpen={wizardOpen}
         peekPromptData={peekPromptData}
-        deleteDialogMessageId={deleteDialogMessageId}
+        deleteDialogMessageId={isConcludedScene ? null : deleteDialogMessageId}
         deleteDialogCanDeleteSwipe={deleteDialogCanDeleteSwipe}
         deleteDialogActiveSwipeIndex={deleteDialogActiveSwipeIndex}
         deleteDialogSwipeCount={deleteDialogSwipeCount}
-        multiSelectMode={multiSelectMode}
-        selectedMessageCount={selectedMessageIds.size}
+        multiSelectMode={!isConcludedScene && multiSelectMode}
+        selectedMessageCount={isConcludedScene ? 0 : selectedMessageIds.size}
         sceneSettings={{
           spriteArrangeMode,
           onToggleSpriteArrange,
@@ -1143,7 +1170,7 @@ export function ChatRoleplaySurface({
         onDeleteSwipe={onDeleteSwipe}
         onDeleteMore={onDeleteMore}
         onCloseDeleteDialog={onCloseDeleteDialog}
-        onBulkDelete={onBulkDelete}
+        onBulkDelete={isConcludedScene ? onCancelMultiSelect : onBulkDelete}
         onCancelMultiSelect={onCancelMultiSelect}
         onUnselectAllMessages={onUnselectAllMessages}
         onSelectAllAboveSelection={onSelectAllAboveSelection}
