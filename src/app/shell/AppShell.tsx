@@ -713,17 +713,23 @@ export function AppShell() {
   useEffect(() => {
     if (!isMobile) {
       setInert(sidebarPanelRef.current, false);
+      setInert(mobileTrackerPanelRef.current, false);
+      setInert(mobileRightPanelRef.current, false);
       setInert(headerRef.current, false);
       setInert(mainRef.current, false);
       return;
     }
 
     setInert(sidebarPanelRef.current, activeMobilePanel !== "sidebar");
+    setInert(mobileTrackerPanelRef.current, activeMobilePanel !== "tracker");
+    setInert(mobileRightPanelRef.current, activeMobilePanel !== "right");
     setInert(headerRef.current, activeMobilePanel !== null);
     setInert(mainRef.current, activeMobilePanel !== null);
 
     return () => {
       setInert(sidebarPanelRef.current, false);
+      setInert(mobileTrackerPanelRef.current, false);
+      setInert(mobileRightPanelRef.current, false);
       setInert(headerRef.current, false);
       setInert(mainRef.current, false);
     };
