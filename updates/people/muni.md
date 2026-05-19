@@ -2,7 +2,34 @@
 
 ## Current Work
 
-No current work listed.
+## First-run New Conversation blocks Connections setup
+
+- Status: Done
+- Owner: Muni
+- Impact area: Chat setup UI, Connections panel entry
+- Reported: 2026-05-19
+- Last updated: 2026-05-19
+
+### Steps
+
+1. Start with no usable language-generation chat connections.
+2. Click New Conversation.
+3. In the No connections found modal, click Open Connections.
+4. Try to click Add Connection in the Connections panel.
+
+### Expected
+
+Open Connections should move the user into connection setup without a blocking chat modal.
+
+### Actual
+
+The Connections panel opens behind the No connections found modal, leaving Add Connection blocked until the modal is closed manually.
+
+### Notes
+
+- Initial owner is `NewChatConnectionGate`, which opens the Connections panel from the empty state.
+- Fixed by dismissing the gate when opening the Connections panel.
+- Verified with `pnpm typecheck`.
 
 ## Owned Bugs
 

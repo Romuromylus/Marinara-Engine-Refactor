@@ -81,6 +81,11 @@ export function NewChatConnectionGate({ mode, onClose }: NewChatConnectionGatePr
 
   const showEmptyState = !isLoading && connectionRows.length === 0;
 
+  const handleOpenConnections = () => {
+    openRightPanel("connections");
+    onClose();
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[3px]" onClick={onClose} />
@@ -115,7 +120,7 @@ export function NewChatConnectionGate({ mode, onClose }: NewChatConnectionGatePr
                   Create a connection first, then come back here and we&apos;ll continue without creating a ghost chat.
                 </p>
                 <button
-                  onClick={() => openRightPanel("connections")}
+                  onClick={handleOpenConnections}
                   className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/10 px-3 py-2 text-xs font-medium text-[var(--primary)] transition-all hover:bg-[var(--primary)]/20"
                 >
                   <Plug size="0.75rem" />
