@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import {
   ChevronRight,
   Plug,
@@ -474,8 +475,9 @@ function ConversationQuickSetup({ chat, onFinish }: ChatSetupWizardProps) {
           characterIds: chatCharIds,
           scheduleGenerationPreferences,
         });
-      } catch {
-        // Schedule generation is non-critical — continue anyway
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Schedule generation failed.";
+        toast.error(message);
       }
       setScheduleState("done");
       setTimeout(onFinish, 2000);

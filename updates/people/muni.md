@@ -2,6 +2,34 @@
 
 ## Current Work
 
+## Conversation schedule generation produces no visible schedules
+
+- Status: Done
+- Owner: Muni
+- Impact area: Conversation mode schedule generation, chat settings UI
+- Reported: 2026-05-19
+- Last updated: 2026-05-19
+
+### Steps
+
+1. Open a conversation-mode chat with one or more characters.
+2. Enable Schedules or click Generate in the Autonomous Messaging settings.
+3. Wait for generation to finish.
+
+### Expected
+
+Generated schedules should be saved to chat metadata and appear in the schedule editor.
+
+### Actual
+
+Schedule generation can finish without any visible schedule appearing.
+
+### Notes
+
+- Owner is `src/engine/modes/chat/schedules/schedule.service.ts`.
+- Initial fix makes empty/failed schedule generation surface an error instead of silently succeeding, and expands parsing for common wrapped schedule JSON shapes.
+- Verified with `pnpm typecheck`.
+
 ## First-run New Conversation blocks Connections setup
 
 - Status: Done

@@ -1105,15 +1105,18 @@ export function ChatSettingsDrawer({
       setIsRegeneratingSchedules(true);
       try {
         const scheduleGenerationPreferences = useUIStore.getState().scheduleGenerationPreferences;
-        await runGenerateConversationSchedules({ storage: storageApi, llm: llmApi }, {
+        const result = await runGenerateConversationSchedules({ storage: storageApi, llm: llmApi }, {
           chatId: chat.id,
           characterIds: chatCharIds,
           forceRefresh,
           scheduleGenerationPreferences,
         });
+        const generatedCount = Object.values(result.schedules).filter(Boolean).length;
+        toast.success(`Generated ${generatedCount} conversation schedule${generatedCount === 1 ? "" : "s"}.`);
         qc.invalidateQueries({ queryKey: chatKeys.detail(chat.id) });
-      } catch {
-        // non-critical
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Schedule generation failed.";
+        toast.error(message);
       } finally {
         isRegeneratingSchedulesRef.current = false;
         setIsRegeneratingSchedules(false);

@@ -105,6 +105,7 @@ export async function generateConversationSchedules(
   const existingSchedules = hasSchedules(meta.characterSchedules) ? meta.characterSchedules : {};
   const characterIds =
     input.characterIds?.length ? input.characterIds : parseJsonArray<string>(chat.characterIds).filter(Boolean);
+  if (characterIds.length === 0) throw new Error("No conversation characters are selected");
   const provider = createScheduleProvider(capabilities.llm, connectionId, numberOrNull(connection.maxTokensOverride));
   const model = stringValue(connection.model);
   const mondayStr = getMonday().toISOString();
@@ -170,6 +171,16 @@ export async function generateConversationSchedules(
       const message = error instanceof Error ? error.message : "Schedule generation failed";
       results[characterId] = { status: `error: ${message}` };
     }
+  }
+
+  const hasRequestedSchedule = characterIds.some((characterId) => !!newSchedules[characterId]);
+  if (!hasRequestedSchedule) {
+    const failures = Object.values(results)
+      .map((result) => result.status)
+      .filter((status) => status.startsWith("error: "));
+    throw new Error(
+      failures[0]?.replace(/^error:\s*/, "") || "No usable schedules were generated for this conversation",
+    );
   }
 
   if (Object.keys(newSchedules).length > 0) {
@@ -312,14 +323,18 @@ function parseScheduleResponse(content: string): Omit<WeekSchedule, "weekStart">
     .replace(/\.{3,}[^"}\]\n]*/g, "") // remove ...etc / ... continuations (not inside strings)
     .replace(/\n\s*\n/g, "\n"); // collapse blank lines left by removals
 
-  let data: {
+  type RawScheduleData = {
     talkativeness?: number;
     inactivityThresholdMinutes?: number;
     days?: Record<string, Array<{ time: string; activity: string; status?: string }>>;
+    schedule?: unknown;
+    weeklySchedule?: unknown;
   };
 
+  let data: RawScheduleData;
+
   try {
-    data = JSON.parse(jsonStr);
+    data = normalizeScheduleData(JSON.parse(jsonStr));
   } catch (firstError) {
     // Second pass: more aggressive repair — remove any lines that aren't valid JSON structure
     // This catches things like "// ..." or bare text the LLM added inside the JSON
@@ -335,7 +350,7 @@ function parseScheduleResponse(content: string): Omit<WeekSchedule, "weekStart">
     });
     const repairedStr = repairedLines.join("\n").replace(/,\s*([\]\}])/g, "$1");
     try {
-      data = JSON.parse(repairedStr);
+      data = normalizeScheduleData(JSON.parse(repairedStr));
     } catch {
       // If still failing, throw the original error with context
       throw firstError;
@@ -346,7 +361,7 @@ function parseScheduleResponse(content: string): Omit<WeekSchedule, "weekStart">
   type ValidStatus = "online" | "idle" | "dnd" | "offline";
   const days: Record<string, DaySchedule> = {};
   for (const day of DAYS) {
-    const dayData = data.days?.[day] ?? [];
+    const dayData = getDaySchedule(data.days, day);
     days[day] = dayData.map((block) => ({
       time: block.time,
       activity: block.activity,
@@ -355,6 +370,9 @@ function parseScheduleResponse(content: string): Omit<WeekSchedule, "weekStart">
           ? (block.status as ValidStatus)
           : inferStatusFromActivity(block.activity),
     }));
+  }
+  if (Object.values(days).every((day) => day.length === 0)) {
+    throw new Error("Schedule response did not include any daily time blocks");
   }
 
   return {
@@ -444,6 +462,30 @@ export function getMonday(date: Date = new Date()): Date {
   d.setDate(diff);
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+function normalizeScheduleData(value: unknown): {
+  talkativeness?: number;
+  inactivityThresholdMinutes?: number;
+  days?: Record<string, Array<{ time: string; activity: string; status?: string }>>;
+} {
+  const record = parseJsonObject(value);
+  const nested = parseJsonObject(record.schedule);
+  if (nested.days && !record.days) return nested;
+  const weekly = parseJsonObject(record.weeklySchedule);
+  if (weekly.days && !record.days) return weekly;
+  return record;
+}
+
+function getDaySchedule(
+  days: Record<string, Array<{ time: string; activity: string; status?: string }>> | undefined,
+  day: string,
+): Array<{ time: string; activity: string; status?: string }> {
+  if (!days) return [];
+  const direct = days[day];
+  if (Array.isArray(direct)) return direct;
+  const match = Object.entries(days).find(([key]) => key.toLowerCase() === day.toLowerCase());
+  return Array.isArray(match?.[1]) ? match[1] : [];
 }
 
 function hasSchedules(value: unknown): value is CharacterSchedules {
