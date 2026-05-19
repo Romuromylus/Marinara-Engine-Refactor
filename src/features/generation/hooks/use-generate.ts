@@ -32,10 +32,11 @@ import { chatKeys } from "../../chats/hooks/use-chats";
 import { characterKeys } from "../../characters/hooks/use-characters";
 import {
   applyGenerationReplayToRegenerateInput,
+  type GenerationReplayInput,
   type GenerationReplay,
 } from "../../../engine/generation/generation-replay";
 
-export type GenerateArgs = {
+export type GenerateArgs = GenerationReplayInput & {
   chatId: string;
   connectionId?: string | null;
   message?: string;
