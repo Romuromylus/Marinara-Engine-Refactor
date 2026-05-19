@@ -248,8 +248,19 @@ async function saveAssistantMessage(args: {
     return args.storage.addChatMessageSwipe(args.input.chatId, regenerateMessageId, args.content);
   }
 
+  const requestedCharacterId = readString(args.input.forCharacterId).trim();
+  const chatCharacterIdList = stringArray(args.chat.characterIds);
+  const chatCharacterIds = new Set(chatCharacterIdList);
+  const characterId =
+    requestedCharacterId && (chatCharacterIds.size === 0 || chatCharacterIds.has(requestedCharacterId))
+      ? requestedCharacterId
+      : chatCharacterIdList.length === 1
+        ? chatCharacterIdList[0]!
+      : null;
+
   return args.storage.createChatMessage(args.input.chatId, {
     role: "assistant",
+    characterId,
     content: args.content,
     extra: args.attachments?.length ? { attachments: args.attachments } : {},
     generationInfo: {

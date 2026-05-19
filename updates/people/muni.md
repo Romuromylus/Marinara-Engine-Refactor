@@ -8,7 +8,7 @@ No current work listed.
 
 ## Character replies lose avatar icons in conversation and roleplay
 
-- Status: In progress
+- Status: Done
 - Owner: Muni
 - Impact area: UI, engine generation persistence
 - Reported: 2026-05-19
@@ -36,10 +36,11 @@ Character replies could render without the character icon/avatar image after rep
 - The reply picker passes `forCharacterId` into generation, but assistant message persistence appears to save the reply without copying that target into the saved message `characterId`.
 - Initial partial fix persisted requested `forCharacterId` as the assistant message `characterId` when it belongs to the chat.
 - Conversation testing showed normal one-on-one replies can still miss avatars because they do not pass `forCharacterId`; fix needs to infer the single chat character when no explicit reply target exists.
+- Fixed follow-up in `src/engine/generation/start-generation.ts` by inferring the only chat character when no explicit reply target exists.
 
 ## Cannot delete messages in the built-in Professor Mari chat
 
-- Status: In progress
+- Status: Done
 - Owner: Muni
 - Impact area: Rust storage capability, UI message deletion
 - Reported: 2026-05-19
@@ -62,6 +63,7 @@ Deleting messages in the Professor Mari conversation fails because Rust storage 
 
 - `storage_delete` blocks deleting any message whose `chatId` is the protected Professor Mari chat.
 - `chat_messages_bulk_delete` blocks bulk deletion for the protected Professor Mari chat.
+- Fixed in Rust storage commands by allowing message deletion in the protected Professor Mari chat while keeping the built-in Mari character and chat records protected.
 
 ## Status Notes
 
