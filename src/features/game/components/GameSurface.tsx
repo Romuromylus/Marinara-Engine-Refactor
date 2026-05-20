@@ -11,10 +11,7 @@ import { useChatStore } from "../../../shared/stores/chat.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import { useGameStateStore } from "../../world-state/stores/world-state.store";
 import { worldStateApi } from "../../world-state/api/world-state-api";
-import {
-  flushGameStatePatch,
-  patchGameStateField,
-} from "../../world-state/hooks/use-world-state-patcher";
+import { useGameStatePatcher } from "../../world-state/hooks/use-world-state-patcher";
 import type { GameStatePatchField } from "../../world-state/types";
 import {
   useSyncGameState,
@@ -221,11 +218,6 @@ function getConfiguredGameAssetImageSizes(): NonNullable<GameAssetGenerationPayl
     portrait: { width: settings.imagePortraitWidth, height: settings.imagePortraitHeight },
     selfie: { width: settings.imageSelfieWidth, height: settings.imageSelfieHeight },
   };
-}
-
-function patchVisibleGameState(chatId: string, field: GameStatePatchField, value: unknown) {
-  patchGameStateField(chatId, field, value);
-  void flushGameStatePatch(chatId).catch(() => {});
 }
 
 const GAME_ASSET_GENERATION_TIMEOUT_MS = 240_000;
@@ -1657,6 +1649,19 @@ export function GameSurface({
   const messagesPerPage = useUIStore((s) => s.messagesPerPage);
   const openGameAssetsBrowser = useUIStore((s) => s.openGameAssetsBrowser);
   const gameSnapshot = useGameStateStore((s) => (s.current?.chatId === activeChatId ? s.current : null));
+  const { patchField: patchVisibleGameStateField, flushPatch: flushVisibleGameStatePatch } = useGameStatePatcher(
+    activeChatId,
+    "game-surface",
+  );
+  const patchVisibleGameState = useCallback(
+    (field: GameStatePatchField, value: unknown) => {
+      patchVisibleGameStateField(field, value);
+      void flushVisibleGameStatePatch().catch((error) => {
+        console.warn("Failed to flush visible game-state patch", error);
+      });
+    },
+    [flushVisibleGameStatePatch, patchVisibleGameStateField],
+  );
   const chatCharacterIds = useMemo(() => getChatCharacterIds(chat.characterIds), [chat.characterIds]);
   const useSpotifyGameMusic = chatMeta.gameUseSpotifyMusic === true || chatMeta.gameEnableSpotifyDj === true;
   const { data: connectionsList } = useConnections();
@@ -2265,7 +2270,7 @@ export function GameSurface({
       }
 
       if (currentGameState?.chatId === activeChatId && currentPlayerStats && nextPlayerStats !== currentPlayerStats) {
-        patchVisibleGameState(activeChatId, "playerStats", nextPlayerStats);
+        patchVisibleGameState("playerStats", nextPlayerStats);
       }
 
       for (const entry of journalEntries) {
@@ -2288,7 +2293,7 @@ export function GameSurface({
         notificationTimerRef.current = setTimeout(() => setInventoryNotifications([]), 4000);
       }
     },
-    [activeChatId],
+    [activeChatId, patchVisibleGameState],
   );
 
   const playDirections = useCallback((directions: DirectionCommand[]) => {
@@ -4594,13 +4599,13 @@ export function GameSurface({
           gameTime: nextTime,
         });
 
-        patchVisibleGameState(activeChatId, "time", formattedTime);
+        patchVisibleGameState("time", formattedTime);
         toast.success(`Set game day to ${nextTime.day}.`);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to update game day.");
       }
     },
-    [activeChatId, gameTimeMeta?.hour, gameTimeMeta?.minute, updateChatMetadata],
+    [activeChatId, gameTimeMeta?.hour, gameTimeMeta?.minute, patchVisibleGameState, updateChatMetadata],
   );
 
   const handleJsonRepairApplied = useCallback(
@@ -4836,7 +4841,7 @@ export function GameSurface({
 
       setInventoryItems(updatedInventory);
       if (shouldPatchGameState && nextPlayerStats) {
-        patchVisibleGameState(activeChatId, "playerStats", nextPlayerStats);
+        patchVisibleGameState("playerStats", nextPlayerStats);
       }
 
       setInventoryNotifications([`You gained ${addedItemName}!`]);
@@ -4849,7 +4854,7 @@ export function GameSurface({
       toast.error(message);
       return null;
     }
-  }, [activeChatId, inventoryItems, updateChatMetadata]);
+  }, [activeChatId, inventoryItems, patchVisibleGameState, updateChatMetadata]);
 
   const handleIncrementInventoryItem = useCallback(
     async (itemName: string) => {
@@ -4883,7 +4888,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState(activeChatId, "playerStats", nextPlayerStats);
+          patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         setInventoryNotifications([`You gained ${normalizedItemName}!`]);
@@ -4895,7 +4900,7 @@ export function GameSurface({
         toast.error(message);
       }
     },
-    [activeChatId, inventoryItems, updateChatMetadata],
+    [activeChatId, inventoryItems, patchVisibleGameState, updateChatMetadata],
   );
 
   const handleRemoveInventoryItem = useCallback(
@@ -4931,7 +4936,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState(activeChatId, "playerStats", nextPlayerStats);
+          patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         gameApi
@@ -4951,7 +4956,7 @@ export function GameSurface({
         toast.error(message);
       }
     },
-    [activeChatId, inventoryItems, updateChatMetadata],
+    [activeChatId, inventoryItems, patchVisibleGameState, updateChatMetadata],
   );
 
   const handleUseCombatInventoryItem = useCallback(
@@ -4988,7 +4993,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState(activeChatId, "playerStats", nextPlayerStats);
+          patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         gameApi
@@ -5008,7 +5013,7 @@ export function GameSurface({
         toast.error(message);
       }
     },
-    [activeChatId, inventoryItems, updateChatMetadata],
+    [activeChatId, inventoryItems, patchVisibleGameState, updateChatMetadata],
   );
 
   const handleRenameInventoryItem = useCallback(
@@ -5049,7 +5054,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState(activeChatId, "playerStats", nextPlayerStats);
+          patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         toast.success(`Renamed ${currentName} to ${resolvedName}.`);
@@ -5060,7 +5065,7 @@ export function GameSurface({
         return null;
       }
     },
-    [activeChatId, inventoryItems, updateChatMetadata],
+    [activeChatId, inventoryItems, patchVisibleGameState, updateChatMetadata],
   );
 
   const handleReorderInventoryItem = useCallback(

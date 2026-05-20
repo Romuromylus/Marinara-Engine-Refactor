@@ -44,8 +44,6 @@ mod integrations;
 mod knowledge;
 #[path = "storage/llm.rs"]
 mod llm;
-#[path = "storage/mari.rs"]
-mod mari;
 #[path = "storage/memory.rs"]
 mod memory;
 #[path = "storage/lorebook_images.rs"]
@@ -87,7 +85,5 @@ pub mod mari_commands;
 pub mod media_commands;
 #[path = "storage/commands/memory.rs"]
 pub mod memory_commands;
-#[path = "storage/commands/mari.rs"]
-pub mod mari_commands;
 #[path = "storage/commands/profile.rs"]
 pub mod profile_commands;
