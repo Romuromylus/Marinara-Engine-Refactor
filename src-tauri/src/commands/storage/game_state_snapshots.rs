@@ -1,4 +1,5 @@
 use crate::state::AppState;
+use chrono::{DateTime, Utc};
 use marinara_core::{ensure_object, AppError, AppResult};
 use serde_json::{json, Map, Value};
 
@@ -31,7 +32,7 @@ pub(crate) fn save_tracker_snapshot(
     let mut snapshot = normalize_tracker_snapshot(chat_id, body)?;
     let message_id =
         required_message_id(string_value(&snapshot, "messageId").as_deref())?.to_string();
-    let swipe_index = swipe_index_value(snapshot.get("swipeIndex")).unwrap_or(0);
+    let swipe_index = parse_swipe_index(snapshot.get("swipeIndex"))?;
     let mut existing = tracker_snapshots_for_target(state, chat_id, &message_id, swipe_index)?;
     sort_newest_first(&mut existing);
 
@@ -52,11 +53,8 @@ pub(crate) fn save_tracker_snapshot(
             .create(SNAPSHOT_COLLECTION, Value::Object(snapshot));
     };
     if !snapshot.contains_key("createdAt") {
-        if let Some(created_at) = primary.get("createdAt").and_then(Value::as_str) {
-            snapshot.insert(
-                "createdAt".to_string(),
-                Value::String(created_at.to_string()),
-            );
+        if let Some(created_at) = normalized_timestamp(primary.get("createdAt")) {
+            snapshot.insert("createdAt".to_string(), Value::String(created_at));
         }
     }
     state
@@ -114,7 +112,7 @@ fn normalize_tracker_snapshot(chat_id: &str, body: Value) -> AppResult<Map<Strin
 
     let message_id =
         required_message_id(incoming.get("messageId").and_then(Value::as_str))?.to_string();
-    let swipe_index = swipe_index_value(incoming.get("swipeIndex")).unwrap_or(0);
+    let swipe_index = parse_swipe_index(incoming.get("swipeIndex"))?;
 
     let mut snapshot = Map::new();
     snapshot.insert("kind".to_string(), Value::String(TRACKER_KIND.to_string()));
@@ -148,13 +146,8 @@ fn normalize_tracker_snapshot(chat_id: &str, body: Value) -> AppResult<Map<Strin
         "committed".to_string(),
         Value::Bool(bool_value(incoming.get("committed"))),
     );
-    if let Some(created_at) = incoming.get("createdAt").and_then(Value::as_str) {
-        if !created_at.trim().is_empty() {
-            snapshot.insert(
-                "createdAt".to_string(),
-                Value::String(created_at.trim().to_string()),
-            );
-        }
+    if let Some(created_at) = normalized_timestamp(incoming.get("createdAt")) {
+        snapshot.insert("createdAt".to_string(), Value::String(created_at));
     }
     Ok(snapshot)
 }
@@ -198,6 +191,29 @@ fn swipe_index_value(value: Option<&Value>) -> Option<i64> {
             .map(|value| value.max(0)),
         Some(Value::String(raw)) => raw.trim().parse::<i64>().ok().map(|value| value.max(0)),
         _ => None,
+    }
+}
+
+fn parse_swipe_index(value: Option<&Value>) -> AppResult<i64> {
+    match value {
+        None | Some(Value::Null) => Ok(0),
+        Some(Value::Number(number)) => {
+            if let Some(value) = number.as_i64() {
+                return Ok(value.max(0));
+            }
+            let Some(value) = number.as_u64() else {
+                return Err(AppError::invalid_input("swipeIndex must be an integer"));
+            };
+            i64::try_from(value)
+                .map(|value| value.max(0))
+                .map_err(|_| AppError::invalid_input("swipeIndex is too large"))
+        }
+        Some(Value::String(raw)) => raw
+            .trim()
+            .parse::<i64>()
+            .map(|value| value.max(0))
+            .map_err(|_| AppError::invalid_input("swipeIndex must be an integer")),
+        _ => Err(AppError::invalid_input("swipeIndex must be an integer")),
     }
 }
 
@@ -330,17 +346,31 @@ fn coerce_text_value_inner(value: Option<&Value>, depth: usize) -> Option<String
 
 fn sort_newest_first(rows: &mut [Value]) {
     rows.sort_by(|left, right| {
-        timestamp(right)
-            .cmp(timestamp(left))
+        timestamp_millis(right)
+            .cmp(&timestamp_millis(left))
             .then_with(|| non_empty_string(right, "id").cmp(&non_empty_string(left, "id")))
     });
 }
 
-fn timestamp(row: &Value) -> &str {
-    row.get("createdAt")
-        .or_else(|| row.get("updatedAt"))
-        .and_then(Value::as_str)
-        .unwrap_or("")
+fn normalized_timestamp(value: Option<&Value>) -> Option<String> {
+    parse_timestamp(value).map(|time| time.to_rfc3339())
+}
+
+fn timestamp_millis(row: &Value) -> i64 {
+    parse_timestamp(row.get("createdAt"))
+        .or_else(|| parse_timestamp(row.get("updatedAt")))
+        .map(|time| time.timestamp_millis())
+        .unwrap_or(0)
+}
+
+fn parse_timestamp(value: Option<&Value>) -> Option<DateTime<Utc>> {
+    let raw = value?.as_str()?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|time| time.with_timezone(&Utc))
 }
 
 #[cfg(test)]
@@ -355,6 +385,7 @@ mod tests {
                 "chatId": "chat-1",
                 "messageId": "message-1",
                 "swipeIndex": "2",
+                "createdAt": "2026-05-20T08:30:00-04:00",
                 "location": { "name": "Harbor" },
                 "presentCharacters": "[{\"name\":\"Mari\"}]",
                 "playerStats": "{\"status\":\"ready\"}",
@@ -369,6 +400,7 @@ mod tests {
         assert_eq!(snapshot["chatId"], "chat-1");
         assert_eq!(snapshot["messageId"], "message-1");
         assert_eq!(snapshot["swipeIndex"], json!(2));
+        assert_eq!(snapshot["createdAt"], "2026-05-20T12:30:00+00:00");
         assert_eq!(snapshot["location"], "Harbor");
         assert!(snapshot["presentCharacters"].is_array());
         assert!(snapshot["playerStats"].is_object());
@@ -403,5 +435,53 @@ mod tests {
         .expect_err("message id should be required");
 
         assert_eq!(error.code, "invalid_input");
+    }
+
+    #[test]
+    fn normalize_tracker_snapshot_rejects_malformed_swipe_index() {
+        let error = normalize_tracker_snapshot(
+            "chat-1",
+            json!({
+                "chatId": "chat-1",
+                "messageId": "message-1",
+                "swipeIndex": "nope"
+            }),
+        )
+        .expect_err("malformed swipe index should fail");
+
+        assert_eq!(error.code, "invalid_input");
+    }
+
+    #[test]
+    fn normalize_tracker_snapshot_ignores_malformed_created_at() {
+        let snapshot = normalize_tracker_snapshot(
+            "chat-1",
+            json!({
+                "chatId": "chat-1",
+                "messageId": "message-1",
+                "createdAt": "not-a-date"
+            }),
+        )
+        .expect("invalid optional createdAt should be ignored");
+
+        assert!(snapshot.get("createdAt").is_none());
+    }
+
+    #[test]
+    fn sort_newest_first_ignores_malformed_created_at() {
+        let mut rows = vec![
+            json!({
+                "id": "bad",
+                "createdAt": "zzzzzzzz"
+            }),
+            json!({
+                "id": "good",
+                "createdAt": "2026-05-20T12:30:00+00:00"
+            }),
+        ];
+
+        sort_newest_first(&mut rows);
+
+        assert_eq!(rows[0]["id"], "good");
     }
 }
