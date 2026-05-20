@@ -19,6 +19,10 @@ import { useUIStore, type TrackerPanelSide } from "../../../shared/stores/ui.sto
 import { useCharacterSprites, type SpriteInfo } from "../../characters/hooks/use-characters";
 import { cn } from "../../../shared/lib/utils";
 import {
+  addPresentCharacterStat,
+  updatePresentCharacterCustomField,
+} from "../../world-state/lib/tracker-state-edits";
+import {
   TRACKER_CARD_PORTRAIT_ZOOM_DEFAULT,
   TRACKER_CARD_PORTRAIT_ZOOM_MAX,
   TRACKER_CARD_PORTRAIT_ZOOM_MIN,
@@ -661,21 +665,12 @@ export function FeaturedCharacterTrackerCard({
 
   const addCharacterStat = () => {
     if (!onUpdate) return;
-    onUpdate({
-      ...character,
-      stats: [...characterStats, { name: "New Stat", value: 0, max: 100, color: "var(--primary)" }],
-    });
+    onUpdate(addPresentCharacterStat(character));
   };
   const updateCustomField = (oldName: string, nextName: string, nextValue: string) => {
     if (!onUpdate) return;
-    const nextFields = { ...(character.customFields ?? {}) };
-    const trimmedName = nextName.trim();
-    if (trimmedName && trimmedName !== oldName && Object.prototype.hasOwnProperty.call(nextFields, trimmedName)) {
-      return;
-    }
-    delete nextFields[oldName];
-    if (trimmedName) nextFields[trimmedName] = nextValue;
-    onUpdate({ ...character, customFields: nextFields });
+    const nextCharacter = updatePresentCharacterCustomField(character, oldName, nextName, nextValue);
+    if (nextCharacter) onUpdate(nextCharacter);
   };
 
   return (

@@ -1,4 +1,4 @@
-export type WorldTemperatureUnit = "celsius" | "fahrenheit";
+import type { WorldTemperatureUnit } from "../types";
 
 export const WORLD_MONTH_LABELS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 

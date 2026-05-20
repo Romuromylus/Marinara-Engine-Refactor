@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CustomTrackerField, GameState, InventoryItem, PresentCharacter, QuestProgress } from "../../../engine/contracts/types/game-state";
+import type { TrackerStateController } from "../types";
 import { worldStateApi } from "../api/world-state-api";
 import { useGameStateStore } from "../stores/world-state.store";
 import { useGameStatePatcher } from "./use-world-state-patcher";
 
-export function useTrackerStateController(chatId: string | null, registrationId?: string) {
+export function useTrackerStateController(chatId: string | null, registrationId?: string): TrackerStateController {
   const gameState = useGameStateStore((s) => (chatId && s.current?.chatId === chatId ? s.current : null));
   const gameStateRefreshing = useGameStateStore((s) => s.isRefreshing);
   const setGameState = useGameStateStore((s) => s.setGameState);

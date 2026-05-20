@@ -14,8 +14,8 @@ import { worldStateApi } from "../../world-state/api/world-state-api";
 import {
   flushGameStatePatch,
   patchGameStateField,
-  type GameStatePatchField,
 } from "../../world-state/hooks/use-world-state-patcher";
+import type { GameStatePatchField } from "../../world-state/types";
 import {
   useSyncGameState,
   useCreateGame,

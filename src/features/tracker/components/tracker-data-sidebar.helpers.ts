@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { CharacterStat, GameState, PresentCharacter } from "../../../engine/contracts/types/game-state";
+import type { GameState, PresentCharacter } from "../../../engine/contracts/types/game-state";
 import type { Persona, TrackerCardColorConfig } from "../../../engine/contracts/types/persona";
 import type { SpriteInfo } from "../../characters/hooks/use-characters";
 import {
@@ -131,11 +131,6 @@ export function clampNumber(value: number, min: number, max: number) {
 export function getNumberValueWidth(value: number) {
   const text = Number.isFinite(value) ? String(value) : "0";
   return `${Math.min(7, Math.max(1.15, text.length + 0.35))}ch`;
-}
-
-export function getStatPercent(stat: CharacterStat) {
-  if (!Number.isFinite(stat.max) || stat.max <= 0) return 0;
-  return Math.max(0, Math.min(100, (stat.value / stat.max) * 100));
 }
 
 export function getForecastWeatherTextClass(weather: string | null | undefined) {
@@ -505,19 +500,6 @@ export function parseMetadataRecord(raw: unknown): Record<string, unknown> {
     }
   }
   return typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-}
-
-export function parseAgentSettings(settings: unknown): Record<string, unknown> {
-  if (!settings) return {};
-  if (typeof settings === "string") {
-    try {
-      const parsed = JSON.parse(settings);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-    } catch {
-      return {};
-    }
-  }
-  return typeof settings === "object" && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {};
 }
 
 export function normalizeStringArray(value: unknown): string[] {

@@ -1,17 +1,8 @@
 import { useCallback, useEffect } from "react";
 import type { GameState, PlayerStats } from "../../../engine/contracts/types/game-state";
+import type { GameStatePatchField } from "../types";
 import { worldStateApi } from "../api/world-state-api";
 import { useGameStateStore } from "../stores/world-state.store";
-
-export type GameStatePatchField =
-  | "date"
-  | "time"
-  | "location"
-  | "weather"
-  | "temperature"
-  | "presentCharacters"
-  | "playerStats"
-  | "personaStats";
 
 type GameStatePatch = Partial<Record<GameStatePatchField, unknown>>;
 type GameStatePatchTarget = {
