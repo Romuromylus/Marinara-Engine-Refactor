@@ -2,6 +2,15 @@
 
 ## Current Work
 
+- Fixing game session continuity bugs through the local-only bug branch workflow.
+
+## Owned Bugs
+
+## Starting a new game session drops carried inventory and player state
+
+- Status: Done
+- Owner: Promansis
+- Impact area: UI | engine | storage
 - Fixing game checkpoint access through the local-only bug branch workflow.
 
 ## Owned Bugs
@@ -16,6 +25,13 @@
 
 ### Notes
 
+- Failing behavior: `gameApi.startSession` creates the next session with only setup/map/NPC metadata, dropping durable inventory, widget state, time/weather, morale, notes, journal, and the stored `chat.gameState`.
+- Owner: `src/features/game/api/game-api.ts`; dependent readers are `GameSurface`, `useSyncGameState`, world-state hydration, and game prompt assembly.
+- Resolution: new sessions now carry durable game metadata and `chat.gameState` while leaving combat-only session state behind.
+
+## Status Notes
+
+- Bug 6 branch: `fix/game-session-carryover-state`.
 - Failing behavior: `GameCheckpoints` and checkpoint hooks/API exist, but `GameSurface` has no visible entry point or restore refresh path.
 - Owner: `src/features/game/components/GameSurface.tsx`; dependent restore path is `gameApi.loadCheckpoint`, chat detail/messages queries, and `useGameStateStore`.
 - Resolution: the game surface now exposes the checkpoint manager on desktop and mobile, and refreshes chat/game state after a checkpoint restore.
