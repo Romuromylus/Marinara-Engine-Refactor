@@ -30,8 +30,13 @@ import { useGameStateStore } from "../../world-state/stores/world-state.store";
 import { worldStateApi } from "../../world-state/api/world-state-api";
 import { chatKeys } from "../../chats/hooks/use-chats";
 import { characterKeys } from "../../characters/hooks/use-characters";
+import {
+  applyGenerationReplayToRegenerateInput,
+  type GenerationReplayInput,
+  type GenerationReplay,
+} from "../../../engine/generation/generation-replay";
 
-export type GenerateArgs = {
+export type GenerateArgs = GenerationReplayInput & {
   chatId: string;
   connectionId?: string | null;
   message?: string;
@@ -109,6 +114,12 @@ function parseMaybeRecord(value: unknown): Record<string, unknown> {
     }
   }
   return isRecord(value) ? value : {};
+}
+
+function readGenerationReplay(value: unknown): GenerationReplay | null {
+  const record = parseMaybeRecord(value);
+  const replay = record.generationReplay;
+  return isRecord(replay) ? (replay as GenerationReplay) : null;
 }
 
 const editableCharacterCardFieldSet = new Set<string>(EDITABLE_CHARACTER_CARD_FIELDS);
@@ -753,10 +764,27 @@ export function useGenerate() {
   const queryClient = useQueryClient();
 
   const generate = useCallback(
-    (args: GenerateArgs): Promise<boolean> =>
-      runGenerationWithUi(
+    async (args: GenerateArgs): Promise<boolean> => {
+      const adjustedArgs = await (async () => {
+        const regenerateMessageId = readString(args.regenerateMessageId).trim();
+        const chatId = readString(args.chatId).trim();
+        if (!regenerateMessageId || !chatId) return args;
+
+        const cachedMessages = queryClient.getQueryData<InfiniteData<Message[]>>(chatKeys.messages(chatId));
+        const cachedMessage = cachedMessages?.pages.flat().find((message) => readString(message.id) === regenerateMessageId);
+        const storedMessage = cachedMessage ?? (await storageApi.get<Message>("messages", regenerateMessageId).catch(() => null));
+        if (!storedMessage || readString(storedMessage.chatId).trim() !== chatId) return args;
+        const replay = readGenerationReplay(storedMessage?.extra);
+        if (!replay) return args;
+
+        const nextArgs = { ...args };
+        applyGenerationReplayToRegenerateInput(nextArgs, replay);
+        return nextArgs;
+      })();
+
+      return runGenerationWithUi(
         queryClient,
-        args,
+        adjustedArgs,
         (streamArgs, signal) =>
           startGeneration(
             { storage: storageApi, llm: llmApi, integrations: integrationGateway },
@@ -777,7 +805,8 @@ export function useGenerate() {
             });
           },
         },
-      ),
+      );
+    },
     [queryClient],
   );
 
