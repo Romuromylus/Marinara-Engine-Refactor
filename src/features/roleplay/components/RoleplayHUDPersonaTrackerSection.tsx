@@ -58,7 +58,7 @@ export function PersonaTrackerSection({
         <div className={bodyClass(layout, "space-y-2")}>
           {stats.map((stat, idx) => (
             <StatBarEditable
-              key={stat.name}
+              key={idx}
               stat={stat}
               onUpdateName={(name) => updateStat(idx, "name", name)}
               onUpdateValue={(value) => updateStat(idx, "value", value)}
@@ -89,7 +89,7 @@ export function PersonaTrackerSection({
         {stats.length === 0 && <div className={EMPTY_STATE}>No stats tracked</div>}
         {stats.map((stat, idx) => (
           <StatBarEditable
-            key={stat.name}
+            key={idx}
             stat={stat}
             onUpdateName={(name) => updateStat(idx, "name", name)}
             onUpdateValue={(value) => updateStat(idx, "value", value)}

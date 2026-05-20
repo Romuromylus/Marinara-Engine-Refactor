@@ -53,8 +53,11 @@ export function CombinedWorldPanel({
             title="Re-run world state tracker only"
           />
           <button
+            type="button"
             onClick={onClose}
             className="text-[var(--muted-foreground)]/50 hover:text-[var(--foreground)] transition-colors"
+            title="Close"
+            aria-label="Close"
           >
             <X size="0.75rem" />
           </button>

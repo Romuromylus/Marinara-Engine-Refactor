@@ -26,6 +26,7 @@ export function TrackerSectionRefresh({
       }}
       disabled={busy}
       title={title ?? `Re-run ${agentType} only`}
+      aria-label={title ?? `Re-run ${agentType} only`}
       className="rounded p-0.5 text-[var(--muted-foreground)]/50 transition-colors hover:bg-[var(--accent)] hover:text-purple-300 disabled:opacity-40"
     >
       <RefreshCw size="0.625rem" className={busy ? "animate-spin" : ""} />
@@ -45,7 +46,7 @@ export function PersonaStatusField({ value, onSave }: { value: string; onSave?: 
       <InlineEdit
         value={value}
         onSave={onSave ?? (() => {})}
-        className="w-full !text-[0.6875rem] !text-[var(--foreground)]/85"
+        className="w-full text-[0.6875rem]! text-[var(--foreground)]/85!"
         placeholder="Status not tracked"
         scrollOnHover
       />
@@ -125,6 +126,7 @@ export function WorldFieldRow({
           />
         ) : (
           <button
+            type="button"
             onClick={() => setEditing(true)}
             className={cn(
               "w-full text-left text-[0.6875rem] font-medium truncate",
@@ -137,9 +139,11 @@ export function WorldFieldRow({
       </div>
       {!editing && (
         <button
+          type="button"
           onClick={() => setEditing(true)}
           className="shrink-0 text-[var(--muted-foreground)]/30 opacity-0 group-hover/row:opacity-100 transition-opacity"
           title={`Edit ${label.toLowerCase()}`}
+          aria-label={`Edit ${label.toLowerCase()}`}
         >
           <Pencil size="0.625rem" />
         </button>

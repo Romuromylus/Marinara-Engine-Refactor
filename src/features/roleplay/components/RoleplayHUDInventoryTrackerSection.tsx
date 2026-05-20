@@ -68,7 +68,11 @@ export function InventoryTrackerSection({
             <input
               type="number"
               value={item.quantity}
-              onChange={(event) => updateItem(idx, { ...item, quantity: Math.max(0, Number(event.target.value)) })}
+              onChange={(event) => {
+                const parsed = event.currentTarget.valueAsNumber;
+                const quantity = Number.isFinite(parsed) ? Math.max(0, parsed) : item.quantity;
+                updateItem(idx, { ...item, quantity });
+              }}
               className="w-8 bg-transparent text-center text-[0.5625rem] text-[var(--foreground)]/60 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               title="Quantity"
             />
@@ -77,6 +81,7 @@ export function InventoryTrackerSection({
               onClick={() => removeItem(idx)}
               className="text-[var(--muted-foreground)]/40 hover:text-red-500 transition-colors shrink-0"
               title="Remove item"
+              aria-label={`Remove ${item.name || "item"}`}
             >
               <X size="0.5625rem" />
             </button>

@@ -20,6 +20,17 @@ export type GameStatePatchField =
 
 export type WorldTemperatureUnit = "celsius" | "fahrenheit";
 
+export interface GameStatePatchValue {
+  date: GameState["date"];
+  time: GameState["time"];
+  location: GameState["location"];
+  weather: GameState["weather"];
+  temperature: GameState["temperature"];
+  presentCharacters: GameState["presentCharacters"];
+  playerStats: GameState["playerStats"];
+  personaStats: GameState["personaStats"];
+}
+
 export interface TrackerStateController {
   gameState: GameState | null;
   playerStats: PlayerStats | null;
@@ -31,7 +42,7 @@ export interface TrackerStateController {
   loadingGameState: boolean;
   gameStateRefreshing: boolean;
   isLoadingGameState: boolean;
-  patchField: (field: GameStatePatchField, value: unknown) => void;
-  patchPlayerStats: (field: keyof PlayerStats, value: unknown) => void;
+  patchField: <K extends GameStatePatchField>(field: K, value: GameStatePatchValue[K]) => void;
+  patchPlayerStats: <K extends keyof PlayerStats>(field: K, value: PlayerStats[K]) => void;
   flushPatch: () => Promise<void>;
 }

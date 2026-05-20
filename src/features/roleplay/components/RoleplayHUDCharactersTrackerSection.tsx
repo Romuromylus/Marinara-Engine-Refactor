@@ -71,7 +71,7 @@ export function CharactersTrackerSection({
         <InlineEdit
           value={char.emoji || "👤"}
           onSave={(value) => updateCharacter(idx, { ...char, emoji: value })}
-          className="w-8 text-center !text-sm"
+          className="w-8 text-center text-sm!"
         />
       );
     }
@@ -161,7 +161,7 @@ export function CharactersTrackerSection({
               <InlineEdit
                 value={char.name}
                 onSave={(value) => updateCharacter(idx, { ...char, name: value })}
-                className="flex-1 !font-medium"
+                className="flex-1 font-medium!"
                 placeholder="Name"
               />
               <button

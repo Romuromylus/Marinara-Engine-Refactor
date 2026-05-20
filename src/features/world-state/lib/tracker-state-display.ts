@@ -24,6 +24,6 @@ export const TRACKER_SECTION_RERUN_TITLES: Record<TrackerPanelSection, string> =
 };
 
 export function getTrackerStatPercent(stat: Pick<CharacterStat, "value" | "max">) {
-  if (!Number.isFinite(stat.max) || stat.max <= 0) return 0;
+  if (!Number.isFinite(stat.max) || stat.max <= 0 || !Number.isFinite(stat.value)) return 0;
   return Math.max(0, Math.min(100, (stat.value / stat.max) * 100));
 }

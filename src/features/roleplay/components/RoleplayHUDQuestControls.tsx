@@ -44,6 +44,7 @@ export function QuestCardEditable({
           type="button"
           onClick={() => onUpdate({ ...quest, completed: !quest.completed })}
           title={quest.completed ? "Mark incomplete" : "Mark complete"}
+          aria-label={quest.completed ? "Mark quest incomplete" : "Mark quest complete"}
         >
           {quest.completed ? (
             <CheckCircle2 size="0.6875rem" className="text-emerald-400 shrink-0" />
@@ -54,7 +55,7 @@ export function QuestCardEditable({
         <InlineEdit
           value={quest.name}
           onSave={(value) => onUpdate({ ...quest, name: value })}
-          className={cn("flex-1 !font-medium", quest.completed && "line-through opacity-50")}
+          className={cn("flex-1 font-medium!", quest.completed && "line-through opacity-50")}
           placeholder="Quest name"
         />
         {total > 0 && (
@@ -67,6 +68,7 @@ export function QuestCardEditable({
           onClick={onRemove}
           className="text-[var(--muted-foreground)]/40 hover:text-red-500 transition-colors shrink-0"
           title="Remove quest"
+          aria-label={`Remove ${quest.name || "quest"}`}
         >
           <X size="0.5625rem" />
         </button>
@@ -75,7 +77,11 @@ export function QuestCardEditable({
         <div className="mt-1 space-y-0.5 pl-4">
           {quest.objectives.map((objective, idx) => (
             <div key={idx} className="group flex items-center gap-1 text-[0.5625rem]">
-              <button type="button" onClick={() => toggleObjective(idx)}>
+              <button
+                type="button"
+                onClick={() => toggleObjective(idx)}
+                aria-label={objective.completed ? "Mark objective incomplete" : "Mark objective complete"}
+              >
                 {objective.completed ? (
                   <CheckCircle2 size="0.5rem" className="text-emerald-400/60 shrink-0" />
                 ) : (
@@ -92,6 +98,7 @@ export function QuestCardEditable({
                 type="button"
                 onClick={() => removeObjective(idx)}
                 className="opacity-0 group-hover:opacity-100 text-[var(--muted-foreground)]/40 hover:text-red-500 transition-all shrink-0"
+                aria-label="Remove objective"
               >
                 <X size="0.4375rem" />
               </button>

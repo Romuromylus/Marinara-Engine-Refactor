@@ -79,8 +79,12 @@ export function ActionsGroup({
     if (!agentsOpen || !btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
     const maxH = 320;
-    const top = rect.bottom + 4 + maxH > window.innerHeight ? rect.top - maxH - 4 : rect.bottom + 4;
-    const left = Math.min(rect.left, window.innerWidth - ACTIONS_DROPDOWN_WIDTH_PX - 8);
+    const padding = 8;
+    const desiredTop = rect.bottom + 4 + maxH > window.innerHeight ? rect.top - maxH - 4 : rect.bottom + 4;
+    const maxTop = Math.max(padding, window.innerHeight - maxH - padding);
+    const top = Math.min(Math.max(desiredTop, padding), maxTop);
+    const maxLeft = Math.max(padding, window.innerWidth - ACTIONS_DROPDOWN_WIDTH_PX - padding);
+    const left = Math.min(Math.max(rect.left, padding), maxLeft);
     setPos({ top, left });
   }, [agentsOpen]);
 

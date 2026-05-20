@@ -12,7 +12,7 @@ import { useUIStore } from "../../../shared/stores/ui.store";
 import { useGameStateStore } from "../../world-state/stores/world-state.store";
 import { worldStateApi } from "../../world-state/api/world-state-api";
 import { useGameStatePatcher } from "../../world-state/hooks/use-world-state-patcher";
-import type { GameStatePatchField } from "../../world-state/types";
+import type { GameStatePatchField, GameStatePatchValue } from "../../world-state/types";
 import {
   useSyncGameState,
   useCreateGame,
@@ -1654,11 +1654,9 @@ export function GameSurface({
     "game-surface",
   );
   const patchVisibleGameState = useCallback(
-    (field: GameStatePatchField, value: unknown) => {
+    <K extends GameStatePatchField>(field: K, value: GameStatePatchValue[K]) => {
       patchVisibleGameStateField(field, value);
-      void flushVisibleGameStatePatch().catch((error) => {
-        console.warn("Failed to flush visible game-state patch", error);
-      });
+      return flushVisibleGameStatePatch();
     },
     [flushVisibleGameStatePatch, patchVisibleGameStateField],
   );
@@ -1707,7 +1705,7 @@ export function GameSurface({
   const metaWeather = (chatMeta.gameWeather as { type?: string; temperature?: number } | undefined)?.type ?? null;
   const gameTimeMeta = chatMeta.gameTime as GameTimeMeta | undefined;
   const currentGameDay = useMemo(
-    () => normalizeGameDay(gameTimeMeta?.day ?? parseGameDayFromTimeLabel(gameSnapshot?.time) ?? 1),
+    () => normalizeGameDay(parseGameDayFromTimeLabel(gameSnapshot?.time) ?? gameTimeMeta?.day ?? 1),
     [gameSnapshot?.time, gameTimeMeta?.day],
   );
   const metaTime = useMemo(() => {
@@ -2270,7 +2268,9 @@ export function GameSurface({
       }
 
       if (currentGameState?.chatId === activeChatId && currentPlayerStats && nextPlayerStats !== currentPlayerStats) {
-        patchVisibleGameState("playerStats", nextPlayerStats);
+        void patchVisibleGameState("playerStats", nextPlayerStats).catch((error) => {
+          console.warn("Failed to flush visible game-state patch", error);
+        });
       }
 
       for (const entry of journalEntries) {
@@ -4599,7 +4599,7 @@ export function GameSurface({
           gameTime: nextTime,
         });
 
-        patchVisibleGameState("time", formattedTime);
+        await patchVisibleGameState("time", formattedTime);
         toast.success(`Set game day to ${nextTime.day}.`);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to update game day.");
@@ -4841,7 +4841,7 @@ export function GameSurface({
 
       setInventoryItems(updatedInventory);
       if (shouldPatchGameState && nextPlayerStats) {
-        patchVisibleGameState("playerStats", nextPlayerStats);
+        await patchVisibleGameState("playerStats", nextPlayerStats);
       }
 
       setInventoryNotifications([`You gained ${addedItemName}!`]);
@@ -4888,7 +4888,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState("playerStats", nextPlayerStats);
+          await patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         setInventoryNotifications([`You gained ${normalizedItemName}!`]);
@@ -4936,7 +4936,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState("playerStats", nextPlayerStats);
+          await patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         gameApi
@@ -4993,7 +4993,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState("playerStats", nextPlayerStats);
+          await patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         gameApi
@@ -5054,7 +5054,7 @@ export function GameSurface({
 
         setInventoryItems(updatedInventory);
         if (shouldPatchGameState && nextPlayerStats) {
-          patchVisibleGameState("playerStats", nextPlayerStats);
+          await patchVisibleGameState("playerStats", nextPlayerStats);
         }
 
         toast.success(`Renamed ${currentName} to ${resolvedName}.`);

@@ -109,6 +109,7 @@ export function WidgetPopover({
 
     if (placement === "right") {
       left = rect.right + 4;
+      left = Math.min(Math.max(left, 8), Math.max(8, window.innerWidth - popoverWidth - 8));
       top = rect.top;
       if (top + popoverHeight > window.innerHeight - 8) {
         top = Math.max(8, window.innerHeight - popoverHeight - 8);

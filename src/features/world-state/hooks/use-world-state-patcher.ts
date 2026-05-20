@@ -1,10 +1,10 @@
 import { useCallback, useEffect } from "react";
 import type { GameState, PlayerStats } from "../../../engine/contracts/types/game-state";
-import type { GameStatePatchField } from "../types";
+import type { GameStatePatchField, GameStatePatchValue } from "../types";
 import { worldStateApi } from "../api/world-state-api";
 import { useGameStateStore } from "../stores/world-state.store";
 
-type GameStatePatch = Partial<Record<GameStatePatchField, unknown>>;
+type GameStatePatch = Partial<GameStatePatchValue>;
 type GameStatePatchTarget = {
   messageId?: string;
   swipeIndex?: number;
@@ -214,7 +214,7 @@ function reconcileVisibleGameState(chatId: string, payload: GameStatePatch & Gam
   } as GameState);
 }
 
-function queuePatch(chatId: string, field: GameStatePatchField, value: unknown) {
+function queuePatch<K extends GameStatePatchField>(chatId: string, field: K, value: GameStatePatchValue[K]) {
   const target = getPatchTarget(getCurrentGameStateForChat(chatId));
   const key = getPatchKey(chatId, target);
   const existingDurable = durablePatches.get(key);
@@ -407,7 +407,11 @@ function retainBeforeUnloadFlush() {
   };
 }
 
-export function patchGameStateField(chatId: string, field: GameStatePatchField, value: unknown) {
+export function patchGameStateField<K extends GameStatePatchField>(
+  chatId: string,
+  field: K,
+  value: GameStatePatchValue[K],
+) {
   const store = useGameStateStore.getState();
   if (store.isRefreshing) return;
   const prev = getCurrentGameStateForChat(chatId);
@@ -421,16 +425,17 @@ export function patchGameStateField(chatId: string, field: GameStatePatchField, 
   queuePatch(chatId, field, value);
 }
 
-export function patchPlayerStatsField(chatId: string, field: keyof PlayerStats, value: unknown) {
+export function patchPlayerStatsField<K extends keyof PlayerStats>(chatId: string, field: K, value: PlayerStats[K]) {
   const current = getCurrentGameStateForChat(chatId)?.playerStats ?? createEmptyPlayerStats();
-  patchGameStateField(chatId, "playerStats", { ...current, [field]: value });
+  const nextPlayerStats: PlayerStats = { ...current, [field]: value };
+  patchGameStateField(chatId, "playerStats", nextPlayerStats);
 }
 
 export function useGameStatePatcher(chatId: string | null, registrationId?: string) {
   const registerFlushPatch = useGameStateStore((s) => s.registerFlushPatch);
 
   const patchField = useCallback(
-    (field: GameStatePatchField, value: unknown) => {
+    <K extends GameStatePatchField>(field: K, value: GameStatePatchValue[K]) => {
       if (!chatId) return;
       patchGameStateField(chatId, field, value);
     },
@@ -438,7 +443,7 @@ export function useGameStatePatcher(chatId: string | null, registrationId?: stri
   );
 
   const patchPlayerStats = useCallback(
-    (field: keyof PlayerStats, value: unknown) => {
+    <K extends keyof PlayerStats>(field: K, value: PlayerStats[K]) => {
       if (!chatId) return;
       patchPlayerStatsField(chatId, field, value);
     },

@@ -25,7 +25,7 @@ export function StatBarEditable({
           <InlineEdit
             value={stat.name}
             onSave={onUpdateName}
-            className="!text-[0.625rem] !font-medium !text-[var(--foreground)]/80"
+            className="text-[0.625rem]! font-medium! text-[var(--foreground)]/80!"
             placeholder="Stat name"
           />
         ) : (
@@ -35,14 +35,20 @@ export function StatBarEditable({
           <input
             type="number"
             value={stat.value}
-            onChange={(event) => onUpdateValue(Number(event.target.value))}
+            onChange={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+              if (Number.isFinite(value)) onUpdateValue(value);
+            }}
             className="w-12 bg-transparent text-right outline-none text-[var(--foreground)]/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <span>/</span>
           <input
             type="number"
             value={stat.max}
-            onChange={(event) => onUpdateMax(Number(event.target.value))}
+            onChange={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+              if (Number.isFinite(value)) onUpdateMax(value);
+            }}
             className="w-12 bg-transparent outline-none text-[var(--foreground)]/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
