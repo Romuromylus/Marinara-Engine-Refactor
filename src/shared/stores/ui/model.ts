@@ -267,6 +267,7 @@ export interface UIState {
   showModelName: boolean;
   showTokenUsage: boolean;
   showMessageNumbers: boolean;
+  collapseHiddenAiMessages: boolean;
   guideGenerations: boolean;
   showQuickRepliesMenu: boolean;
   showQuickReplyPostOnly: boolean;
@@ -467,6 +468,7 @@ export interface UIState {
   setShowModelName: (v: boolean) => void;
   setShowTokenUsage: (v: boolean) => void;
   setShowMessageNumbers: (v: boolean) => void;
+  setCollapseHiddenAiMessages: (v: boolean) => void;
   setGuideGenerations: (v: boolean) => void;
   setShowQuickRepliesMenu: (v: boolean) => void;
   setShowQuickReplyPostOnly: (v: boolean) => void;

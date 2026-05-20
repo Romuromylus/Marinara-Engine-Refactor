@@ -35,6 +35,10 @@ interface ParsedGroup {
   members: Persona[];
 }
 
+function isRandomPoolEnabled(value: unknown): boolean {
+  return value === true || value === "true" || value === "1";
+}
+
 export function QuickSwitcherMobile() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"connections" | "personas">("connections");
@@ -54,7 +58,7 @@ export function QuickSwitcherMobile() {
   const isRandom = activeConnectionId === "random";
 
   const sortedConnections = filterLanguageGenerationConnections(
-    (connections ?? []) as Array<{ id: string; name: string; provider?: string; useForRandom?: string }>,
+    (connections ?? []) as Array<{ id: string; name: string; provider?: string; useForRandom?: string | boolean | null }>,
   ).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   const sortedPersonas = ((rawPersonas ?? []) as Persona[])
@@ -290,7 +294,7 @@ export function QuickSwitcherMobile() {
                 </button>
                 <div className="mx-2 my-1 h-px bg-[var(--border)]" />
                 {sortedConnections.map((conn) => {
-                  const inPool = conn.useForRandom === "true";
+                  const inPool = isRandomPoolEnabled(conn.useForRandom);
                   const isActive = activeConnectionId === conn.id;
                   if (isRandom) {
                     return (

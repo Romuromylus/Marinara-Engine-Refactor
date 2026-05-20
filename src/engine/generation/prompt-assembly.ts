@@ -7,6 +7,7 @@ import { wrapContent } from "../generation-core/prompt/format-engine";
 import { mergeAdjacentMessages, squashLeadingSystemMessages } from "../generation-core/prompt/merger";
 import { applyRegexScriptsToPromptMessages } from "../generation-core/regex/regex-application";
 import { resolveMacros, type MacroContext } from "../shared/macros/macro-engine";
+import { compileChatSummaryEntries, normalizeChatSummaryEntries } from "../shared/text/chat-summary-entries";
 import type { GameActiveState, GameCampaignPlan, GameMap, GameNpc, HudWidget, SessionSummary } from "../contracts/types/game";
 import { buildGmFormatReminder, buildGmSystemPrompt, type GmPromptContext } from "../modes/game/prompts/gm-prompts";
 import { buildGenerationPromptPresetCandidates } from "./prompt-preset-selection";
@@ -682,7 +683,8 @@ function buildRoleplayScenePromptBlock(
 
 function chatSummary(chat: JsonRecord): string | null {
   const meta = parseRecord(chat.metadata);
-  const parts = [meta.conversationSummary, meta.summary, meta.daySummaries, meta.weekSummaries, meta.lastRoleplaySceneSummary]
+  const rollingSummary = compileChatSummaryEntries(normalizeChatSummaryEntries(meta.summaryEntries)) ?? meta.summary;
+  const parts = [meta.conversationSummary, rollingSummary, meta.daySummaries, meta.weekSummaries, meta.lastRoleplaySceneSummary]
     .map((value) => (typeof value === "string" ? value : isRecord(value) || Array.isArray(value) ? JSON.stringify(value) : ""))
     .filter((value) => value.trim().length > 0);
   return parts.length > 0 ? parts.join("\n\n") : null;

@@ -562,6 +562,10 @@ function buildForkContinuityMessage(sceneMeta: JsonRecord): string | null {
   return ["Hidden continuity carried from the original scene branch.", "", ...lines].join("\n");
 }
 
+function isStoredBooleanTrue(value: unknown): boolean {
+  return value === true || value === "true" || value === "1";
+}
+
 async function resolveConnectionId(
   storage: StorageGateway,
   chat: JsonRecord,
@@ -571,14 +575,15 @@ async function resolveConnectionId(
   const chatConnectionId = stringValue(chat.connectionId).trim();
   const connections = await storage.list<JsonRecord>("connections");
   if (chatConnectionId === "random") {
-    const pool = connections.filter((connection) => connection.useForRandom === true);
+    const pool = connections.filter((connection) => isStoredBooleanTrue(connection.useForRandom));
     const selected = pool[Math.floor(Math.random() * pool.length)];
     if (!selected?.id) throw new Error("No connections marked for the random pool");
     return stringValue(selected.id);
   }
   if (chatConnectionId) return chatConnectionId;
   const selected =
-    connections.find((connection) => connection.isDefault === true || connection.default === true) ?? connections[0];
+    connections.find((connection) => isStoredBooleanTrue(connection.isDefault) || isStoredBooleanTrue(connection.default)) ??
+    connections[0];
   const id = stringValue(selected?.id);
   if (!id) throw new Error("No connection configured");
   return id;

@@ -24,6 +24,10 @@ type PresetRow = {
   sectionOrder?: string | string[];
 };
 
+function isStoredBooleanTrue(value: unknown): boolean {
+  return value === true || value === "true" || value === "1";
+}
+
 export function PresetsPanel() {
   const { data: presets, isLoading } = usePresets();
   const deletePreset = useDeletePreset();
@@ -277,7 +281,7 @@ export function PresetsPanel() {
           const isBulkSelected = selectedPresetIds.has(preset.id);
           const sectionCount = getSectionCount(preset);
           const wrapFormat = (preset.wrapFormat ?? "xml") as string;
-          const isDefault = preset.isDefault === "true";
+          const isDefault = isStoredBooleanTrue(preset.isDefault);
 
           return (
             <div
