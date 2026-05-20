@@ -141,7 +141,6 @@ export function RoleplayHUD({
       },
       personaStats: [],
     };
-    discardPendingGameStatePatch(chatId);
     const prev = useGameStateStore.getState().current;
     if (prev?.chatId === chatId) {
       setGameState({ ...prev, ...cleared } as GameState);
@@ -155,7 +154,9 @@ export function RoleplayHUD({
         ...cleared,
       } as GameState);
     }
-    worldStateApi.patch(chatId, { ...cleared, manual: true, clearOverrides: true }).catch(() => {});
+    void discardPendingGameStatePatch(chatId)
+      .then(() => worldStateApi.patch(chatId, { ...cleared, manual: true, clearOverrides: true }))
+      .catch(() => {});
     // Clear committed agent runs & memory from DB + reset client state
     invokeTauri("agent_runs_clear_for_chat", { chatId }).catch(() => {});
     resetAgentStore();
