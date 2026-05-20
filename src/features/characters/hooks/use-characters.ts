@@ -63,7 +63,23 @@ export function useUpdateCharacter() {
       versionReason?: string;
       skipVersionSnapshot?: boolean;
     }) => storageApi.update("characters", id, data),
-    onSuccess: (_data, variables) => {
+    onSuccess: (updatedCharacter, variables) => {
+      qc.setQueryData<unknown[] | undefined>(characterKeys.list(), (old) => {
+        if (!Array.isArray(old)) return old;
+        if (!updatedCharacter || typeof updatedCharacter !== "object") return old;
+        const updated = updatedCharacter as Record<string, unknown> & { id?: string };
+        const updatedId = updated.id ?? variables.id;
+        return old.map((entry) => {
+          const row = entry as Record<string, unknown> & { id?: string };
+          return row?.id === updatedId ? { ...row, ...updated } : entry;
+        });
+      });
+      qc.setQueryData<unknown | undefined>(characterKeys.detail(variables.id), (old: unknown | undefined) => {
+        if (!updatedCharacter || typeof updatedCharacter !== "object") return old;
+        return old && typeof old === "object"
+          ? { ...(old as Record<string, unknown>), ...(updatedCharacter as Record<string, unknown>) }
+          : updatedCharacter;
+      });
       qc.invalidateQueries({ queryKey: characterKeys.list() });
       qc.invalidateQueries({ queryKey: characterKeys.detail(variables.id) });
       qc.invalidateQueries({ queryKey: characterKeys.versions(variables.id) });

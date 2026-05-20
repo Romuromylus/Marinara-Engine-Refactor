@@ -72,6 +72,8 @@ import { chatKeys } from "../../chats/hooks/use-chats";
 import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
 import { TrackerPanelIcon } from "../../../shared/components/ui/TrackerPanelIcon";
 import { ConversationSoundSetting, ToggleSetting } from "./settings/SettingControls";
+import { TrackerCardColorSettings } from "./settings/TrackerCardColorSettings";
+import { TrackerPanelDisplaySettings } from "./settings/TrackerPanelDisplaySettings";
 import { DraftNumberInput } from "../../../shared/components/ui/DraftNumberInput";
 import { inspectCharacterFilesForEmbeddedLorebooks } from "../../../shared/lib/character-import";
 import { ProfileImportSection } from "./ProfileImportSection";
@@ -1307,7 +1309,9 @@ function AppearanceSettings() {
             onChange={setTrackerPanelUseExpressionSprites}
             help="When on, tracker portraits can switch to Expression Engine sprites if that agent is enabled for the chat and the character has matching sprite images."
           />
+          <TrackerPanelDisplaySettings />
           <TrackerPanelCardOrderSetting />
+          <TrackerCardColorSettings />
         </div>
       </div>
 

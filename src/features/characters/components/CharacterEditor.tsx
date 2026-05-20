@@ -82,7 +82,6 @@ import { HelpTooltip } from "../../../shared/components/ui/HelpTooltip";
 import { exportApi } from "../../../shared/api/export-api";
 import { invokeTauri } from "../../../shared/api/tauri-client";
 import { ColorPicker } from "../../../shared/components/ui/ColorPicker";
-import { TrackerCardColorControls } from "../../../shared/components/ui/TrackerCardColorControls";
 import { ExpandedTextarea } from "../../../shared/components/ui/ExpandedTextarea";
 import { Modal } from "../../../shared/components/ui/Modal";
 import { SpriteFrameEditor } from "../../../shared/components/ui/SpriteFrameEditor";
@@ -2994,7 +2993,6 @@ function ColorsTab({
   const nameColor = (formData.extensions.nameColor as string) ?? "";
   const dialogueColor = (formData.extensions.dialogueColor as string) ?? "";
   const boxColor = (formData.extensions.boxColor as string) ?? "";
-  const trackerCardColors = parseTrackerCardColorConfig(formData.extensions.trackerCardColors);
   const [extracting, setExtracting] = useState(false);
 
   const handleExtract = async () => {
@@ -3123,14 +3121,6 @@ function ColorsTab({
           <li>&bull; Leave any field empty to use the default theme colors.</li>
         </ul>
       </div>
-
-      <TrackerCardColorControls
-        value={trackerCardColors}
-        onChange={(value) => updateExtension("trackerCardColors", value)}
-        chatColors={{ nameColor, dialogueColor, boxColor }}
-        entityLabel="Character"
-        previewName={formData.name || "Character"}
-      />
     </div>
   );
 }

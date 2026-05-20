@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { CharacterStat, GameState, PresentCharacter } from "../../../engine/contracts/types/game-state";
 import type { Persona, TrackerCardColorConfig } from "../../../engine/contracts/types/persona";
+import type { TrackerTemperatureUnit } from "../../../shared/stores/ui.store";
 import type { SpriteInfo } from "../../characters/hooks/use-characters";
 import {
   DEFAULT_TRACKER_CARD_ACCENT,
@@ -315,10 +316,15 @@ export function getTemperatureColor(temperature: string | null | undefined) {
   return "text-red-400";
 }
 
-export function getTemperatureGaugeDisplay(temperature: string | null | undefined) {
+export function getTemperatureGaugeDisplay(
+  temperature: string | null | undefined,
+  unit: TrackerTemperatureUnit = "celsius",
+) {
   const parsed = parseTemperatureValue(temperature);
   const hinted = getTemperatureKeywordHint(temperature);
   const value = parsed ?? hinted;
+  const displayValue = parsed !== null && unit === "fahrenheit" ? Math.round(parsed * (9 / 5) + 32) : parsed;
+  const unitLabel = unit === "fahrenheit" ? "F" : "C";
   const percent =
     value === null ? 42 : Math.max(8, Math.min(96, Math.round(((Math.max(-12, Math.min(42, value)) + 12) / 54) * 100)));
   const color =
@@ -334,7 +340,7 @@ export function getTemperatureGaugeDisplay(temperature: string | null | undefine
 
   return {
     color,
-    label: parsed !== null ? `${parsed}°C` : visibleText(temperature, "--"),
+    label: displayValue !== null ? `${displayValue}°${unitLabel}` : visibleText(temperature, "--"),
     percent,
   };
 }

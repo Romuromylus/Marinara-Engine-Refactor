@@ -46,16 +46,24 @@ export interface TrackerCardColorConfig {
   mode?: TrackerCardColorMode;
   /** Tracker card display color/gradient. */
   nameColor?: string;
+  /** Whether the display paint participates in tracker card styling. */
+  displayEnabled?: boolean;
   /** Tracker card display paint opacity, 0-100. */
   nameColorOpacity?: number;
   /** Tracker card dialogue/accent color. */
   dialogueColor?: string;
+  /** Whether the accent paint participates in tracker card styling. */
+  accentEnabled?: boolean;
   /** Tracker card dialogue/accent paint opacity, 0-100. */
   dialogueColorOpacity?: number;
   /** Tracker card surface tint color. */
   boxColor?: string;
+  /** Whether the surface paint participates in tracker card styling. */
+  surfaceEnabled?: boolean;
   /** Tracker card surface paint opacity, 0-100. */
   boxColorOpacity?: number;
+  /** How much material brightness/lift the card surface uses, 0-100. */
+  materialBrightness?: number;
   /** How strongly selected colors wash into the card surface, 0-100. */
   tintIntensity?: number;
   /** How strongly selected colors affect glows, borders, and hairlines, 0-100. */
@@ -64,6 +72,12 @@ export interface TrackerCardColorConfig {
   contrastIntensity?: number;
   /** Portrait stage background treatment behind transparent sprites. */
   portraitStageBackground?: TrackerCardPortraitStageBackground;
+  /** Persona tracker portrait focus, 0 = left, 100 = right. */
+  portraitFocusX?: number;
+  /** Persona tracker portrait focus, 0 = top, 100 = bottom. */
+  portraitFocusY?: number;
+  /** Persona tracker portrait zoom multiplier. */
+  portraitZoom?: number;
 }
 
 /** Avatar crop — current source-rectangle format. A square region of the source

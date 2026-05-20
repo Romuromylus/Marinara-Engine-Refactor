@@ -1,8 +1,15 @@
 import { createJSONStorage } from "zustand/middleware";
+import {
+  normalizeTrackerPanelCollapsedSections,
+  normalizeTrackerPanelSectionOrder,
+  normalizeTrackerPanelSizeProfile,
+  normalizeTrackerTemperatureUnit,
+  normalizeTrackerThoughtBubbleDisplay,
+} from "./model";
 import type { UIState } from "./model";
 
 export const UI_STORE_NAME = "marinara-engine-ui-tauri";
-export const UI_STORE_VERSION = 1;
+export const UI_STORE_VERSION = 2;
 
 export function createDebouncedUiStorage() {
   return createJSONStorage(() => {
@@ -52,7 +59,10 @@ export function partializeUiState(state: UIState) {
     trackerPanelSide: state.trackerPanelSide,
     trackerPanelHideHudWidgets: state.trackerPanelHideHudWidgets,
     trackerPanelUseExpressionSprites: state.trackerPanelUseExpressionSprites,
-    trackerPanelWidth: state.trackerPanelWidth,
+    trackerPanelSizeProfile: state.trackerPanelSizeProfile,
+    trackerPanelThoughtBubbleDisplay: state.trackerPanelThoughtBubbleDisplay,
+    trackerPanelDockedThoughtsAlwaysVisible: state.trackerPanelDockedThoughtsAlwaysVisible,
+    trackerTemperatureUnit: state.trackerTemperatureUnit,
     trackerPanelCollapsedSections: state.trackerPanelCollapsedSections,
     trackerPanelSectionOrder: state.trackerPanelSectionOrder,
     theme: state.theme,
@@ -135,5 +145,25 @@ export function partializeUiState(state: UIState) {
     impersonateBlockAgents: state.impersonateBlockAgents,
     learnedGameSetupOptions: state.learnedGameSetupOptions,
     rememberedGameSetupText: state.rememberedGameSetupText,
+  };
+}
+
+export function migrateUiState(persistedState: unknown): Partial<UIState> {
+  const state =
+    persistedState && typeof persistedState === "object" && !Array.isArray(persistedState)
+      ? { ...(persistedState as Record<string, unknown>) }
+      : {};
+
+  const legacyWidth = state.trackerPanelWidth;
+  delete state.trackerPanelWidth;
+
+  return {
+    ...state,
+    trackerPanelSizeProfile: normalizeTrackerPanelSizeProfile(state.trackerPanelSizeProfile, legacyWidth),
+    trackerPanelThoughtBubbleDisplay: normalizeTrackerThoughtBubbleDisplay(state.trackerPanelThoughtBubbleDisplay),
+    trackerPanelDockedThoughtsAlwaysVisible: state.trackerPanelDockedThoughtsAlwaysVisible === true,
+    trackerTemperatureUnit: normalizeTrackerTemperatureUnit(state.trackerTemperatureUnit),
+    trackerPanelCollapsedSections: normalizeTrackerPanelCollapsedSections(state.trackerPanelCollapsedSections),
+    trackerPanelSectionOrder: normalizeTrackerPanelSectionOrder(state.trackerPanelSectionOrder),
   };
 }

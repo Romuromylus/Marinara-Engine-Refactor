@@ -2,6 +2,11 @@ import type { TrackerCardColorConfig, TrackerCardColorMode, TrackerCardPortraitS
 
 export const DEFAULT_TRACKER_CARD_COLOR_MODE: TrackerCardColorMode = "chat";
 export const DEFAULT_TRACKER_CARD_PORTRAIT_STAGE_BACKGROUND: TrackerCardPortraitStageBackground = "ambient";
+export const TRACKER_CARD_PORTRAIT_FOCUS_X_DEFAULT = 50;
+export const TRACKER_CARD_PORTRAIT_FOCUS_Y_DEFAULT = 36;
+export const TRACKER_CARD_PORTRAIT_ZOOM_DEFAULT = 1;
+export const TRACKER_CARD_PORTRAIT_ZOOM_MIN = 0.75;
+export const TRACKER_CARD_PORTRAIT_ZOOM_MAX = 2.25;
 
 export interface TrackerCardFinish {
   tintIntensity: number;
@@ -13,6 +18,12 @@ export interface TrackerCardPaintOpacity {
   nameColorOpacity: number;
   dialogueColorOpacity: number;
   boxColorOpacity: number;
+}
+
+export interface TrackerCardPaintEnabled {
+  displayEnabled: boolean;
+  accentEnabled: boolean;
+  surfaceEnabled: boolean;
 }
 
 export interface TrackerCardPortraitStageVars {
@@ -198,6 +209,18 @@ function getClampedFinishValue(value: unknown): number | undefined {
   return Math.max(0, Math.min(100, Math.round(numberValue)));
 }
 
+function getClampedPortraitPercent(value: unknown, fallback: number): number {
+  const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numberValue)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(numberValue)));
+}
+
+function getClampedPortraitZoom(value: unknown): number | undefined {
+  const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numberValue)) return undefined;
+  return Math.max(TRACKER_CARD_PORTRAIT_ZOOM_MIN, Math.min(TRACKER_CARD_PORTRAIT_ZOOM_MAX, numberValue));
+}
+
 function parseRecord(value: unknown): Record<string, unknown> | null {
   if (!value) return null;
 
@@ -222,23 +245,34 @@ export function cleanTrackerCardColorConfig(config: TrackerCardColorConfig | nul
   const nameColorOpacity = getClampedFinishValue(config?.nameColorOpacity);
   const dialogueColorOpacity = getClampedFinishValue(config?.dialogueColorOpacity);
   const boxColorOpacity = getClampedFinishValue(config?.boxColorOpacity);
+  const materialBrightness = getClampedFinishValue(config?.materialBrightness);
   const tintIntensity = getClampedFinishValue(config?.tintIntensity);
   const glowIntensity = getClampedFinishValue(config?.glowIntensity);
   const contrastIntensity = getClampedFinishValue(config?.contrastIntensity);
   const portraitStageBackground = normalizeTrackerCardPortraitStageBackground(config?.portraitStageBackground);
+  const portraitFocusX = getClampedPortraitPercent(config?.portraitFocusX, TRACKER_CARD_PORTRAIT_FOCUS_X_DEFAULT);
+  const portraitFocusY = getClampedPortraitPercent(config?.portraitFocusY, TRACKER_CARD_PORTRAIT_FOCUS_Y_DEFAULT);
+  const portraitZoom = getClampedPortraitZoom(config?.portraitZoom);
 
   return {
     mode: normalizeTrackerCardColorMode(config?.mode),
     ...(config?.nameColor ? { nameColor: config.nameColor } : {}),
+    ...(config?.displayEnabled === false && { displayEnabled: false }),
     ...(nameColorOpacity !== undefined && { nameColorOpacity }),
     ...(config?.dialogueColor ? { dialogueColor: config.dialogueColor } : {}),
+    ...(config?.accentEnabled === false && { accentEnabled: false }),
     ...(dialogueColorOpacity !== undefined && { dialogueColorOpacity }),
     ...(config?.boxColor ? { boxColor: config.boxColor } : {}),
+    ...(config?.surfaceEnabled === false && { surfaceEnabled: false }),
     ...(boxColorOpacity !== undefined && { boxColorOpacity }),
+    ...(materialBrightness !== undefined && { materialBrightness }),
     ...(tintIntensity !== undefined && { tintIntensity }),
     ...(glowIntensity !== undefined && { glowIntensity }),
     ...(contrastIntensity !== undefined && { contrastIntensity }),
     ...(portraitStageBackground !== DEFAULT_TRACKER_CARD_PORTRAIT_STAGE_BACKGROUND && { portraitStageBackground }),
+    ...(portraitFocusX !== TRACKER_CARD_PORTRAIT_FOCUS_X_DEFAULT && { portraitFocusX }),
+    ...(portraitFocusY !== TRACKER_CARD_PORTRAIT_FOCUS_Y_DEFAULT && { portraitFocusY }),
+    ...(portraitZoom !== undefined && portraitZoom !== TRACKER_CARD_PORTRAIT_ZOOM_DEFAULT && { portraitZoom }),
   };
 }
 
@@ -249,15 +283,22 @@ export function parseTrackerCardColorConfig(raw: unknown): TrackerCardColorConfi
   return cleanTrackerCardColorConfig({
     mode: normalizeTrackerCardColorMode(record.mode),
     nameColor: getString(record.nameColor),
+    displayEnabled: record.displayEnabled !== false,
     nameColorOpacity: getClampedFinishValue(record.nameColorOpacity),
     dialogueColor: getString(record.dialogueColor),
+    accentEnabled: record.accentEnabled !== false,
     dialogueColorOpacity: getClampedFinishValue(record.dialogueColorOpacity),
     boxColor: getString(record.boxColor),
+    surfaceEnabled: record.surfaceEnabled !== false,
     boxColorOpacity: getClampedFinishValue(record.boxColorOpacity),
+    materialBrightness: getClampedFinishValue(record.materialBrightness),
     tintIntensity: getClampedFinishValue(record.tintIntensity),
     glowIntensity: getClampedFinishValue(record.glowIntensity),
     contrastIntensity: getClampedFinishValue(record.contrastIntensity),
     portraitStageBackground: normalizeTrackerCardPortraitStageBackground(record.portraitStageBackground),
+    portraitFocusX: getClampedPortraitPercent(record.portraitFocusX, TRACKER_CARD_PORTRAIT_FOCUS_X_DEFAULT),
+    portraitFocusY: getClampedPortraitPercent(record.portraitFocusY, TRACKER_CARD_PORTRAIT_FOCUS_Y_DEFAULT),
+    portraitZoom: getClampedPortraitZoom(record.portraitZoom),
   });
 }
 
@@ -270,11 +311,22 @@ export function getTrackerCardFinish(
   mode = normalizeTrackerCardColorMode(config?.mode),
 ): TrackerCardFinish {
   const defaults = TRACKER_CARD_FINISH_DEFAULTS[mode];
+  const materialBrightness = getClampedFinishValue(config?.materialBrightness);
 
   return {
-    tintIntensity: getClampedFinishValue(config?.tintIntensity) ?? defaults.tintIntensity,
+    tintIntensity: getClampedFinishValue(config?.tintIntensity) ?? materialBrightness ?? defaults.tintIntensity,
     glowIntensity: getClampedFinishValue(config?.glowIntensity) ?? defaults.glowIntensity,
     contrastIntensity: getClampedFinishValue(config?.contrastIntensity) ?? defaults.contrastIntensity,
+  };
+}
+
+export function getTrackerCardPaintEnabled(
+  config: TrackerCardColorConfig | null | undefined,
+): TrackerCardPaintEnabled {
+  return {
+    displayEnabled: config?.displayEnabled !== false,
+    accentEnabled: config?.accentEnabled !== false,
+    surfaceEnabled: config?.surfaceEnabled !== false,
   };
 }
 
@@ -282,14 +334,19 @@ export function getTrackerCardPaintOpacity(config: TrackerCardColorConfig | null
   if (normalizeTrackerCardColorMode(config?.mode) === "default") {
     return TRACKER_CARD_PAINT_OPACITY_DEFAULTS;
   }
+  const enabled = getTrackerCardPaintEnabled(config);
 
   return {
-    nameColorOpacity:
-      getClampedFinishValue(config?.nameColorOpacity) ?? TRACKER_CARD_PAINT_OPACITY_DEFAULTS.nameColorOpacity,
-    dialogueColorOpacity:
-      getClampedFinishValue(config?.dialogueColorOpacity) ?? TRACKER_CARD_PAINT_OPACITY_DEFAULTS.dialogueColorOpacity,
-    boxColorOpacity:
-      getClampedFinishValue(config?.boxColorOpacity) ?? TRACKER_CARD_PAINT_OPACITY_DEFAULTS.boxColorOpacity,
+    nameColorOpacity: enabled.displayEnabled
+      ? (getClampedFinishValue(config?.nameColorOpacity) ?? TRACKER_CARD_PAINT_OPACITY_DEFAULTS.nameColorOpacity)
+      : 0,
+    dialogueColorOpacity: enabled.accentEnabled
+      ? (getClampedFinishValue(config?.dialogueColorOpacity) ??
+        TRACKER_CARD_PAINT_OPACITY_DEFAULTS.dialogueColorOpacity)
+      : 0,
+    boxColorOpacity: enabled.surfaceEnabled
+      ? (getClampedFinishValue(config?.boxColorOpacity) ?? TRACKER_CARD_PAINT_OPACITY_DEFAULTS.boxColorOpacity)
+      : 0,
   };
 }
 

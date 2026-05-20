@@ -11,11 +11,12 @@ import {
   Sparkles,
   Square,
 } from "lucide-react";
-import type { TrackerCardColorConfig, TrackerCardColorMode, TrackerCardPortraitStageBackground } from "../../../engine/contracts/types/persona";
-import { cn } from "../../lib/utils";
+import type { TrackerCardColorConfig, TrackerCardColorMode, TrackerCardPortraitStageBackground } from "../../../../engine/contracts/types/persona";
+import { cn } from "../../../../shared/lib/utils";
 import {
   cleanTrackerCardColorConfig,
   getTrackerCardFinish,
+  getTrackerCardPaintEnabled,
   getTrackerCardPaintOpacity,
   getTrackerCardPortraitStageBackground,
   getTrackerCardStylePalette,
@@ -23,9 +24,10 @@ import {
   normalizeTrackerCardColorMode,
   parseTrackerCardColorConfig,
   type TrackerCardFinish,
+  type TrackerCardPaintEnabled,
   type TrackerCardPaintOpacity,
-} from "../../lib/tracker-card-colors";
-import { ColorPicker } from "./ColorPicker";
+} from "../../../../shared/lib/tracker-card-colors";
+import { ColorPicker } from "../../../../shared/components/ui/ColorPicker";
 
 interface TrackerCardColorControlsProps {
   value: TrackerCardColorConfig | string | null | undefined;
@@ -69,11 +71,12 @@ const FINISH_PRESETS: Array<{
 
 const PAINT_OPACITY_OPTIONS: Array<{
   key: keyof TrackerCardPaintOpacity;
+  enabledKey: keyof TrackerCardPaintEnabled;
   label: string;
 }> = [
-  { key: "nameColorOpacity", label: "Display" },
-  { key: "dialogueColorOpacity", label: "Accent" },
-  { key: "boxColorOpacity", label: "Surface" },
+  { key: "nameColorOpacity", enabledKey: "displayEnabled", label: "Display" },
+  { key: "dialogueColorOpacity", enabledKey: "accentEnabled", label: "Accent" },
+  { key: "boxColorOpacity", enabledKey: "surfaceEnabled", label: "Surface" },
 ];
 
 const PORTRAIT_STAGE_BACKGROUND_OPTIONS: Array<{
@@ -254,6 +257,7 @@ export function TrackerCardColorControls({
   const config = typeof value === "string" ? parseTrackerCardColorConfig(value) : cleanTrackerCardColorConfig(value);
   const mode = normalizeTrackerCardColorMode(config.mode);
   const finish = getTrackerCardFinish(config, mode);
+  const paintEnabled = getTrackerCardPaintEnabled(config);
   const paintOpacity = getTrackerCardPaintOpacity(config);
   const portraitStageBackground = getTrackerCardPortraitStageBackground(config);
   const effectiveColors = getEffectiveColors(mode, config, chatColors);
@@ -297,6 +301,10 @@ export function TrackerCardColorControls({
   };
 
   const updatePaintOpacity = (key: keyof TrackerCardPaintOpacity, nextValue: number) => {
+    onChange(cleanTrackerCardColorConfig({ ...config, [key]: nextValue }));
+  };
+
+  const updatePaintEnabled = (key: keyof TrackerCardPaintEnabled, nextValue: boolean) => {
     onChange(cleanTrackerCardColorConfig({ ...config, [key]: nextValue }));
   };
 
@@ -618,19 +626,29 @@ export function TrackerCardColorControls({
               <div className="grid gap-2 sm:grid-cols-3">
                 {PAINT_OPACITY_OPTIONS.map((option) => {
                   const value = paintOpacity[option.key];
+                  const enabled = paintEnabled[option.enabledKey];
                   return (
                     <label key={option.key} className="min-w-0 space-y-1">
                       <span className="flex items-center justify-between gap-2 text-[0.625rem] text-[var(--muted-foreground)]">
-                        <span>{option.label}</span>
+                        <span className="inline-flex min-w-0 items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={(event) => updatePaintEnabled(option.enabledKey, event.target.checked)}
+                            className="h-3 w-3 rounded border-[var(--border)] accent-[var(--primary)]"
+                          />
+                          <span>{option.label}</span>
+                        </span>
                         <span className="font-mono tabular-nums">{value}%</span>
                       </span>
                       <input
                         type="range"
                         min={0}
                         max={100}
+                        disabled={!enabled}
                         value={value}
                         onChange={(event) => updatePaintOpacity(option.key, Number(event.target.value))}
-                        className="h-1.5 w-full cursor-pointer accent-[var(--primary)]"
+                        className="h-1.5 w-full cursor-pointer accent-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
                   );
@@ -652,6 +670,7 @@ export function TrackerCardColorControls({
               <div className="grid gap-2 lg:grid-cols-3">
                 {PAINT_OPACITY_OPTIONS.map((option) => {
                   const value = paintOpacity[option.key];
+                  const enabled = paintEnabled[option.enabledKey];
                   const colorKey =
                     option.key === "nameColorOpacity"
                       ? "nameColor"
@@ -672,16 +691,25 @@ export function TrackerCardColorControls({
                       />
                       <label className="block min-w-0 space-y-1">
                         <span className="flex items-center justify-between gap-2 text-[0.625rem] text-[var(--muted-foreground)]">
-                          <span>Strength</span>
+                          <span className="inline-flex min-w-0 items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={enabled}
+                              onChange={(event) => updatePaintEnabled(option.enabledKey, event.target.checked)}
+                              className="h-3 w-3 rounded border-[var(--border)] accent-[var(--primary)]"
+                            />
+                            <span>Strength</span>
+                          </span>
                           <span className="font-mono tabular-nums">{value}%</span>
                         </span>
                         <input
                           type="range"
                           min={0}
                           max={100}
+                          disabled={!enabled}
                           value={value}
                           onChange={(event) => updatePaintOpacity(option.key, Number(event.target.value))}
-                          className="h-1.5 w-full cursor-pointer accent-[var(--primary)]"
+                          className="h-1.5 w-full cursor-pointer accent-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40"
                         />
                       </label>
                     </div>

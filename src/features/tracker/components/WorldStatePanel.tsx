@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Clock, MapPin } from "lucide-react";
 import type { GameState } from "../../../engine/contracts/types/game-state";
 import type { GameStatePatchField } from "../../world-state/hooks/use-world-state-patcher";
+import { useUIStore, type TrackerTemperatureUnit } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
 import { WORLD_GRID_BASE_CLASS } from "./tracker-data-sidebar.helpers";
 import {
@@ -32,6 +33,7 @@ export function WorldStatePanel({
   onToggleCollapsed?: () => void;
 }) {
   const dashboardGridClass = getWorldDashboardGridClass(state?.weather, state?.temperature, state?.location);
+  const trackerTemperatureUnit = useUIStore((s) => s.trackerTemperatureUnit);
 
   return (
     <div
@@ -61,6 +63,7 @@ export function WorldStatePanel({
           <WorldForecastTile
             weather={state?.weather}
             temperature={state?.temperature}
+            temperatureUnit={trackerTemperatureUnit}
             onSaveWeather={(value) => onSaveField("weather", value || null)}
             onSaveTemperature={(value) => onSaveField("temperature", value || null)}
           />
@@ -209,16 +212,18 @@ function WorldDateTile({ value, onSave }: { value: string | null | undefined; on
 function WorldForecastTile({
   weather,
   temperature,
+  temperatureUnit,
   onSaveWeather,
   onSaveTemperature,
 }: {
   weather: string | null | undefined;
   temperature: string | null | undefined;
+  temperatureUnit: TrackerTemperatureUnit;
   onSaveWeather?: (value: string) => void;
   onSaveTemperature?: (value: string) => void;
 }) {
   const weatherText = visibleText(weather, "Set weather");
-  const temperatureDisplay = getTemperatureGaugeDisplay(temperature);
+  const temperatureDisplay = getTemperatureGaugeDisplay(temperature, temperatureUnit);
   return (
     <WorldTileShell label="Forecast" className="min-h-[3.125rem]">
       <div className="@container relative h-full min-w-0 overflow-hidden">
@@ -257,7 +262,7 @@ function WorldForecastTile({
           >
             <span className="flex h-7 w-full min-w-0 items-center justify-center overflow-visible @min-[10rem]:h-7 @min-[14rem]:h-8">
               <span className="origin-center scale-[0.74] @min-[7rem]:scale-[0.78] @min-[10rem]:scale-[0.78] @min-[14rem]:scale-[0.88]">
-                <WorldThermometerGauge value={temperature} />
+                <WorldThermometerGauge value={temperature} temperatureUnit={temperatureUnit} />
               </span>
             </span>
             <span
@@ -275,8 +280,14 @@ function WorldForecastTile({
   );
 }
 
-function WorldThermometerGauge({ value }: { value: string | null | undefined }) {
-  const display = getTemperatureGaugeDisplay(value);
+function WorldThermometerGauge({
+  value,
+  temperatureUnit,
+}: {
+  value: string | null | undefined;
+  temperatureUnit: TrackerTemperatureUnit;
+}) {
+  const display = getTemperatureGaugeDisplay(value, temperatureUnit);
   const fillStyle = { backgroundColor: display.color };
   return (
     <div className="relative h-8 w-5">
