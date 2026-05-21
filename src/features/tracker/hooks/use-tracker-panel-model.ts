@@ -1,11 +1,14 @@
 import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { Message } from "../../../engine/contracts/types/chat";
 import type { PresentCharacter } from "../../../engine/contracts/types/game-state";
 import type { Persona } from "../../../engine/contracts/types/persona";
+import { storageApi } from "../../../shared/api/storage-api";
 import { parseCharacterDisplayData } from "../../../shared/lib/character-display";
 import { useChatStore } from "../../../shared/stores/chat.store";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import type { TrackerPanelSizeProfile, TrackerPanelSide, TrackerTemperatureUnit, TrackerThoughtBubbleDisplay } from "../../../shared/stores/ui.store";
-import { useChat, useChatMessages } from "../../chats/hooks/use-chats";
+import { chatKeys, preserveRecentMessageContentEdit, useChat } from "../../chats/hooks/use-chats";
 import { useCharacters, usePersonas } from "../../characters/hooks/use-characters";
 import { useTrackerStateController } from "../../world-state/hooks/use-tracker-state-controller";
 import {
@@ -24,6 +27,25 @@ import {
   parseMetadataRecord,
 } from "../components/tracker-metadata.helpers";
 import { isSpriteLookupCharacterId } from "../components/tracker-sprite.helpers";
+
+const TRACKER_SPRITE_MESSAGE_LIMIT = 20;
+
+function useTrackerSpriteMessages(chatId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: [
+      ...chatKeys.messages(chatId ?? ""),
+      "tracker-sprite-expressions",
+      TRACKER_SPRITE_MESSAGE_LIMIT,
+    ],
+    queryFn: () =>
+      storageApi
+        .listChatMessages<Message>(chatId!, { limit: TRACKER_SPRITE_MESSAGE_LIMIT })
+        .then((messages) =>
+          chatId ? messages.map((message) => preserveRecentMessageContentEdit(chatId, message)) : messages,
+        ),
+    enabled: !!chatId && enabled,
+  });
+}
 
 export interface TrackerSpriteLookup {
   knownIds: Set<string>;
@@ -118,7 +140,7 @@ export function useTrackerPanelModel(): TrackerPanelModel {
   const characterDataLookupEnabled = !!activeChatId && characterTrackerEnabled;
   const personaDataLookupEnabled = !!activeChatId && personaTrackerEnabled;
   const agentConfigLookupEnabled = !!activeChatId && characterTrackerEnabled;
-  const { data: messageData } = useChatMessages(activeChatId, 20, spriteExpressionLookupEnabled);
+  const { data: messageData } = useTrackerSpriteMessages(activeChatId, spriteExpressionLookupEnabled);
   const { data: charactersData } = useCharacters(characterDataLookupEnabled);
   const { data: personasData } = usePersonas(personaDataLookupEnabled);
 
@@ -163,7 +185,7 @@ export function useTrackerPanelModel(): TrackerPanelModel {
     [characterSpriteLookup],
   );
 
-  const cachedMessages = useMemo(() => messageData?.pages.flat() ?? [], [messageData]);
+  const cachedMessages = useMemo(() => messageData ?? [], [messageData]);
   const spriteExpressions = useMemo(
     () =>
       getLatestSpriteExpressionsFromMessages(cachedMessages as Array<{ role?: string; extra?: unknown }>) ??
