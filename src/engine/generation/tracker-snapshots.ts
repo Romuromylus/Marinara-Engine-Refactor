@@ -336,22 +336,22 @@ export function trackerSnapshotTargetFromMessage(message: unknown): TrackerSnaps
   };
 }
 
-function snapshotTime(value: unknown): number {
+function snapshotCreatedTime(value: unknown): number {
   const record = parseRecord(value);
-  const updated = Date.parse(readString(record.updatedAt));
-  if (Number.isFinite(updated)) return updated;
   const created = Date.parse(readString(record.createdAt));
-  return Number.isFinite(created) ? created : 0;
+  if (Number.isFinite(created)) return created;
+  const updated = Date.parse(readString(record.updatedAt));
+  return Number.isFinite(updated) ? updated : 0;
 }
 
 function sortNewestFirst(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  return [...rows].sort((left, right) => snapshotTime(right) - snapshotTime(left));
+  return [...rows].sort((left, right) => snapshotCreatedTime(right) - snapshotCreatedTime(left));
 }
 
 async function listTrackerSnapshotRows(storage: StorageGateway, chatId: string): Promise<Array<Record<string, unknown>>> {
   const rows = await storage.list<Record<string, unknown>>("game-state-snapshots", {
     filters: { chatId, kind: "tracker" },
-    orderBy: "updatedAt",
+    orderBy: "createdAt",
     descending: true,
   });
   return sortNewestFirst(rows.map(parseRecord).filter((row) => trackerSnapshotTargetFromRecord(row)));
