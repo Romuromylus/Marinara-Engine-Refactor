@@ -2,6 +2,10 @@ import type { CSSProperties } from "react";
 import type { PresentCharacter } from "../../../engine/contracts/types/game-state";
 import {
   DEFAULT_TRACKER_CARD_ACCENT,
+  TRACKER_CARD_NEUTRAL_LIFT,
+  TRACKER_CARD_NEUTRAL_MATERIAL,
+  TRACKER_CARD_NEUTRAL_SURFACE_BOTTOM,
+  TRACKER_CARD_NEUTRAL_SURFACE_TOP,
   getTrackerCardCssPaintValue,
   getTrackerCardSkinFinish,
   getTrackerCardSolidColor,
@@ -9,15 +13,6 @@ import {
 } from "../../../shared/lib/tracker-card-colors";
 import { type TrackerProfileColors, getTrackerProfilePalette } from "./tracker-profile-colors";
 import { withTrackerProfileStyle } from "./tracker-profile-style-vars";
-
-const TRACKER_CARD_NEUTRAL_SURFACE_TOP =
-  "var(--tracker-card-neutral-surface-top, color-mix(in srgb, color-mix(in srgb, var(--secondary) 66%, var(--accent) 34%) 91%, var(--primary) 9%))";
-const TRACKER_CARD_NEUTRAL_SURFACE_BOTTOM =
-  "var(--tracker-card-neutral-surface-bottom, color-mix(in srgb, color-mix(in srgb, var(--secondary) 78%, var(--accent) 22%) 94%, var(--muted-foreground) 6%))";
-const TRACKER_CARD_NEUTRAL_MATERIAL =
-  "var(--tracker-card-neutral-material, color-mix(in srgb, color-mix(in srgb, var(--secondary) 68%, var(--accent) 32%) 89%, var(--primary) 11%))";
-const TRACKER_CARD_NEUTRAL_LIFT =
-  "var(--tracker-card-neutral-lift, color-mix(in srgb, var(--muted-foreground) 72%, var(--primary) 28%))";
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));

@@ -168,6 +168,115 @@ export interface TrackerCardStyleVars {
   backgroundBlendMode: string;
 }
 
+export type TrackerCardCssVariableStyle = Record<`--${string}`, string | undefined> & {
+  background?: string;
+  backgroundBlendMode?: string;
+};
+
+type TrackerCardStyleVarKey = Exclude<keyof TrackerCardStyleVars, "background" | "backgroundBlendMode">;
+
+const TRACKER_CARD_STYLE_VAR_KEYS = [
+  "accent",
+  "accentHighlightOpacity",
+  "accentLayer",
+  "accentSolid",
+  "accentWashOpacity",
+  "bodyRuleOpacity",
+  "bodyWashOpacity",
+  "box",
+  "boxLayer",
+  "dialogueBorder",
+  "dialogueGlow",
+  "displayLayer",
+  "displayOpacity",
+  "displayRailOpacity",
+  "displaySolid",
+  "frame",
+  "frameBlend",
+  "fieldMaterial",
+  "fieldMaterialBlend",
+  "glowOpacity",
+  "icon",
+  "labelIcon",
+  "labelMutedText",
+  "labelText",
+  "material",
+  "materialBlend",
+  "mutedPanel",
+  "mutedPanelBlend",
+  "nameplate",
+  "nameplateGlow",
+  "nameplateRule",
+  "nameplateText",
+  "panel",
+  "panelBlend",
+  "panelMaterial",
+  "panelMaterialBlend",
+  "panelStrong",
+  "panelStrongBlend",
+  "portraitBase",
+  "portraitBottomGlowOpacity",
+  "portraitBottomRuleOpacity",
+  "portraitMediaBlur",
+  "portraitMediaOpacity",
+  "portraitMediaSaturate",
+  "portraitLight",
+  "portraitLightOpacity",
+  "portraitRim",
+  "portraitRimOpacity",
+  "portraitSideMaskOpacity",
+  "portraitVeil",
+  "rule",
+  "surface",
+  "surfaceBlend",
+  "surfaceLayer",
+  "surfaceSolid",
+  "slotRule",
+  "slotShadow",
+  "slotSurface",
+  "slotSurfaceBlend",
+  "tintOpacity",
+  "contrastSoftTop",
+  "contrastSoftMid",
+  "contrastSoftBottom",
+  "contrastStrongTop",
+  "contrastStrongMid",
+  "contrastStrongBottom",
+  "mutedText",
+  "numberText",
+  "rowRule",
+  "statFillGlow",
+  "statFillHighlight",
+  "statTrack",
+  "statTrackBlend",
+  "statTrackRing",
+  "statTrackShadow",
+  "text",
+] as const satisfies readonly TrackerCardStyleVarKey[];
+
+function toTrackerCardCssVariableName(prefix: `--${string}`, key: TrackerCardStyleVarKey): `--${string}` {
+  return `${prefix}-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+}
+
+export function getTrackerCardCssVariableStyle({
+  vars,
+  prefix,
+}: {
+  vars: TrackerCardStyleVars;
+  prefix: `--${string}`;
+}): TrackerCardCssVariableStyle {
+  const style: TrackerCardCssVariableStyle = {
+    background: vars.background,
+    backgroundBlendMode: vars.backgroundBlendMode,
+  };
+
+  for (const key of TRACKER_CARD_STYLE_VAR_KEYS) {
+    style[toTrackerCardCssVariableName(prefix, key)] = vars[key];
+  }
+
+  return style;
+}
+
 export interface TrackerCardSkinFinish {
   accentPanelMix: number;
   borderOpacity: number;
@@ -235,13 +344,13 @@ export const TRACKER_CARD_PAINT_ENABLED_DEFAULTS: TrackerCardPaintEnabled = {
 };
 
 export const DEFAULT_TRACKER_CARD_ACCENT = "var(--primary)";
-const TRACKER_CARD_NEUTRAL_SURFACE_TOP =
+export const TRACKER_CARD_NEUTRAL_SURFACE_TOP =
   "var(--tracker-card-neutral-surface-top, color-mix(in srgb, color-mix(in srgb, var(--secondary) 66%, var(--accent) 34%) 91%, var(--primary) 9%))";
-const TRACKER_CARD_NEUTRAL_SURFACE_BOTTOM =
+export const TRACKER_CARD_NEUTRAL_SURFACE_BOTTOM =
   "var(--tracker-card-neutral-surface-bottom, color-mix(in srgb, color-mix(in srgb, var(--secondary) 78%, var(--accent) 22%) 94%, var(--muted-foreground) 6%))";
-const TRACKER_CARD_NEUTRAL_MATERIAL =
+export const TRACKER_CARD_NEUTRAL_MATERIAL =
   "var(--tracker-card-neutral-material, color-mix(in srgb, color-mix(in srgb, var(--secondary) 68%, var(--accent) 32%) 89%, var(--primary) 11%))";
-const TRACKER_CARD_NEUTRAL_LIFT =
+export const TRACKER_CARD_NEUTRAL_LIFT =
   "var(--tracker-card-neutral-lift, color-mix(in srgb, var(--muted-foreground) 72%, var(--primary) 28%))";
 const TRACKER_CARD_ACTIVE_SURFACE_TOP =
   "var(--tracker-card-active-surface-top, color-mix(in srgb, var(--card) 72%, var(--background) 28%))";

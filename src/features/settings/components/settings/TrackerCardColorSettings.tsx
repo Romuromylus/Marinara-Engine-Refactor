@@ -125,16 +125,25 @@ function getTargetSavedConfig(target: TrackerCardColorTarget): SavedTrackerCardC
   };
 }
 
-function patchCharacterDataTrackerCardColors(rawData: unknown, serializedConfig: string) {
+function patchCharacterDataTrackerCardColors(
+  rawData: unknown,
+  serializedConfig: string,
+  previewBaseSerializedConfig?: string,
+) {
   const characterData = parseCharacterData(rawData);
   if (!characterData) return rawData;
+  const nextExtensions: Record<string, unknown> = {
+    ...getCharacterExtensions(characterData),
+    trackerCardColors: serializedConfig,
+  };
+  delete nextExtensions[TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD];
+  if (previewBaseSerializedConfig !== undefined) {
+    nextExtensions[TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD] = previewBaseSerializedConfig;
+  }
 
   const nextData = {
     ...characterData,
-    extensions: {
-      ...getCharacterExtensions(characterData),
-      trackerCardColors: serializedConfig,
-    },
+    extensions: nextExtensions,
   };
 
   return typeof rawData === "string" ? JSON.stringify(nextData) : nextData;
@@ -200,7 +209,7 @@ export function TrackerCardColorSettings() {
           if (!isRecord(character) || character.id !== target.id) return character;
           return {
             ...character,
-            data: patchCharacterDataTrackerCardColors(character.data, serializedConfig),
+            data: patchCharacterDataTrackerCardColors(character.data, serializedConfig, previewBaseSerializedConfig),
           };
         });
       });
@@ -299,6 +308,10 @@ export function TrackerCardColorSettings() {
       const extensions = getCharacterExtensions(characterData);
       const config = parseTrackerCardColorConfig(extensions.trackerCardColors);
       const serializedConfig = serializeTrackerCardColorConfig(config);
+      const previewBaseSerializedConfig = extensions[TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD];
+      const savedSerializedConfig =
+        typeof previewBaseSerializedConfig === "string" ? previewBaseSerializedConfig : serializedConfig;
+      const savedConfig = parseTrackerCardColorConfig(savedSerializedConfig);
       nextTargets.push({
         key: `character:${id}`,
         id,
@@ -309,8 +322,8 @@ export function TrackerCardColorSettings() {
         chatColors: getCharacterChatColors(characterData),
         config,
         serializedConfig,
-        savedConfig: config,
-        savedSerializedConfig: serializedConfig,
+        savedConfig,
+        savedSerializedConfig,
         characterData,
       });
     }
@@ -409,15 +422,17 @@ export function TrackerCardColorSettings() {
           ?.map((character) => (isRecord(character) && character.id === target.id ? character : null))
           .find((character): character is Record<string, unknown> => !!character)?.data ?? target.characterData;
       const characterData = parseCharacterData(latestCharacterData) ?? target.characterData;
+      const nextExtensions: Record<string, unknown> = {
+        ...getCharacterExtensions(characterData),
+        trackerCardColors: serializedConfig,
+      };
+      delete nextExtensions[TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD];
 
       await updateCharacter.mutateAsync({
         id: target.id,
         data: {
           ...characterData,
-          extensions: {
-            ...getCharacterExtensions(characterData),
-            trackerCardColors: serializedConfig,
-          },
+          extensions: nextExtensions,
         },
         skipVersionSnapshot: true,
         versionSource: "settings-tracker-card-colors",
@@ -607,7 +622,6 @@ export function TrackerCardColorSettings() {
               onChange={handleChange}
               chatColors={selectedTarget.chatColors}
               entityLabel={selectedTarget.entityLabel}
-              previewName={selectedTarget.name}
               variant="compact"
               disabled={saveState === "saving"}
             />

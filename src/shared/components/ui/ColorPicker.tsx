@@ -18,6 +18,8 @@ interface ColorPickerProps {
   helpText?: string;
   /** Text shown when no color is set. */
   emptyText?: string;
+  /** Disable all interactive picker controls. */
+  disabled?: boolean;
   /** Optional compact control shown beside the label. */
   headerAction?: ReactNode;
 }
@@ -85,6 +87,7 @@ export function ColorPicker({
   label,
   helpText,
   emptyText = "No color set — uses default",
+  disabled = false,
   headerAction,
 }: ColorPickerProps) {
   const isGradient = value.startsWith("linear-gradient");
@@ -111,13 +114,15 @@ export function ColorPicker({
 
   const handleSolidChange = useCallback(
     (color: string) => {
+      if (disabled) return;
       onChange(color);
     },
-    [onChange],
+    [disabled, onChange],
   );
 
   const handleGradientStopChange = useCallback(
     (index: number, color: string) => {
+      if (disabled) return;
       setGradientStops((prev) => {
         const updated = [...prev];
         updated[index] = color;
@@ -125,19 +130,21 @@ export function ColorPicker({
         return updated;
       });
     },
-    [onChange, gradientAngle],
+    [disabled, onChange, gradientAngle],
   );
 
   const addStop = useCallback(() => {
+    if (disabled) return;
     setGradientStops((prev) => {
       const updated = [...prev, "#ffffff"];
       onChange(buildGradient(gradientAngle, updated));
       return updated;
     });
-  }, [onChange, gradientAngle]);
+  }, [disabled, onChange, gradientAngle]);
 
   const removeStop = useCallback(
     (index: number) => {
+      if (disabled) return;
       if (gradientStops.length <= 2) return;
       setGradientStops((prev) => {
         const updated = prev.filter((_, i) => i !== index);
@@ -145,21 +152,23 @@ export function ColorPicker({
         return updated;
       });
     },
-    [onChange, gradientAngle, gradientStops.length],
+    [disabled, onChange, gradientAngle, gradientStops.length],
   );
 
   const handleAngleChange = useCallback(
     (angle: number) => {
+      if (disabled) return;
       setGradientAngle(angle);
       onChange(buildGradient(angle, gradientStops));
     },
-    [onChange, gradientStops],
+    [disabled, onChange, gradientStops],
   );
 
   const clearColor = useCallback(() => {
+    if (disabled) return;
     onChange("");
     setExpanded(false);
-  }, [onChange]);
+  }, [disabled, onChange]);
 
   const displayStyle = value
     ? value.startsWith("linear-gradient")
@@ -180,7 +189,8 @@ export function ColorPicker({
             <button
               type="button"
               onClick={clearColor}
-              className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[0.625rem] text-[var(--muted-foreground)] transition-all hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
+              disabled={disabled}
+              className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[0.625rem] text-[var(--muted-foreground)] transition-all hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)] disabled:cursor-not-allowed disabled:opacity-55"
             >
               <X size="0.625rem" />
               Clear
@@ -193,11 +203,15 @@ export function ColorPicker({
       {/* Preview + trigger */}
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          if (!disabled) setExpanded(!expanded);
+        }}
+        disabled={disabled}
         className={cn(
           "flex w-full items-center rounded-xl border border-[var(--border)] bg-[var(--secondary)] transition-all hover:border-[var(--primary)]/30",
           compact ? "gap-2 rounded-lg p-1.5" : "gap-3 p-2.5",
           expanded && "border-[var(--primary)]/40 ring-1 ring-[var(--primary)]/20",
+          disabled && "cursor-not-allowed opacity-65 hover:border-[var(--border)]",
         )}
       >
         <div
@@ -230,11 +244,13 @@ export function ColorPicker({
               <button
                 type="button"
                 onClick={() => {
+                  if (disabled) return;
                   setMode("solid");
                   if (gradientStops[0]) handleSolidChange(gradientStops[0]);
                 }}
+                disabled={disabled}
                 className={cn(
-                  "flex-1 rounded-md px-3 py-1.5 text-[0.6875rem] font-medium transition-all",
+                  "flex-1 rounded-md px-3 py-1.5 text-[0.6875rem] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-55",
                   mode === "solid"
                     ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
                     : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
@@ -246,11 +262,13 @@ export function ColorPicker({
               <button
                 type="button"
                 onClick={() => {
+                  if (disabled) return;
                   setMode("gradient");
                   onChange(buildGradient(gradientAngle, gradientStops));
                 }}
+                disabled={disabled}
                 className={cn(
-                  "flex-1 rounded-md px-3 py-1.5 text-[0.6875rem] font-medium transition-all",
+                  "flex-1 rounded-md px-3 py-1.5 text-[0.6875rem] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-55",
                   mode === "gradient"
                     ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
                     : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
@@ -282,7 +300,8 @@ export function ColorPicker({
                     aria-label={`Pick ${label} color`}
                     value={value && !value.startsWith("linear-gradient") ? getNativeColorValue(value) : "#6c5ce7"}
                     onChange={(e) => handleSolidChange(e.target.value)}
-                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    disabled={disabled}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
                   />
                 </label>
 
@@ -293,6 +312,7 @@ export function ColorPicker({
                     value={value && !value.startsWith("linear-gradient") ? value : ""}
                     onChange={(e) => handleSolidChange(e.target.value)}
                     placeholder="#hex or color name"
+                    disabled={disabled}
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-1.5 font-mono text-xs outline-none transition-colors focus:border-[var(--primary)]/50"
                   />
                 </label>
@@ -307,8 +327,9 @@ export function ColorPicker({
                       key={color}
                       type="button"
                       onClick={() => handleSolidChange(color)}
+                      disabled={disabled}
                       className={cn(
-                        "h-6 w-6 rounded-md ring-1 ring-[var(--border)] transition-all hover:scale-110 hover:ring-2 hover:ring-[var(--primary)]/50",
+                        "h-6 w-6 rounded-md ring-1 ring-[var(--border)] transition-all hover:scale-110 hover:ring-2 hover:ring-[var(--primary)]/50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:ring-1",
                         value === color && "ring-2 ring-[var(--primary)] scale-110",
                       )}
                       style={{ backgroundColor: color }}
@@ -336,7 +357,8 @@ export function ColorPicker({
                   <button
                     type="button"
                     onClick={addStop}
-                    className="flex items-center gap-0.5 rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] text-[var(--muted-foreground)] transition-all hover:text-[var(--foreground)]"
+                    disabled={disabled}
+                    className="flex items-center gap-0.5 rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] text-[var(--muted-foreground)] transition-all hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <Plus size="0.625rem" /> Add
                   </button>
@@ -350,18 +372,21 @@ export function ColorPicker({
                         activeStopRef.current = i;
                         handleGradientStopChange(i, e.target.value);
                       }}
+                      disabled={disabled}
                       className="h-7 w-7 cursor-pointer rounded-md border-0 bg-transparent p-0"
                     />
                     <input
                       value={stop}
                       onChange={(e) => handleGradientStopChange(i, e.target.value)}
+                      disabled={disabled}
                       className="flex-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 font-mono text-[0.6875rem] outline-none focus:border-[var(--primary)]/40"
                     />
                     {gradientStops.length > 2 && (
                       <button
                         type="button"
                         onClick={() => removeStop(i)}
-                        className="rounded-md p-1 text-[var(--muted-foreground)] hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
+                        disabled={disabled}
+                        className="rounded-md p-1 text-[var(--muted-foreground)] hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)] disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         <Trash2 size="0.6875rem" />
                       </button>
@@ -385,7 +410,8 @@ export function ColorPicker({
                   max={360}
                   value={gradientAngle}
                   onChange={(e) => handleAngleChange(parseInt(e.target.value))}
-                  className="h-1.5 w-full cursor-pointer accent-[var(--primary)]"
+                  disabled={disabled}
+                  className="h-1.5 w-full cursor-pointer accent-[var(--primary)] disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -398,13 +424,15 @@ export function ColorPicker({
                       key={g}
                       type="button"
                       onClick={() => {
+                        if (disabled) return;
                         setGradientStops(parseGradientStops(g));
                         const angleMatch = g.match(/linear-gradient\((\d+)deg/);
                         if (angleMatch) setGradientAngle(parseInt(angleMatch[1]));
                         onChange(g);
                       }}
+                      disabled={disabled}
                       className={cn(
-                        "h-6 rounded-md ring-1 ring-[var(--border)] transition-all hover:scale-105 hover:ring-2 hover:ring-[var(--primary)]/50",
+                        "h-6 rounded-md ring-1 ring-[var(--border)] transition-all hover:scale-105 hover:ring-2 hover:ring-[var(--primary)]/50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:ring-1",
                         value === g && "ring-2 ring-[var(--primary)] scale-105",
                       )}
                       style={{ background: g }}

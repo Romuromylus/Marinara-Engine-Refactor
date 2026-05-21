@@ -1509,7 +1509,6 @@ function PersonaColorsTab({
           boxColor: formData.boxColor,
         }}
         entityLabel="Persona"
-        previewName={formData.name || "You"}
       />
     </div>
   );
