@@ -61,7 +61,7 @@ import { SpriteGenerationModal } from "../../../shared/components/ui/SpriteGener
 import { AvatarGenerationModal } from "../../../shared/components/ui/AvatarGenerationModal";
 import { AvatarCropWidget } from "../../../shared/components/ui/AvatarCropWidget";
 import { SpriteFrameEditor } from "../../../shared/components/ui/SpriteFrameEditor";
-import { SpriteWandCleanupEditor } from "../../../shared/components/ui/SpriteWandCleanupEditor";
+import { SpriteWandCleanupEditor } from "../../../shared/components/ui/sprite-wand-cleanup/SpriteWandCleanupEditor";
 import { ExportFormatDialog, type ExportFormatChoice } from "../../../shared/components/ui/ExportFormatDialog";
 import { Modal } from "../../../shared/components/ui/Modal";
 import type { TrackerCardColorConfig } from "../../../engine/contracts/types/persona";

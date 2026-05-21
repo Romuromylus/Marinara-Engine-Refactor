@@ -86,7 +86,7 @@ import { TrackerCardColorControls } from "../../../shared/components/ui/TrackerC
 import { ExpandedTextarea } from "../../../shared/components/ui/ExpandedTextarea";
 import { Modal } from "../../../shared/components/ui/Modal";
 import { SpriteFrameEditor } from "../../../shared/components/ui/SpriteFrameEditor";
-import { SpriteWandCleanupEditor } from "../../../shared/components/ui/SpriteWandCleanupEditor";
+import { SpriteWandCleanupEditor } from "../../../shared/components/ui/sprite-wand-cleanup/SpriteWandCleanupEditor";
 import { ExportFormatDialog, type ExportFormatChoice } from "../../../shared/components/ui/ExportFormatDialog";
 import type { CharacterCardVersion, CharacterData, RPGStatsConfig } from "../../../engine/contracts/types/character";
 import { parseTrackerCardColorConfig, serializeTrackerCardColorConfig } from "../../../shared/lib/tracker-card-colors";
