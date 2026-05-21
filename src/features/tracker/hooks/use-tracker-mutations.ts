@@ -18,6 +18,8 @@ import {
   mergeQuestProgressListItemUpdate,
   mergeTrackerListItemUpdate,
   mergeTrackerListUpdate,
+  removePresentCharacterListItem,
+  removeQuestProgressListItem,
   removeTrackerListItem,
 } from "../../world-state/lib/tracker-state-edits";
 import { getCharacterFeatureKey } from "../components/tracker-character.helpers";
@@ -98,9 +100,9 @@ export function useTrackerMutations({
   const removeCharacter = useCallback(
     (index: number) => {
       const latestCharacters = getLatestPresentCharacters();
-      const removed = latestCharacters[index] ?? presentCharacters[index];
+      const removed = presentCharacters[index] ?? latestCharacters[index];
       if (removed) removeFeaturedCharacterCard(getCharacterFeatureKey(removed, index));
-      updatePresentCharacters(removeTrackerListItem(latestCharacters, index));
+      updatePresentCharacters(removePresentCharacterListItem(presentCharacters, latestCharacters, index));
     },
     [getLatestPresentCharacters, presentCharacters, removeFeaturedCharacterCard, updatePresentCharacters],
   );
@@ -146,9 +148,9 @@ export function useTrackerMutations({
 
   const removeQuest = useCallback(
     (index: number) => {
-      updateQuests(removeTrackerListItem(getLatestQuests(), index));
+      updateQuests(removeQuestProgressListItem(quests, getLatestQuests(), index));
     },
-    [getLatestQuests, updateQuests],
+    [getLatestQuests, quests, updateQuests],
   );
 
   const addQuest = useCallback(() => {

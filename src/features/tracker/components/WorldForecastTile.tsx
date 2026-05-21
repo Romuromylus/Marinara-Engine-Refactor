@@ -86,7 +86,7 @@ export function WorldForecastTile({
             onSave={onSaveTemperature}
             placeholder="Set temp"
             className={cn(
-              "h-full w-full rounded-[3px] bg-[color-mix(in_srgb,var(--background)_38%,transparent)] text-center shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_8%,transparent),0_0_8px_color-mix(in_srgb,var(--background)_30%,transparent)] ring-1 ring-[var(--border)]/24 hover:!bg-[color-mix(in_srgb,var(--background)_46%,transparent)]",
+              "h-full w-full rounded-[3px] bg-[color-mix(in_srgb,var(--background)_38%,transparent)] text-center shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_8%,transparent),0_0_8px_color-mix(in_srgb,var(--background)_30%,transparent)] ring-1 ring-[var(--border)]/24 hover:bg-[color-mix(in_srgb,var(--background)_46%,transparent)]!",
               useHorizontalTempRail
                 ? "grid grid-cols-[minmax(0,1fr)_1.05rem] items-center gap-1 py-0.5 pl-0.5 pr-0.5 @min-[10rem]:grid-cols-[minmax(0,1fr)_1.1rem]"
                 : "flex flex-row items-center justify-center gap-1 px-0.5 py-0.5",
