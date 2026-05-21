@@ -10,6 +10,18 @@ type ResolvedWorldStateTarget = { messageId: string; swipeIndex: number };
 const OPERATIONAL_PATCH_KEYS = new Set(["manual", "clearOverrides", "targetVisible"]);
 const MANUAL_OVERRIDE_FIELDS = ["date", "time", "location", "weather", "temperature"] as const;
 
+interface WorldStateApi {
+  /**
+   * Gets the visible world state by default, or a specific tracker snapshot when a target is supplied.
+   * Argument handling is centralized here: readTarget identifies target-shaped values, resolveVisibleTarget
+   * finds the current assistant swipe, storageApi.get loads the chat fallback, trackerSnapshotApi.get loads
+   * native snapshots, and withTarget stamps fallback chat state with the resolved target.
+   */
+  get(chatId: string, target: WorldStateTarget, init?: RequestInit): Promise<WorldState | null>;
+  get(chatId: string, init?: RequestInit): Promise<WorldState | null>;
+  patch(chatId: string, patch: WorldStatePatch, init?: RequestInit): Promise<WorldState>;
+}
+
 function createEmptyWorldState(chatId: string): WorldState {
   return {
     id: "",
@@ -107,22 +119,30 @@ async function resolveVisibleTarget(chatId: string, fallback: unknown): Promise<
   return (await latestAssistantTarget(chatId).catch(() => null)) ?? readTarget(fallback);
 }
 
-export const worldStateApi = {
-  get: async (chatId: string, targetOrInit?: WorldStateTarget | RequestInit, maybeInit?: RequestInit) => {
-    const requestedTarget = readTarget(targetOrInit);
-    const init = requestedTarget ? maybeInit : (targetOrInit as RequestInit | undefined);
+async function getWorldState(chatId: string, target: WorldStateTarget, init?: RequestInit): Promise<WorldState | null>;
+async function getWorldState(chatId: string, init?: RequestInit): Promise<WorldState | null>;
+async function getWorldState(
+  chatId: string,
+  targetOrInit?: WorldStateTarget | RequestInit,
+  maybeInit?: RequestInit,
+): Promise<WorldState | null> {
+  const requestedTarget = readTarget(targetOrInit);
+  const init = requestedTarget ? maybeInit : (targetOrInit as RequestInit | undefined);
+  throwIfAborted(init);
+  const chat = await storageApi.get<{ gameState?: WorldState }>("chats", chatId);
+  throwIfAborted(init);
+  const target = requestedTarget ?? (await resolveVisibleTarget(chatId, chat?.gameState));
+  throwIfAborted(init);
+  if (target) {
+    const snapshot = await trackerSnapshotApi.get(chatId, target);
     throwIfAborted(init);
-    const chat = await storageApi.get<{ gameState?: WorldState }>("chats", chatId);
-    throwIfAborted(init);
-    const target = requestedTarget ?? (await resolveVisibleTarget(chatId, chat?.gameState));
-    throwIfAborted(init);
-    if (target) {
-      const snapshot = await trackerSnapshotApi.get(chatId, target);
-      throwIfAborted(init);
-      if (snapshot) return snapshot;
-    }
-    return chat?.gameState ? withTarget(chat.gameState, chatId, target) : null;
-  },
+    if (snapshot) return snapshot;
+  }
+  return chat?.gameState ? withTarget(chat.gameState, chatId, target) : null;
+}
+
+export const worldStateApi: WorldStateApi = {
+  get: getWorldState,
   patch: async (chatId: string, patch: WorldStatePatch, init?: RequestInit) => {
     throwIfAborted(init);
     const requestedTarget = readTarget(patch);

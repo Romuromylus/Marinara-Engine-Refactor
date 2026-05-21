@@ -1,6 +1,7 @@
 import type { StorageGateway, StorageListOptions } from "../../engine/capabilities/storage";
 import { ApiError } from "./api-errors";
 import { invokeTauri } from "./tauri-client";
+import { trackerSnapshotApi, type TrackerSnapshotInput } from "./tracker-snapshot-api";
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
@@ -96,11 +97,8 @@ export const storageApi: StorageGateway = {
     const chat = await storageApi.get<Record<string, unknown>>("chats", chatId);
     return (chat?.gameState as never) ?? null;
   },
-  saveTrackerSnapshot: (chatId, snapshot) =>
-    invokeTauri("tracker_snapshot_save", {
-      chatId,
-      snapshot,
-    }),
+  saveTrackerSnapshot: <T = unknown>(chatId: string, snapshot: Record<string, unknown>) =>
+    trackerSnapshotApi.save(chatId, snapshot as unknown as TrackerSnapshotInput) as Promise<T>,
   listLorebookEntries: (lorebookId) => storageApi.list("lorebook-entries", { filters: { lorebookId } }),
   createLorebookEntries: async (lorebookId, entries) =>
     Promise.all(entries.map((entry) => storageApi.create("lorebook-entries", { ...entry, lorebookId }))) as Promise<

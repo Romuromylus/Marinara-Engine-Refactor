@@ -8,6 +8,7 @@ import type {
   PlayerStats,
   PresentCharacter,
   QuestProgress,
+  RPGAttributes,
 } from "../contracts/types/game-state";
 import { preserveTrackerCharacterUiFields } from "./generate-route-utils";
 import { boolish, isRecord, nowIso, parseRecord, readNumber, readString } from "./runtime-records";
@@ -45,6 +46,9 @@ type TrackerStatePatch = Partial<
 
 type QuestObjective = QuestProgress["objectives"][number];
 type QuestUpdateAction = "create" | "update" | "complete" | "fail";
+type RpgAttributeKey = keyof RPGAttributes;
+
+const RPG_ATTRIBUTE_KEYS: RpgAttributeKey[] = ["str", "dex", "con", "int", "wis", "cha"];
 
 interface NormalizedQuestUpdate {
   action: QuestUpdateAction;
@@ -65,17 +69,6 @@ function readNullableString(value: unknown): string | null {
 function readNonNegativeInteger(value: unknown, fallback: number): number {
   const parsed = readNumber(value, fallback);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function createEmptyPlayerStats(): PlayerStats {
-  return {
-    stats: [],
-    attributes: null,
-    skills: {},
-    inventory: [],
-    activeQuests: [],
-    status: "",
-  };
 }
 
 function parseStat(value: unknown): CharacterStat | null {
@@ -144,6 +137,38 @@ function parseCustomTrackerField(value: unknown): CustomTrackerField | null {
   return { name, value: readString(record.value).trim() };
 }
 
+function parseRpgAttributes(value: unknown): RPGAttributes | null {
+  const record = parseRecord(value);
+  if (!RPG_ATTRIBUTE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(record, key))) return null;
+  return {
+    str: readNumber(record.str, 10),
+    dex: readNumber(record.dex, 10),
+    con: readNumber(record.con, 10),
+    int: readNumber(record.int, 10),
+    wis: readNumber(record.wis, 10),
+    cha: readNumber(record.cha, 10),
+  };
+}
+
+function parseSkills(value: unknown): Record<string, number> {
+  const record = parseRecord(value);
+  return Object.fromEntries(
+    Object.entries(record)
+      .map(([key, skillValue]) => [key.trim(), readNumber(skillValue, Number.NaN)] as const)
+      .filter(([key, skillValue]) => key.length > 0 && Number.isFinite(skillValue)),
+  );
+}
+
+function parseManualOverrides(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null;
+  const overrides = Object.fromEntries(
+    Object.entries(value)
+      .filter((entry): entry is [string, string] => entry[0].trim().length > 0 && typeof entry[1] === "string")
+      .map(([key, overrideValue]) => [key.trim(), overrideValue]),
+  );
+  return Object.keys(overrides).length ? overrides : null;
+}
+
 function parsePresentCharacter(value: unknown): PresentCharacter | null {
   const record = parseRecord(value);
   const name = readString(record.name).trim();
@@ -180,11 +205,10 @@ function parsePresentCharacter(value: unknown): PresentCharacter | null {
 
 function clonePlayerStats(value: unknown): PlayerStats {
   const record = parseRecord(value);
-  const stats = createEmptyPlayerStats();
   return {
-    ...stats,
-    ...record,
     stats: Array.isArray(record.stats) ? record.stats.map(parseStat).filter((stat): stat is CharacterStat => !!stat) : [],
+    attributes: parseRpgAttributes(record.attributes),
+    skills: parseSkills(record.skills),
     inventory: Array.isArray(record.inventory)
       ? record.inventory.map(parseInventoryItem).filter((item): item is InventoryItem => !!item)
       : [],
@@ -197,7 +221,7 @@ function clonePlayerStats(value: unknown): PlayerStats {
           .filter((field): field is CustomTrackerField => !!field)
       : undefined,
     status: readString(record.status),
-  } as PlayerStats;
+  };
 }
 
 function normalizeQuestAction(value: unknown): QuestUpdateAction | null {
@@ -253,7 +277,10 @@ function applyQuestUpdatesToPlayerStats(value: unknown, updatesValue: unknown): 
   const quests = playerStats.activeQuests.map(cloneQuest);
 
   for (const update of updates) {
-    const index = quests.findIndex((quest) => quest.name === update.questName || quest.questEntryId === update.questName);
+    let index = quests.findIndex((quest) => quest.questEntryId === update.questName);
+    if (index === -1) {
+      index = quests.findIndex((quest) => quest.name === update.questName);
+    }
     if (update.action === "create" && index === -1) {
       quests.push({
         questEntryId: update.questName,
@@ -310,7 +337,7 @@ function normalizeGameState(value: unknown, chatId: string, target: TrackerSnaps
       ? record.personaStats.map(parseStat).filter((stat): stat is CharacterStat => !!stat)
       : null,
     committed: record.committed === undefined ? undefined : boolish(record.committed, false),
-    manualOverrides: isRecord(record.manualOverrides) ? (record.manualOverrides as Record<string, string>) : null,
+    manualOverrides: parseManualOverrides(record.manualOverrides),
     createdAt: readString(record.createdAt) || nowIso(),
   };
 }
@@ -336,25 +363,13 @@ export function trackerSnapshotTargetFromMessage(message: unknown): TrackerSnaps
   };
 }
 
-function snapshotCreatedTime(value: unknown): number {
-  const record = parseRecord(value);
-  const created = Date.parse(readString(record.createdAt));
-  if (Number.isFinite(created)) return created;
-  const updated = Date.parse(readString(record.updatedAt));
-  return Number.isFinite(updated) ? updated : 0;
-}
-
-function sortNewestFirst(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  return [...rows].sort((left, right) => snapshotCreatedTime(right) - snapshotCreatedTime(left));
-}
-
 async function listTrackerSnapshotRows(storage: StorageGateway, chatId: string): Promise<Array<Record<string, unknown>>> {
   const rows = await storage.list<Record<string, unknown>>("game-state-snapshots", {
     filters: { chatId, kind: "tracker" },
     orderBy: "createdAt",
     descending: true,
   });
-  return sortNewestFirst(rows.map(parseRecord).filter((row) => trackerSnapshotTargetFromRecord(row)));
+  return rows.map(parseRecord).filter((row) => trackerSnapshotTargetFromRecord(row));
 }
 
 export async function createTrackerSnapshotReadContext(
@@ -514,7 +529,9 @@ export async function persistTrackerSnapshotForTurn(
 ): Promise<GameState | null> {
   if (!target || !target.messageId || results.length === 0) return null;
   const existing = await getTrackerSnapshotForTarget(storage, chatId, target);
-  const chat = existing || options.baseSnapshot ? null : parseRecord(await storage.get("chats", chatId).catch(() => null));
+  const chat = (existing || options.baseSnapshot)
+    ? null
+    : parseRecord(await storage.get("chats", chatId).catch(() => null));
   let snapshot = normalizeGameState(existing ?? options.baseSnapshot ?? chat?.gameState, chatId, target);
   if (!existing) {
     snapshot = { ...snapshot, id: "", committed: false, manualOverrides: null, createdAt: nowIso() };
