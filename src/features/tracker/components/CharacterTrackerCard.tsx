@@ -35,47 +35,30 @@ import {
   TRACKER_PROFILE_THOUGHT_BUBBLE_TEXT_CLASS,
 } from "./CharacterThoughtBubble.styles";
 
-const CHARACTER_CARD_CLASS =
-  "group/character @container relative isolate h-full min-w-0 overflow-hidden rounded-md border border-[color-mix(in_srgb,var(--tracker-profile-rule)_52%,transparent)] bg-[image:var(--tracker-profile-material)] p-0.5 shadow-[0_0_9px_color-mix(in_srgb,var(--tracker-profile-dialogue-glow)_13%,transparent),inset_0_1px_0_color-mix(in_srgb,var(--foreground)_4%,transparent),inset_0_-1px_0_color-mix(in_srgb,var(--background)_24%,transparent)] transition-colors duration-200 hover:border-[color-mix(in_srgb,var(--primary)_22%,var(--tracker-profile-rule)_78%)] [background-blend-mode:var(--tracker-profile-material-blend)]";
-const CHARACTER_CARD_TONE_OVERLAY_CLASS =
-  "pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_22%_12%,color-mix(in_srgb,var(--tracker-profile-nameplate-glow)_10%,transparent),transparent_36%),linear-gradient(135deg,color-mix(in_srgb,var(--foreground)_2%,transparent),transparent_46%,color-mix(in_srgb,var(--tracker-profile-accent-solid)_4%,transparent))] opacity-[var(--tracker-profile-accent-wash-opacity,0)]";
-const CHARACTER_CARD_TEXTURE_CLASS =
-  "pointer-events-none absolute inset-0 z-0 bg-[repeating-linear-gradient(135deg,color-mix(in_srgb,var(--tracker-profile-rule)_7%,transparent)_0_1px,transparent_1px_7px),repeating-linear-gradient(0deg,color-mix(in_srgb,var(--foreground)_2%,transparent)_0_1px,transparent_1px_5px)] opacity-[0.24] mix-blend-soft-light [mask-image:linear-gradient(180deg,transparent_0%,black_20%,black_100%)]";
-const CHARACTER_CARD_BODY_MATERIAL_CLASS =
-  "pointer-events-none absolute inset-x-0 bottom-0 top-[1.35rem] z-0 bg-[image:var(--tracker-profile-material)] shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_4%,transparent),inset_0_10px_18px_color-mix(in_srgb,var(--tracker-profile-accent-solid)_5%,transparent)] [background-blend-mode:var(--tracker-profile-material-blend)]";
-const CHARACTER_AVATAR_CORNER_SHADE_CLASS =
-  "pointer-events-none absolute left-0 top-[1.35rem] z-0 h-[3.1rem] w-[7.25rem] bg-[radial-gradient(ellipse_at_0%_0%,color-mix(in_srgb,var(--background)_48%,transparent)_0%,color-mix(in_srgb,var(--background)_24%,transparent)_34%,transparent_72%)] mix-blend-multiply [mask-image:linear-gradient(180deg,black_0%,black_60%,transparent_100%)]";
-const CHARACTER_REMOVE_BUTTON_CLASS =
-  "rounded p-1 text-[var(--destructive)] transition-all hover:bg-[var(--destructive)]/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)] active:scale-90";
+const CHARACTER_CARD_CLASS = "group/character tracker-compact-character-card";
+const CHARACTER_CARD_TONE_OVERLAY_CLASS = "tracker-compact-character-tone-overlay";
+const CHARACTER_CARD_TEXTURE_CLASS = "tracker-compact-character-texture";
+const CHARACTER_CARD_BODY_MATERIAL_CLASS = "tracker-compact-character-body-material";
+const CHARACTER_AVATAR_CORNER_SHADE_CLASS = "tracker-compact-character-avatar-corner-shade";
+const CHARACTER_REMOVE_BUTTON_CLASS = "tracker-compact-character-remove-button";
 const CHARACTER_HEADER_CLASS = "relative -mt-2.5 flex items-start gap-1 px-0.5";
 const CHARACTER_HEADER_COPY_CLASS = "relative z-[1] min-w-0 flex-1 pt-3";
-const CHARACTER_HEADER_VOID_TEXTURE_CLASS =
-  "pointer-events-none absolute inset-x-0 bottom-[-0.125rem] top-[2.05rem] z-0 rounded-b-[5px] bg-[radial-gradient(ellipse_at_48%_0%,color-mix(in_srgb,var(--tracker-profile-accent-solid)_11%,transparent)_0%,transparent_62%),repeating-linear-gradient(135deg,color-mix(in_srgb,var(--tracker-profile-rule)_18%,transparent)_0_1px,transparent_1px_7px),repeating-linear-gradient(0deg,color-mix(in_srgb,var(--foreground)_4%,transparent)_0_1px,transparent_1px_5px)] opacity-[0.56] mix-blend-soft-light [mask-image:linear-gradient(180deg,transparent_0%,black_22%,black_82%,transparent_100%)]";
-const CHARACTER_FEATURE_BUTTON_CLASS =
-  "absolute left-0 top-0 z-[6] flex h-[1.35rem] w-[1.35rem] items-center justify-center rounded-tl-[5px] rounded-br-[5px] bg-transparent text-[var(--tracker-profile-nameplate-text)]/42 transition-all hover:bg-[color-mix(in_srgb,var(--tracker-profile-nameplate-rule)_10%,transparent)] hover:text-[var(--tracker-profile-nameplate-text)]/74 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--primary)]/50 active:scale-95 [&>svg]:drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]";
-const CHARACTER_NAMEPLATE_CLASS =
-  "relative z-[3] -mx-0.5 -mt-0.5 mb-0.5 flex h-[1.35rem] min-w-0 items-center overflow-hidden rounded-t-[5px] border-x border-t border-[color-mix(in_srgb,var(--tracker-profile-nameplate-rule)_20%,transparent)] bg-[image:var(--tracker-profile-nameplate)] pl-[clamp(4.05rem,43cqw,4.85rem)] pr-1.5 shadow-[0_0_4px_color-mix(in_srgb,var(--tracker-profile-nameplate-glow)_9%,transparent),inset_0_-1px_0_color-mix(in_srgb,var(--background)_24%,transparent)] [background-blend-mode:normal]";
-const CHARACTER_NAMEPLATE_GLEAM_CLASS =
-  "pointer-events-none absolute inset-x-0 top-0 z-[2] h-px bg-[image:var(--tracker-profile-accent-layer)] opacity-[var(--tracker-profile-accent-highlight-opacity,0.32)] [mask-image:linear-gradient(90deg,transparent_0%,black_20%,black_82%,transparent_100%)]";
-const CHARACTER_AVATAR_SOCKET_CLASS =
-  "pointer-events-none absolute z-[2] rounded-full border border-[color-mix(in_srgb,var(--tracker-profile-nameplate-rule)_34%,transparent)] bg-[image:var(--tracker-profile-nameplate)] shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_4%,transparent),inset_0_-2px_4px_color-mix(in_srgb,var(--background)_24%,transparent)] [background-blend-mode:normal]";
+const CHARACTER_HEADER_VOID_TEXTURE_CLASS = "tracker-compact-character-header-void-texture";
+const CHARACTER_FEATURE_BUTTON_CLASS = "tracker-compact-character-feature-button";
+const CHARACTER_NAMEPLATE_CLASS = "tracker-compact-character-nameplate";
+const CHARACTER_NAMEPLATE_GLEAM_CLASS = "tracker-compact-character-nameplate-gleam";
+const CHARACTER_AVATAR_SOCKET_CLASS = "tracker-compact-character-avatar-socket";
 const CHARACTER_AVATAR_SOCKET_SIZE_CLASS = {
-  regular: "left-[0.32rem] top-[0.7rem] h-[clamp(3.06rem,35cqw,3.75rem)] w-[clamp(3.06rem,35cqw,3.75rem)]",
-  dense: "left-[0.32rem] top-[0.7rem] h-[clamp(2.36rem,29cqw,3rem)] w-[clamp(2.36rem,29cqw,3rem)]",
+  regular: "tracker-compact-character-avatar-socket--regular",
+  dense: "tracker-compact-character-avatar-socket--dense",
 } satisfies Record<"regular" | "dense", string>;
-const CHARACTER_HEADER_FILLER_CLASS =
-  "pointer-events-none mt-1 h-3 w-[86%] bg-[repeating-linear-gradient(180deg,color-mix(in_srgb,var(--tracker-profile-nameplate-rule)_16%,transparent)_0_1px,transparent_1px_6px)] opacity-45 [mask-image:linear-gradient(90deg,black_0%,transparent_100%)]";
-const CHARACTER_NAME_EDIT_CLASS =
-  "h-full w-full min-w-0 overflow-hidden px-0 py-0 text-[0.75rem] font-bold leading-[1.35rem] text-[color:var(--tracker-profile-nameplate-text)] drop-shadow-[0_1px_2px_rgba(0,0,0,0.38)] hover:bg-transparent";
-const CHARACTER_NAME_PREVIEW_CLASS =
-  "h-full w-full text-[0.75rem] font-bold leading-[1.35rem] text-[color:var(--tracker-profile-nameplate-text)] drop-shadow-[0_1px_2px_rgba(0,0,0,0.38)]";
+const CHARACTER_HEADER_FILLER_CLASS = "tracker-compact-character-header-filler";
+const CHARACTER_NAME_EDIT_CLASS = "tracker-compact-character-name-edit";
+const CHARACTER_NAME_PREVIEW_CLASS = "tracker-compact-character-name-preview";
 const CHARACTER_DETAIL_ROWS_CLASS = "relative z-[1] mt-0.5 grid grid-cols-1 gap-px px-px pb-px";
-const CHARACTER_STAT_BLOCK_CLASS =
-  "group/statbox relative z-[1] mt-1 border-t border-[color-mix(in_srgb,var(--tracker-profile-rule)_34%,transparent)] pt-1";
-const CHARACTER_CUSTOM_FIELD_LIST_CLASS =
-  "relative z-[1] mt-1 grid gap-px border-t border-[color-mix(in_srgb,var(--tracker-profile-rule)_34%,transparent)] pt-1 text-[0.5625rem] @min-[176px]:text-[0.625rem]";
-const CHARACTER_CUSTOM_FIELD_ROW_CLASS =
-  "grid min-w-0 grid-cols-[minmax(2.05rem,0.42fr)_minmax(0,1fr)] items-center gap-0.5 @min-[176px]:grid-cols-[minmax(2.35rem,0.42fr)_minmax(0,1fr)] @min-[176px]:gap-1";
+const CHARACTER_STAT_BLOCK_CLASS = "group/statbox tracker-compact-character-stat-block";
+const CHARACTER_CUSTOM_FIELD_LIST_CLASS = "tracker-compact-character-custom-field-list";
+const CHARACTER_CUSTOM_FIELD_ROW_CLASS = "tracker-compact-character-custom-field-row";
 
 function CompactCharacterNameplate({ children }: { children: ReactNode }) {
   return (

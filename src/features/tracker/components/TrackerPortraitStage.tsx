@@ -51,55 +51,38 @@ interface PortraitDragState {
   zoom: number;
 }
 
-const PORTRAIT_STAGE_BASE_CLASS =
-  "group/portrait relative flex min-w-0 items-end justify-center overflow-hidden border-y border-[color-mix(in_srgb,var(--tracker-profile-dialogue-border)_62%,transparent)] bg-[image:var(--tracker-profile-surface)] text-left shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_7%,transparent),inset_0_-18px_24px_color-mix(in_srgb,var(--background)_48%,transparent)] transition-all [background-blend-mode:var(--tracker-profile-surface-blend)]";
+const PORTRAIT_STAGE_BASE_CLASS = "tracker-portrait-stage";
 const PORTRAIT_FRAME_TONE_CLASS = {
-  featured:
-    "[--tracker-portrait-frame-accent:color-mix(in_srgb,var(--tracker-profile-accent-solid)_64%,var(--tracker-profile-display-solid)_36%)] [--tracker-portrait-frame-rim-opacity:0.74]",
-  persona:
-    "[--tracker-portrait-frame-accent:color-mix(in_srgb,var(--tracker-profile-accent-solid)_62%,var(--tracker-profile-display-solid)_38%)] [--tracker-portrait-frame-rim-opacity:0.7]",
+  featured: "tracker-portrait-stage--featured",
+  persona: "tracker-portrait-stage--persona",
 } satisfies Record<TrackerPortraitStageFrameTone, string>;
-const PORTRAIT_STAGE_INNER_GLOW_CLASS =
-  "pointer-events-none absolute inset-1 z-0 rounded-[inherit] bg-[image:radial-gradient(circle_at_50%_0%,color-mix(in_srgb,var(--tracker-profile-display-solid)_14%,transparent),transparent_42%)] opacity-[0.62]";
-const PORTRAIT_TONE_OVERLAY_CLASS =
-  "pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_42%_16%,color-mix(in_srgb,var(--tracker-profile-display-solid)_15%,transparent)_0%,transparent_42%),linear-gradient(180deg,color-mix(in_srgb,var(--tracker-portrait-frame-accent)_8%,transparent)_0%,transparent_42%,color-mix(in_srgb,var(--background)_55%,transparent)_100%)]";
-const PORTRAIT_MEDIA_DRAG_SURFACE_CLASS =
-  "absolute inset-0 z-[1] flex h-full w-full touch-none items-center justify-center overflow-hidden";
-const PORTRAIT_MEDIA_OFFSET_CLASS = "relative flex h-full w-full min-w-0 items-center justify-center will-change-transform";
-const SPRITE_IMAGE_CLASS =
-  "relative h-full w-full object-contain drop-shadow-[0_8px_14px_rgba(0,0,0,0.38)] will-change-transform";
-const ART_IMAGE_CLASS = "absolute inset-0 h-full w-full max-h-none object-cover will-change-transform";
-const EMPTY_PORTRAIT_CLASS = "relative z-[1] flex h-full w-full items-center justify-center px-2 py-3";
-const EMPTY_PORTRAIT_FLOOR_CLASS =
-  "pointer-events-none absolute inset-x-3 bottom-2 h-px bg-[color-mix(in_srgb,var(--tracker-profile-rule)_58%,transparent)]";
-const EMPTY_PORTRAIT_AVATAR_CLASS =
-  "relative flex h-12 w-12 items-center justify-center rounded-full border border-[var(--tracker-profile-dialogue-border)] bg-[color-mix(in_srgb,var(--background)_54%,var(--card)_42%,transparent)] text-lg font-semibold leading-none text-[var(--tracker-profile-icon)] shadow-[0_8px_18px_rgba(0,0,0,0.24),0_0_10px_var(--tracker-profile-dialogue-glow),inset_0_1px_0_color-mix(in_srgb,var(--foreground)_8%,transparent)]";
-const EMPTY_PORTRAIT_INITIAL_CLASS = "relative text-2xl font-semibold leading-none text-[var(--tracker-profile-icon)]";
-const EMPTY_PORTRAIT_UPLOAD_BADGE_CLASS =
-  "absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--tracker-profile-dialogue-border)] bg-[color-mix(in_srgb,var(--background)_82%,var(--primary)_18%)] text-[var(--tracker-profile-icon)] shadow-[0_4px_10px_rgba(0,0,0,0.28)]";
-const PORTRAIT_VIEW_CONTROLS_CLASS =
-  "pointer-events-none absolute bottom-1 left-1 z-[4] flex flex-col items-center gap-0.5 rounded-sm border border-[color-mix(in_srgb,var(--tracker-profile-rule)_88%,transparent)] bg-[color-mix(in_srgb,var(--background)_66%,transparent)] p-0.5 text-[var(--tracker-profile-icon)] opacity-0 shadow-[0_6px_14px_rgba(0,0,0,0.24)] backdrop-blur-sm transition-opacity group-hover/portrait:pointer-events-auto group-hover/portrait:opacity-100 group-focus-within/portrait:pointer-events-auto group-focus-within/portrait:opacity-100 [@media(pointer:coarse)]:pointer-events-auto [@media(pointer:coarse)]:opacity-100";
-const PORTRAIT_VIEW_BUTTON_CLASS =
-  "flex h-5 w-5 items-center justify-center rounded-[2px] transition-colors hover:bg-[var(--primary)]/16 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)] active:scale-90";
-const PORTRAIT_EDGE_OVERLAY_CLASS =
-  "pointer-events-none absolute inset-0 z-[2] rounded-[inherit] opacity-[var(--tracker-portrait-frame-rim-opacity)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--tracker-portrait-frame-accent)_36%,var(--tracker-profile-dialogue-border)_64%)] shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_9%,transparent),inset_0_0_0_1px_color-mix(in_srgb,var(--tracker-profile-accent-solid)_8%,transparent),inset_0_-16px_20px_color-mix(in_srgb,var(--background)_40%,transparent)]";
-const PORTRAIT_TOP_GLEAM_BASE_CLASS =
-  "pointer-events-none absolute top-0 z-[2] h-px bg-[color-mix(in_srgb,var(--tracker-portrait-frame-accent)_46%,var(--foreground)_18%)] opacity-[0.64]";
+const PORTRAIT_STAGE_INNER_GLOW_CLASS = "tracker-portrait-stage-inner-glow";
+const PORTRAIT_TONE_OVERLAY_CLASS = "tracker-portrait-tone-overlay";
+const PORTRAIT_MEDIA_DRAG_SURFACE_CLASS = "tracker-portrait-media-drag-surface";
+const PORTRAIT_MEDIA_OFFSET_CLASS = "tracker-portrait-media-offset";
+const SPRITE_IMAGE_CLASS = "tracker-portrait-sprite-image";
+const ART_IMAGE_CLASS = "tracker-portrait-art-image";
+const EMPTY_PORTRAIT_CLASS = "tracker-portrait-empty";
+const EMPTY_PORTRAIT_FLOOR_CLASS = "tracker-portrait-empty-floor";
+const EMPTY_PORTRAIT_AVATAR_CLASS = "tracker-portrait-empty-avatar";
+const EMPTY_PORTRAIT_INITIAL_CLASS = "tracker-portrait-empty-initial";
+const EMPTY_PORTRAIT_UPLOAD_BADGE_CLASS = "tracker-portrait-upload-badge";
+const PORTRAIT_VIEW_CONTROLS_CLASS = "tracker-portrait-view-controls";
+const PORTRAIT_VIEW_BUTTON_CLASS = "tracker-portrait-view-button";
+const PORTRAIT_EDGE_OVERLAY_CLASS = "tracker-portrait-edge-overlay";
+const PORTRAIT_TOP_GLEAM_BASE_CLASS = "tracker-portrait-top-gleam";
 const PORTRAIT_TOP_GLEAM_CLASS_BY_SIDE = {
-  left: "left-0 right-5 [mask-image:linear-gradient(90deg,black_0%,black_48%,transparent_100%)]",
-  right: "left-5 right-0 [mask-image:linear-gradient(90deg,transparent_0%,black_52%,black_100%)]",
+  left: "tracker-portrait-top-gleam--left",
+  right: "tracker-portrait-top-gleam--right",
 } satisfies Record<TrackerProfileSide, string>;
-const PORTRAIT_BOTTOM_HIGHLIGHT_BASE_CLASS =
-  "pointer-events-none absolute bottom-0 z-[2] h-px w-[72%] bg-[color-mix(in_srgb,var(--tracker-portrait-frame-accent)_44%,var(--tracker-profile-dialogue-border)_56%)] opacity-[0.58]";
+const PORTRAIT_BOTTOM_HIGHLIGHT_BASE_CLASS = "tracker-portrait-bottom-highlight";
 const PORTRAIT_BOTTOM_HIGHLIGHT_CLASS_BY_SIDE = {
-  left: "left-0",
-  right: "right-0",
+  left: "tracker-portrait-bottom-highlight--left",
+  right: "tracker-portrait-bottom-highlight--right",
 } satisfies Record<TrackerProfileSide, string>;
-const PORTRAIT_SIDE_FADE_BASE_CLASS = "pointer-events-none absolute inset-y-0 z-[2] w-4 opacity-[0.48]";
-const PORTRAIT_UPLOAD_HIT_TARGET_CLASS =
-  "absolute inset-0 z-[3] cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--primary)] active:scale-[0.99]";
-const PORTRAIT_UPLOAD_BUTTON_CLASS =
-  "pointer-events-none absolute bottom-1 right-1 z-[4] flex h-6 w-6 items-center justify-center rounded-sm border border-[color-mix(in_srgb,var(--tracker-profile-rule)_86%,transparent)] bg-[color-mix(in_srgb,var(--background)_66%,transparent)] text-[var(--muted-foreground)]/80 opacity-0 shadow-[0_5px_12px_rgba(0,0,0,0.24)] backdrop-blur-sm transition-all hover:bg-[var(--primary)]/16 hover:text-[var(--tracker-profile-icon)] focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)] group-hover/portrait:pointer-events-auto group-hover/portrait:opacity-100 group-focus-within/portrait:pointer-events-auto group-focus-within/portrait:opacity-100 [@media(pointer:coarse)]:pointer-events-auto [@media(pointer:coarse)]:opacity-100";
+const PORTRAIT_SIDE_FADE_BASE_CLASS = "tracker-portrait-side-fade";
+const PORTRAIT_UPLOAD_HIT_TARGET_CLASS = "tracker-portrait-upload-hit-target";
+const PORTRAIT_UPLOAD_BUTTON_CLASS = "tracker-portrait-upload-button";
 const EMPTY_AVATAR_STAGE_STYLE: TrackerPortraitStageStyle = {
   "--tracker-profile-surface":
     "radial-gradient(ellipse at 50% 42%, color-mix(in srgb, var(--muted-foreground) 10%, transparent) 0%, transparent 42%), linear-gradient(180deg, color-mix(in srgb, var(--card) 82%, var(--background) 18%) 0%, color-mix(in srgb, var(--background) 92%, var(--card) 8%) 100%)",
