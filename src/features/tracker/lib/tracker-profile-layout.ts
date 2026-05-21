@@ -23,11 +23,6 @@ export const TRACKER_PROFILE_DETAILS_SEAM_BORDER_CLASS_BY_SIDE = {
   right: "border-l",
 } satisfies Record<TrackerProfileSide, string>;
 
-export const TRACKER_PROFILE_DETAILS_SEAM_EDGE_CLASS_BY_SIDE = {
-  left: "right-0",
-  right: "left-0",
-} satisfies Record<TrackerProfileSide, string>;
-
 export const TRACKER_PROFILE_PORTRAIT_LOWER_OUTSIDE_FRAME_CLASS_BY_SIDE = {
   left: "rounded-l-[0.875rem] border-l",
   right: "rounded-r-[0.875rem] border-r",

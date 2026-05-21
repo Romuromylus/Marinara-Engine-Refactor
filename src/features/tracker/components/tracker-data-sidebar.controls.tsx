@@ -24,14 +24,6 @@ export const TRACKER_PROFILE_FIELD_TILE_CLASS = "group/field tracker-profile-fie
 export const TRACKER_PROFILE_MATERIAL_PANEL_CLASS = "tracker-profile-material-panel";
 export const TRACKER_PROFILE_STATUS_STRIP_CLASS = "tracker-profile-status-strip";
 export const TRACKER_PROFILE_EMPTY_SURFACE_CLASS = "tracker-profile-empty-surface";
-export const TRACKER_PROFILE_INSTRUMENT_SHELF_CLASS = "group/statbox tracker-profile-instrument-shelf";
-export const TRACKER_PROFILE_INSTRUMENT_SHELF_LEDGE_CLASS = "tracker-profile-instrument-shelf-ledge";
-export const TRACKER_PROFILE_INSTRUMENT_SHELF_GLEAM_CLASS = "tracker-profile-instrument-shelf-gleam";
-export const TRACKER_PROFILE_INSTRUMENT_SHELF_PINLINES_CLASS =
-  "tracker-profile-surface-texture tracker-profile-instrument-shelf-pinlines";
-export const TRACKER_PROFILE_INSTRUMENT_SHELF_ETCH_CLASS = "tracker-profile-instrument-shelf-etch";
-export const TRACKER_PROFILE_INSTRUMENT_SHELF_BOTTOM_RAIL_CLASS =
-  "tracker-profile-instrument-shelf-bottom-rail";
 
 export function FittedText({
   children,
