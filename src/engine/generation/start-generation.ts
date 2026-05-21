@@ -26,6 +26,7 @@ import { applyRuntimeRegexScripts } from "./regex-runtime";
 import { hiddenFromAi, isRecord, nowIso, readString, stringArray, type JsonRecord } from "./runtime-records";
 import {
   commitTrackerSnapshotForTarget,
+  createTrackerSnapshotReadContext,
   getTrackerSnapshotForTarget,
   persistTrackerSnapshotForTurn,
   selectTrackerSnapshotForGeneration,
@@ -415,12 +416,23 @@ export async function retryGenerationAgents(
   const storedMessages = await loadChatMessages(deps.storage, chatId);
   const target = targetAssistantMessage(storedMessages, input.options);
   const targetTrackerTarget = trackerSnapshotTargetFromMessage(target);
-  const retryBaseline = await selectTrackerSnapshotForGeneration(deps.storage, chatId, {
-    preferLatestVisible: true,
-    visibleAnchor: targetTrackerTarget,
-    excludeMessageId: targetTrackerTarget?.messageId ?? null,
-  });
-  const targetSnapshot = await getTrackerSnapshotForTarget(deps.storage, chatId, targetTrackerTarget);
+  const trackerReadContext = await createTrackerSnapshotReadContext(deps.storage, chatId);
+  const retryBaseline = await selectTrackerSnapshotForGeneration(
+    deps.storage,
+    chatId,
+    {
+      preferLatestVisible: true,
+      visibleAnchor: targetTrackerTarget,
+      excludeMessageId: targetTrackerTarget?.messageId ?? null,
+    },
+    trackerReadContext,
+  );
+  const targetSnapshot = await getTrackerSnapshotForTarget(
+    deps.storage,
+    chatId,
+    targetTrackerTarget,
+    trackerReadContext,
+  );
   const chatForAgents = targetSnapshot ?? retryBaseline ? { ...chat, gameState: targetSnapshot ?? retryBaseline } : chat;
   const assembly = await assembleGenerationPrompt(deps.storage, {
     chat: chatForAgents,

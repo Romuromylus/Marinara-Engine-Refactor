@@ -24,6 +24,10 @@ export interface TrackerSnapshotSelectionOptions {
   fallbackMessageIds?: string[] | null;
 }
 
+export interface TrackerSnapshotReadContext {
+  rows: Array<Record<string, unknown>>;
+}
+
 type TrackerStatePatch = Partial<
   Pick<
     GameState,
@@ -353,6 +357,13 @@ async function listTrackerSnapshotRows(storage: StorageGateway, chatId: string):
   return sortNewestFirst(rows.map(parseRecord).filter((row) => trackerSnapshotTargetFromRecord(row)));
 }
 
+export async function createTrackerSnapshotReadContext(
+  storage: StorageGateway,
+  chatId: string,
+): Promise<TrackerSnapshotReadContext> {
+  return { rows: await listTrackerSnapshotRows(storage, chatId) };
+}
+
 function normalizeTrackerSnapshotRow(row: Record<string, unknown>, chatId: string): GameState | null {
   const target = trackerSnapshotTargetFromRecord(row);
   return target ? normalizeGameState(row, chatId, target) : null;
@@ -380,9 +391,10 @@ export async function getTrackerSnapshotForTarget(
   storage: StorageGateway,
   chatId: string,
   target: TrackerSnapshotTurnTarget | null,
+  context?: TrackerSnapshotReadContext,
 ): Promise<GameState | null> {
   if (!target) return null;
-  const rows = await listTrackerSnapshotRows(storage, chatId);
+  const rows = context?.rows ?? (await listTrackerSnapshotRows(storage, chatId));
   return newestMatchingSnapshot(rows, chatId, (row) => targetMatches(row, target));
 }
 
@@ -390,8 +402,9 @@ export async function selectTrackerSnapshotForGeneration(
   storage: StorageGateway,
   chatId: string,
   options: TrackerSnapshotSelectionOptions = {},
+  context?: TrackerSnapshotReadContext,
 ): Promise<GameState | null> {
-  const rows = await listTrackerSnapshotRows(storage, chatId);
+  const rows = context?.rows ?? (await listTrackerSnapshotRows(storage, chatId));
   const fallbackMessageIds = new Set(
     (options.fallbackMessageIds ?? []).filter((messageId): messageId is string => typeof messageId === "string"),
   );
