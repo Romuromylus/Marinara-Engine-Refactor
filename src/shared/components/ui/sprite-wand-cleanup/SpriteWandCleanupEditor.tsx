@@ -26,7 +26,7 @@ export function SpriteWandCleanupEditor({
       open
       onClose={onClose}
       title={`Clean ${label}`}
-      width="!w-[calc(100vw_-_1.5rem)] min-w-0 max-w-[calc(100vw_-_1.5rem)] sm:!w-full sm:max-w-6xl"
+      width="w-[calc(100vw_-_1.5rem)]! min-w-0 max-w-[calc(100vw_-_1.5rem)] sm:w-full! sm:max-w-6xl"
     >
       <div className="flex h-[calc(100dvh-7rem)] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto sm:h-[min(44rem,calc(90dvh-6rem))]">
         <SpriteCleanupControls {...editor.controls} />

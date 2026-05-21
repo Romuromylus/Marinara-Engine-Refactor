@@ -3926,7 +3926,9 @@ export function GameSurface({
   );
 
   async function applySceneResult(result: SceneAnalysis, msg: { id: string }) {
-    console.log("[scene-analysis] Result from model:", JSON.stringify(result, null, 2));
+    if (import.meta.env.DEV) {
+      console.log("[scene-analysis] Result from model:", JSON.stringify(result, null, 2));
+    }
     setSceneAnalysisFailed(false);
     // NOTE: Game state transitions are owned exclusively by the GM model via [state: ...] tags.
     // The scene model no longer emits stateChange to avoid conflicting state flips.
