@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, useReducedMotion, type MotionProps, type Transition } from "framer-motion";
 import type { TrackerPanelSide } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import { InlineEdit } from "./tracker-data-sidebar.controls";
 
 type ThoughtBubbleSize = "short" | "medium" | "long";

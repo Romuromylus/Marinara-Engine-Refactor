@@ -1,8 +1,8 @@
 import type { Persona } from "../../../engine/contracts/types/persona";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import { TRACKER_PROFILE_ORDER_CLASS_BY_SIDE, type TrackerProfileSide } from "../lib/tracker-profile-layout";
-import { getPersonaInitial } from "./tracker-data-sidebar.helpers";
+import { getPersonaInitial } from "./tracker-persona-profile-style";
 import { TrackerPortraitStage, type TrackerPortraitStageMediaKind } from "./TrackerPortraitStage";
 
 export function PersonaPortraitStage({

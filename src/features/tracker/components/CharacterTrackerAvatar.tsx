@@ -1,7 +1,7 @@
 import { ImagePlus } from "lucide-react";
 import type { PresentCharacter } from "../../../engine/contracts/types/game-state";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 
 const AVATAR_BOTTOM_GLINT_CLASS =
   "pointer-events-none absolute -inset-[2px] z-[3] rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,transparent_104deg,color-mix(in_srgb,var(--tracker-profile-dialogue-border)_58%,transparent)_148deg,color-mix(in_srgb,var(--tracker-profile-accent-solid)_46%,transparent)_192deg,transparent_226deg,transparent_360deg)] opacity-90 shadow-[0_1px_4px_color-mix(in_srgb,var(--tracker-profile-accent-solid)_28%,transparent)] [mask:radial-gradient(farthest-side,transparent_calc(100%-3px),black_calc(100%-2px),black_100%)] [transform:rotate(-8deg)]";

@@ -12,7 +12,7 @@ import {
   removeTrackerListItem,
   replaceTrackerListItem,
 } from "../../world-state/lib/tracker-state-edits";
-import { getCharacterFeatureKey } from "../components/tracker-data-sidebar.helpers";
+import { getCharacterFeatureKey } from "../components/tracker-character.helpers";
 
 export function useTrackerMutations({
   activeChatId,

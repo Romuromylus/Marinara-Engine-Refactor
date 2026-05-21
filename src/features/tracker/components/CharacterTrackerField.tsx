@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import { InlineEdit } from "./tracker-data-sidebar.controls";
 
 export type CompactCharacterFieldTone = "mood" | "appearance" | "outfit" | "thoughts";

@@ -26,7 +26,7 @@ import {
 import {
   normalizeLookupText,
   normalizeMaybeJsonStringArray,
-} from "../../../tracker/components/tracker-data-sidebar.helpers";
+} from "../../../tracker/components/tracker-metadata.helpers";
 import {
   TrackerCardColorControls,
   type TrackerCardColorEntityLabel,

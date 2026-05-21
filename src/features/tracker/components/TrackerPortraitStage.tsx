@@ -11,7 +11,7 @@ import {
   TRACKER_PORTRAIT_ZOOM_STEP,
   TRACKER_PROFILE_PORTRAIT_FRAME_STAGE_CLASS,
 } from "./tracker-data-sidebar.constants";
-import { clampNumber } from "./tracker-data-sidebar.helpers";
+import { clampNumber } from "./tracker-display.helpers";
 import {
   TRACKER_PROFILE_PORTRAIT_FADE_CLASS_BY_OUTSIDE_SIDE,
   TRACKER_PROFILE_PORTRAIT_LOWER_OUTSIDE_FRAME_CLASS_BY_SIDE,

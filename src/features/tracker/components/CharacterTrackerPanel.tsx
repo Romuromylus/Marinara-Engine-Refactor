@@ -7,11 +7,9 @@ import type {
   TrackerThoughtBubbleDisplay,
 } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
-import {
-  getCharacterFeatureKey,
-  getSpriteExpressionForCharacter,
-  type TrackerProfileColors,
-} from "./tracker-data-sidebar.helpers";
+import { getCharacterFeatureKey } from "./tracker-character.helpers";
+import { getSpriteExpressionForCharacter } from "./tracker-sprite.helpers";
+import type { TrackerProfileColors } from "./tracker-profile-colors";
 import { AddRowButton, EmptySection, SectionHeader } from "./tracker-data-sidebar.controls";
 import { CharacterTrackerCard } from "./CharacterTrackerCard";
 

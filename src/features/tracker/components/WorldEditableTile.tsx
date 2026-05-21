@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 
 export function WorldTileShell({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (

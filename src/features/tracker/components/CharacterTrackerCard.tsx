@@ -7,7 +7,9 @@ import type {
   TrackerThoughtBubbleDisplay,
 } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
-import { getCharacterAmbienceStyle, visibleText, type TrackerProfileColors } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
+import { getCharacterAmbienceStyle } from "./tracker-character-profile-style";
+import type { TrackerProfileColors } from "./tracker-profile-colors";
 import {
   addPresentCharacterStat,
   updatePresentCharacterCustomField,

@@ -3,7 +3,8 @@ import type { CharacterStat } from "../../../engine/contracts/types/game-state";
 import { cn } from "../../../shared/lib/utils";
 import { TRACKER_BAR, TRACKER_TEXT_ROW } from "./tracker-data-sidebar.constants";
 import type { TrackerStatDensity, TrackerStatDisplayScale } from "./tracker-data-sidebar.constants";
-import { getTrackerStatDisplayScale, visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
+import { getTrackerStatDisplayScale } from "./tracker-stat-layout";
 import { getTrackerStatPercent } from "../../world-state/lib/tracker-state-display";
 import { EmptySection, FittedText, InlineAddRow, InlineEdit, InlineNumber } from "./tracker-data-sidebar.controls";
 

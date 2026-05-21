@@ -1,6 +1,7 @@
 import { MapPin } from "lucide-react";
 import { cn } from "../../../shared/lib/utils";
-import { getLocationPinColor, visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
+import { getLocationPinColor } from "./tracker-world.helpers";
 import { WorldRenderedEdit, WorldTileShell } from "./WorldEditableTile";
 
 export function WorldLocationPlate({

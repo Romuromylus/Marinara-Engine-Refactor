@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import type { CharacterStat } from "../../../engine/contracts/types/game-state";
+import { getFiniteNumberInputValue } from "../../../shared/lib/number-input";
 import { getTrackerStatPercent } from "../../world-state/lib/tracker-state-display";
 import { InlineEdit } from "./RoleplayHUDInlineEdit";
 
@@ -36,8 +37,7 @@ export function StatBarEditable({
             type="number"
             value={stat.value}
             onChange={(event) => {
-              const value = event.currentTarget.valueAsNumber;
-              if (Number.isFinite(value)) onUpdateValue(value);
+              onUpdateValue(getFiniteNumberInputValue(event.currentTarget.valueAsNumber, stat.value));
             }}
             className="w-12 bg-transparent text-right outline-none text-[var(--foreground)]/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
@@ -46,8 +46,7 @@ export function StatBarEditable({
             type="number"
             value={stat.max}
             onChange={(event) => {
-              const value = event.currentTarget.valueAsNumber;
-              if (Number.isFinite(value)) onUpdateMax(value);
+              onUpdateMax(getFiniteNumberInputValue(event.currentTarget.valueAsNumber, stat.max));
             }}
             className="w-12 bg-transparent outline-none text-[var(--foreground)]/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />

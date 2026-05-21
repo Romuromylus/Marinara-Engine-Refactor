@@ -8,9 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronDown, Pencil, Plus } from "lucide-react";
+import { getFiniteNumberInputValue } from "../../../shared/lib/number-input";
 import { cn } from "../../../shared/lib/utils";
 import { TRACKER_TEXT_MICRO } from "./tracker-data-sidebar.constants";
-import { getNumberValueWidth } from "./tracker-data-sidebar.helpers";
+import { getNumberValueWidth } from "./tracker-display.helpers";
 
 export const TRACKER_PROFILE_CARD_FRAME_CLASS = cn(
   "relative isolate min-w-0 overflow-hidden rounded-md border border-[color-mix(in_srgb,var(--tracker-profile-rule)_82%,transparent)]",
@@ -362,9 +363,7 @@ export function InlineNumber({
       type="number"
       value={Number.isFinite(value) ? value : 0}
       onChange={(event) => {
-        const numeric = Number(event.target.value);
-        const next = Number.isFinite(numeric) ? numeric : 0;
-        onChange(min === undefined ? next : Math.max(min, next));
+        onChange(getFiniteNumberInputValue(event.currentTarget.valueAsNumber, 0, { min }));
       }}
       title={title}
       style={{ width }}

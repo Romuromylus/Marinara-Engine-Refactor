@@ -4,7 +4,7 @@ import type { CharacterStat, PresentCharacter } from "../../../engine/contracts/
 import type { TrackerPanelSizeProfile } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
 import type { TrackerStatDensity } from "./tracker-data-sidebar.constants";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import { InlineEdit, TRACKER_PROFILE_FIELD_TILE_CLASS } from "./tracker-data-sidebar.controls";
 import { StatList as TrackerStatList } from "./tracker-data-sidebar.stats";
 

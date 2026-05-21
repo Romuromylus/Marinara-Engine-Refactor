@@ -1,6 +1,6 @@
 import { Clock } from "lucide-react";
 import { cn } from "../../../shared/lib/utils";
-import { getWorldDateDisplay, getWorldTimeDisplay } from "./tracker-data-sidebar.helpers";
+import { getWorldDateDisplay, getWorldTimeDisplay } from "./tracker-world.helpers";
 import { WorldRenderedEdit, WorldTileShell } from "./WorldEditableTile";
 
 export function WorldDateTile({

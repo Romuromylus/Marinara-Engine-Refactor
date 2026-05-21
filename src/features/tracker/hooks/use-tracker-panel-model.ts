@@ -14,16 +14,16 @@ import {
 } from "../../world-state/lib/tracker-state-display";
 import type { TrackerStateController } from "../../world-state/types";
 import { useFeaturedCharacterCards } from "./use-featured-character-cards";
+import { getCharacterProfileColors } from "../components/tracker-character-profile-style";
+import type { TrackerProfileColors } from "../components/tracker-profile-colors";
 import {
-  getCharacterProfileColors,
   getLatestSpriteExpressionsFromMessages,
-  isSpriteLookupCharacterId,
   normalizeLookupText,
   normalizeMaybeJsonStringArray,
   normalizeSpriteExpressionMap,
   parseMetadataRecord,
-  type TrackerProfileColors,
-} from "../components/tracker-data-sidebar.helpers";
+} from "../components/tracker-metadata.helpers";
+import { isSpriteLookupCharacterId } from "../components/tracker-sprite.helpers";
 
 export interface TrackerSpriteLookup {
   knownIds: Set<string>;

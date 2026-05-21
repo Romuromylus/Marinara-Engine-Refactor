@@ -20,12 +20,12 @@ import {
   getOppositeTrackerProfileSide,
   getTrackerProfilePortraitSide,
 } from "../lib/tracker-profile-layout";
+import { getCharacterAmbienceStyle } from "./tracker-character-profile-style";
+import type { TrackerProfileColors } from "./tracker-profile-colors";
 import {
-  getCharacterAmbienceStyle,
   getFeaturedCharacterStatDensity,
   trackerStatStackHeight,
-  type TrackerProfileColors,
-} from "./tracker-data-sidebar.helpers";
+} from "./tracker-stat-layout";
 import {
   addPresentCharacterStat,
   updatePresentCharacterCustomField,

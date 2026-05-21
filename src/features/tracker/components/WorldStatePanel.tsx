@@ -3,7 +3,7 @@ import { MapPin } from "lucide-react";
 import type { GameState } from "../../../engine/contracts/types/game-state";
 import type { TrackerPanelSizeProfile, TrackerTemperatureUnit } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
-import type { GameStatePatchField } from "../../world-state/types";
+import type { GameStatePatchValue, WorldStatePatchField } from "../../world-state/types";
 import { SectionHeader } from "./tracker-data-sidebar.controls";
 import {
   WORLD_FREEFORM_DATE_GRID_BASE_CLASS,
@@ -11,7 +11,7 @@ import {
   getWorldAmbienceStyle,
   getWorldDashboardGridClass,
   getWorldDateDisplay,
-} from "./tracker-data-sidebar.helpers";
+} from "./tracker-world.helpers";
 import { WorldDateTile, WorldTimeTile } from "./WorldDateTimeTiles";
 import { WorldForecastTile } from "./WorldForecastTile";
 import { WorldLocationPlate } from "./WorldLocationPlate";
@@ -29,7 +29,7 @@ export function WorldStatePanel({
   trackerPanelSizeProfile: TrackerPanelSizeProfile;
   trackerTemperatureUnit: TrackerTemperatureUnit;
   action?: ReactNode;
-  onSaveField: (field: GameStatePatchField, value: string | null) => void;
+  onSaveField: <K extends WorldStatePatchField>(field: K, value: GameStatePatchValue[K]) => void;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
 }) {

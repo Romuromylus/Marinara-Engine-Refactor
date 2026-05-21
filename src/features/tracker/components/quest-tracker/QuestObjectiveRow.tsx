@@ -2,7 +2,7 @@ import { CheckCircle2, Circle, X } from "lucide-react";
 import type { QuestProgress } from "../../../../engine/contracts/types/game-state";
 import { cn } from "../../../../shared/lib/utils";
 import { InlineEdit } from "../tracker-data-sidebar.controls";
-import { visibleText } from "../tracker-data-sidebar.helpers";
+import { visibleText } from "../tracker-display.helpers";
 
 type QuestObjective = QuestProgress["objectives"][number];
 

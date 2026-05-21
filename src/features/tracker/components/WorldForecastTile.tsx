@@ -4,8 +4,8 @@ import {
   getTemperatureColor,
   getTemperatureGaugeDisplay,
   getWeatherEmoji,
-  visibleText,
-} from "./tracker-data-sidebar.helpers";
+} from "./tracker-world.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import { FittedText } from "./tracker-data-sidebar.controls";
 import { WorldRenderedEdit, WorldTileShell } from "./WorldEditableTile";
 

@@ -23,7 +23,7 @@ import {
   TRACKER_PROFILE_PORTRAIT_MEDIA_STAGE_REM,
   TRACKER_PROFILE_PORTRAIT_ROOMY_MEDIA_STAGE_REM,
 } from "./tracker-data-sidebar.constants";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import {
   TRACKER_PROFILE_DETAILS_SEAM_BORDER_CLASS_BY_SIDE,
   TRACKER_PROFILE_GRID_CLASS,
@@ -32,9 +32,9 @@ import {
   getOppositeTrackerProfileSide,
   getTrackerProfilePortraitSide,
 } from "../lib/tracker-profile-layout";
-import { resolveSpriteUrl } from "./tracker-data-sidebar.helpers";
-import { getPersonaStatDensity } from "./tracker-data-sidebar.helpers";
-import { getPersonaAmbienceStyle } from "./tracker-data-sidebar.helpers";
+import { resolveSpriteUrl } from "./tracker-sprite.helpers";
+import { getPersonaStatDensity } from "./tracker-stat-layout";
+import { getPersonaAmbienceStyle } from "./tracker-persona-profile-style";
 import { InlineAddRow, InlineEdit } from "./tracker-data-sidebar.controls";
 import { TrackerProfileNameplate } from "./TrackerProfileNameplate";
 import {

@@ -7,6 +7,7 @@ import type {
   PresentCharacter,
   QuestProgress,
 } from "../../engine/contracts/types/game-state";
+import type { TemperatureUnit } from "../../shared/lib/temperature-units";
 
 export type GameStatePatchField =
   | "date"
@@ -18,7 +19,12 @@ export type GameStatePatchField =
   | "playerStats"
   | "personaStats";
 
-export type WorldTemperatureUnit = "celsius" | "fahrenheit";
+export type WorldStatePatchField = Extract<
+  GameStatePatchField,
+  "date" | "time" | "location" | "weather" | "temperature"
+>;
+
+export type WorldTemperatureUnit = TemperatureUnit;
 
 export interface GameStatePatchValue {
   date: GameState["date"];

@@ -9,7 +9,7 @@ import {
 } from "../../../world-state/lib/tracker-state-edits";
 import { TRACKER_BAR } from "../tracker-data-sidebar.constants";
 import { InlineEdit } from "../tracker-data-sidebar.controls";
-import { visibleText } from "../tracker-data-sidebar.helpers";
+import { visibleText } from "../tracker-display.helpers";
 import { QuestObjectiveRow } from "./QuestObjectiveRow";
 
 export function QuestRow({

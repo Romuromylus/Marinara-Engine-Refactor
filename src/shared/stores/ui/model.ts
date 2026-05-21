@@ -1,4 +1,6 @@
 // UI store types, constants, and pure helpers.
+import { TEMPERATURE_UNITS, normalizeTemperatureUnit, type TemperatureUnit } from "../../lib/temperature-units";
+
 export type Panel =
   | "chat"
   | "characters"
@@ -14,8 +16,8 @@ export type VisualTheme = "default" | "sillytavern";
 export type HudPosition = "top" | "left" | "right";
 export type TrackerPanelSide = "left" | "right";
 export type TrackerThoughtBubbleDisplay = "inline" | "floating";
-export const TRACKER_TEMPERATURE_UNITS = ["celsius", "fahrenheit"] as const;
-export type TrackerTemperatureUnit = (typeof TRACKER_TEMPERATURE_UNITS)[number];
+export const TRACKER_TEMPERATURE_UNITS = TEMPERATURE_UNITS;
+export type TrackerTemperatureUnit = TemperatureUnit;
 export const TRACKER_PANEL_SIZE_PROFILES = ["compact", "standard", "expanded"] as const;
 export type TrackerPanelSizeProfile = (typeof TRACKER_PANEL_SIZE_PROFILES)[number];
 export type TrackerDataPanelSection = "world" | "persona" | "characters" | "quests" | "custom";
@@ -118,9 +120,7 @@ export function normalizeTrackerThoughtBubbleDisplay(value: unknown): TrackerTho
 }
 
 export function normalizeTrackerTemperatureUnit(value: unknown): TrackerTemperatureUnit {
-  return TRACKER_TEMPERATURE_UNITS.includes(value as TrackerTemperatureUnit)
-    ? (value as TrackerTemperatureUnit)
-    : "celsius";
+  return normalizeTemperatureUnit(value);
 }
 
 export function normalizeTrackerPanelCollapsedSections(value: unknown): TrackerPanelCollapsedSections {

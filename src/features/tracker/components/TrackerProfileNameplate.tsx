@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import { FittedText, InlineEdit } from "./tracker-data-sidebar.controls";
 import { getOppositeTrackerProfileSide, type TrackerProfileSide } from "../lib/tracker-profile-layout";
 

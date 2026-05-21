@@ -8,7 +8,7 @@ import {
   removeTrackerListItem,
   replaceTrackerListItem,
 } from "../../world-state/lib/tracker-state-edits";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import {
   AddRowButton,
   EmptySection,

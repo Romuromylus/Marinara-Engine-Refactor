@@ -9,10 +9,10 @@ import {
   TRACKER_PORTRAIT_MAX_ZOOM,
   TRACKER_PORTRAIT_MIN_ZOOM,
 } from "./tracker-data-sidebar.constants";
-import { getCharacterPortraitFallback } from "./tracker-data-sidebar.helpers";
-import { clampNumber, visibleText } from "./tracker-data-sidebar.helpers";
+import { getCharacterPortraitFallback } from "./tracker-character.helpers";
+import { clampNumber, visibleText } from "./tracker-display.helpers";
 import { getOppositeTrackerProfileSide, type TrackerProfileSide } from "../lib/tracker-profile-layout";
-import { getCharacterExpressionHint, isSpriteLookupCharacterId, resolveSpriteUrl } from "./tracker-data-sidebar.helpers";
+import { getCharacterExpressionHint, isSpriteLookupCharacterId, resolveSpriteUrl } from "./tracker-sprite.helpers";
 import { TrackerPortraitStage, type TrackerPortraitStageMediaKind } from "./TrackerPortraitStage";
 
 export function FeaturedCharacterPortrait({

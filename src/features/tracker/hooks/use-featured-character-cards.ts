@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUpdateChatMetadata } from "../../chats/hooks/use-chats";
 import { TRACKER_FEATURED_CHARACTER_META_KEY } from "../components/tracker-data-sidebar.constants";
-import { normalizeStringArray } from "../components/tracker-data-sidebar.helpers";
+import { normalizeStringArray } from "../components/tracker-metadata.helpers";
 
 export function useFeaturedCharacterCards({
   activeChatId,
