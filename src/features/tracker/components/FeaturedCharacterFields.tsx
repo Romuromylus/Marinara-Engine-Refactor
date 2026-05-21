@@ -204,6 +204,8 @@ export function FeaturedStatGrid({
           density={density}
           fillAvailable={false}
           wideColumns={wideColumns}
+          showWideColumnGhost={wideColumns}
+          visualTone="instrument"
         />
       </div>
     </div>

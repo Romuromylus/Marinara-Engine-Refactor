@@ -57,7 +57,7 @@ export function WorldStatePanel({
       {!collapsed && (
         <div
           className={cn(
-            "relative grid gap-px p-1 @min-[380px]:gap-1 @min-[380px]:p-1.5",
+            "relative grid gap-px px-0.5 py-1 @min-[380px]:gap-0.5 @min-[380px]:px-1",
             hasFreeformDate ? WORLD_FREEFORM_DATE_GRID_BASE_CLASS : WORLD_GRID_BASE_CLASS,
             dashboardGridClass,
           )}

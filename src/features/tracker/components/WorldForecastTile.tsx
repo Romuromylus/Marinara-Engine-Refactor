@@ -1,9 +1,11 @@
 import type { TrackerPanelSizeProfile, TrackerTemperatureUnit } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
 import {
+  getTemperatureKeywordHint,
   getTemperatureColor,
   getTemperatureGaugeDisplay,
   getWeatherEmoji,
+  parseTemperatureValue,
 } from "./tracker-world.helpers";
 import { visibleText } from "./tracker-display.helpers";
 import { FittedText } from "./tracker-data-sidebar.controls";
@@ -26,6 +28,8 @@ export function WorldForecastTile({
 }) {
   const weatherText = visibleText(weather, "Set weather");
   const temperatureDisplay = getTemperatureGaugeDisplay(temperature, trackerTemperatureUnit);
+  const hasTemperatureSignal =
+    parseTemperatureValue(temperature) !== null || getTemperatureKeywordHint(temperature) !== null;
   const useHorizontalTempRail = trackerPanelSizeProfile !== "compact";
   return (
     <WorldTileShell label="Forecast" className="min-h-[3.125rem]">
@@ -35,7 +39,7 @@ export function WorldForecastTile({
           className={cn(
             "pointer-events-none absolute top-1/2 z-0 -translate-y-1/2 select-none text-[2.75rem] leading-none opacity-[0.085] saturate-125 @min-[7rem]:text-[3.25rem] @min-[10rem]:text-[4rem] @min-[14rem]:text-[4.65rem]",
             useHorizontalTempRail
-              ? "right-[4rem] @min-[7rem]:right-[4.15rem] @min-[10rem]:right-[4.25rem] @min-[14rem]:right-[4.35rem]"
+              ? "right-[3.25rem] @min-[7rem]:right-[3.35rem] @min-[10rem]:right-[3.45rem] @min-[14rem]:right-[3.55rem]"
               : "right-[2rem] @min-[7rem]:right-[2.3rem] @min-[10rem]:right-[2.7rem] @min-[14rem]:right-[3.05rem]",
           )}
         >
@@ -49,21 +53,21 @@ export function WorldForecastTile({
           onSave={onSaveWeather}
           placeholder="Set weather"
           className={cn(
-            "relative z-[2] flex h-full min-w-0 flex-col justify-center overflow-hidden px-1.5 py-1 text-left @min-[10rem]:px-2",
+            "relative z-[2] flex h-full min-w-0 flex-col justify-center overflow-hidden px-1 py-1 text-left @min-[10rem]:px-1.5",
             useHorizontalTempRail
-              ? "pr-[4.75rem] @min-[7rem]:pr-[4.9rem] @min-[10rem]:pr-[5rem] @min-[14rem]:pr-[5.1rem]"
-              : "pr-[2.65rem] @min-[7rem]:pr-[2.95rem] @min-[10rem]:pr-[3.35rem] @min-[14rem]:pr-[3.85rem]",
+              ? "pr-[3.9rem] @min-[7rem]:pr-[4rem] @min-[10rem]:pr-[4.1rem] @min-[14rem]:pr-[4.2rem]"
+              : "pr-[2.75rem] @min-[7rem]:pr-[2.9rem] @min-[10rem]:pr-[3.05rem] @min-[14rem]:pr-[3.2rem]",
           )}
           inputClassName={cn(
             "text-left text-[0.75rem]",
             useHorizontalTempRail
-              ? "pr-[4.75rem] @min-[7rem]:pr-[4.9rem] @min-[10rem]:pr-[5rem] @min-[14rem]:pr-[5.1rem]"
-              : "pr-[2.65rem] @min-[7rem]:pr-[2.95rem] @min-[10rem]:pr-[3.35rem] @min-[14rem]:pr-[3.85rem]",
+              ? "pr-[3.9rem] @min-[7rem]:pr-[4rem] @min-[10rem]:pr-[4.1rem] @min-[14rem]:pr-[4.2rem]"
+              : "pr-[2.75rem] @min-[7rem]:pr-[2.9rem] @min-[10rem]:pr-[3.05rem] @min-[14rem]:pr-[3.2rem]",
           )}
           editHintClassName={cn(
             useHorizontalTempRail
-              ? "right-[4.45rem] @min-[7rem]:right-[4.6rem] @min-[10rem]:right-[4.7rem] @min-[14rem]:right-[4.8rem]"
-              : "right-[2.45rem] @min-[7rem]:right-[2.65rem] @min-[10rem]:right-[2.95rem] @min-[14rem]:right-[3.25rem]",
+              ? "right-[3.6rem] @min-[7rem]:right-[3.7rem] @min-[10rem]:right-[3.8rem] @min-[14rem]:right-[3.9rem]"
+              : "right-[2.55rem] @min-[7rem]:right-[2.7rem] @min-[10rem]:right-[2.85rem] @min-[14rem]:right-[3rem]",
           )}
         >
           <WorldWeatherLabel text={weatherText} trackerPanelSizeProfile={trackerPanelSizeProfile} />
@@ -72,8 +76,8 @@ export function WorldForecastTile({
           className={cn(
             "absolute bottom-0.5 right-0.5 top-0.5 z-[3]",
             useHorizontalTempRail
-              ? "w-[4.15rem] @min-[7rem]:w-[4.25rem] @min-[10rem]:w-[4.35rem] @min-[14rem]:w-[4.45rem]"
-              : "w-[2.3rem] @min-[7rem]:w-[2.45rem] @min-[10rem]:bottom-0.5 @min-[10rem]:top-auto @min-[10rem]:h-[2.95rem] @min-[10rem]:w-[2.7rem] @min-[14rem]:w-[3rem]",
+              ? "w-[3.3rem] @min-[7rem]:w-[3.4rem] @min-[10rem]:w-[3.5rem] @min-[14rem]:w-[3.6rem]"
+              : "w-[2.45rem] @min-[7rem]:w-[2.6rem] @min-[10rem]:w-[2.75rem] @min-[14rem]:w-[2.9rem]",
           )}
         >
           <WorldRenderedEdit
@@ -84,8 +88,8 @@ export function WorldForecastTile({
             className={cn(
               "h-full w-full rounded-[3px] bg-[color-mix(in_srgb,var(--background)_38%,transparent)] text-center shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_8%,transparent),0_0_8px_color-mix(in_srgb,var(--background)_30%,transparent)] ring-1 ring-[var(--border)]/24 hover:!bg-[color-mix(in_srgb,var(--background)_46%,transparent)]",
               useHorizontalTempRail
-                ? "grid grid-cols-[minmax(0,1fr)_1.4rem] items-center gap-0.5 py-0.5 pl-0.5 pr-1 @min-[10rem]:grid-cols-[minmax(0,1fr)_1.5rem] @min-[14rem]:gap-1 @min-[14rem]:pl-1 @min-[14rem]:pr-1.5"
-                : "flex flex-col items-center justify-center gap-[0.125rem] px-0 pb-0.5 pt-0.5 @min-[10rem]:gap-0.5 @min-[10rem]:pt-0.5",
+                ? "grid grid-cols-[minmax(0,1fr)_1.05rem] items-center gap-px py-0.5 pl-0.5 pr-0.5 @min-[10rem]:grid-cols-[minmax(0,1fr)_1.1rem] @min-[14rem]:gap-0.5"
+                : "flex flex-row items-center justify-center gap-1 px-0.5 py-0.5",
             )}
             inputClassName={cn("text-center text-[0.625rem]", useHorizontalTempRail && "text-[0.6875rem]")}
             showEditHint={false}
@@ -95,7 +99,7 @@ export function WorldForecastTile({
                 "min-w-0 truncate font-black leading-none tracking-normal drop-shadow-sm",
                 useHorizontalTempRail
                   ? "justify-self-end text-right text-[0.625rem] @min-[10rem]:text-[0.6875rem] @min-[14rem]:text-[0.75rem]"
-                  : "text-[0.5625rem] @min-[10rem]:text-[0.625rem]",
+                  : "text-left text-[0.625rem]",
                 getTemperatureColor(temperature),
               )}
             >
@@ -104,10 +108,14 @@ export function WorldForecastTile({
             <span
               className={cn(
                 "flex min-w-0 items-center justify-center overflow-visible",
-                useHorizontalTempRail ? "h-full w-full" : "order-first h-[1.55rem] w-full @min-[14rem]:h-[1.6rem]",
+                useHorizontalTempRail ? "h-full w-full" : "h-4 w-[0.625rem] shrink-0",
               )}
             >
-              <WorldThermometerGauge display={temperatureDisplay} variant={useHorizontalTempRail ? "expanded" : "compact"} />
+              <WorldThermometerGauge
+                active={hasTemperatureSignal}
+                display={temperatureDisplay}
+                variant={useHorizontalTempRail ? "expanded" : "compact"}
+              />
             </span>
           </WorldRenderedEdit>
         </div>
@@ -254,67 +262,45 @@ function WorldWeatherLabel({
 }
 
 function WorldThermometerGauge({
+  active,
   display,
   variant = "compact",
 }: {
+  active: boolean;
   display: ReturnType<typeof getTemperatureGaugeDisplay>;
   variant?: "compact" | "expanded";
 }) {
-  const fillStyle = { backgroundColor: display.color };
-  const expanded = variant === "expanded";
+  const fillRatio = display.percent / 100;
   return (
-    <div className={cn("relative", expanded ? "h-[2.55rem] w-[1.15rem]" : "h-[1.55rem] w-[0.95rem]")}>
-      <div
-        className={cn(
-          "absolute left-1/2 -translate-x-1/2 overflow-hidden rounded-full border border-[var(--border)]/42 bg-[var(--background)]/52 shadow-[inset_0_0_4px_rgba(0,0,0,0.32)]",
-          expanded ? "bottom-[0.58rem] h-[1.78rem] w-[0.5rem]" : "bottom-[0.42rem] h-[1rem] w-[0.42rem]",
-        )}
-      >
-        <div
-          className={cn(
-            "absolute inset-x-0 overflow-hidden rounded-full",
-            expanded ? "bottom-[0.15625rem] top-[0.15625rem]" : "bottom-[0.125rem] top-[0.125rem]",
-          )}
-        >
-          <span
-            className={cn(
-              "absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full shadow-[0_0_6px_color-mix(in_srgb,var(--primary)_16%,transparent)] transition-[height] duration-200",
-              expanded ? "w-[0.25rem]" : "w-[0.2rem]",
-            )}
-            style={{ ...fillStyle, height: `${display.percent}%` }}
-          />
-        </div>
-        <span
-          className={cn(
-            "absolute left-1/2 w-px -translate-x-1/2 rounded-full bg-[var(--foreground)]/18",
-            expanded ? "top-[0.18rem] h-1" : "top-[0.125rem] h-0.5",
-          )}
-        />
-      </div>
-      <span
-        className={cn(
-          "absolute left-1/2 z-[1] -translate-x-1/2 shadow-[0_0_6px_color-mix(in_srgb,var(--primary)_14%,transparent)]",
-          expanded ? "bottom-[0.49rem] h-[0.42rem] w-[0.27rem]" : "bottom-[0.36rem] h-[0.3rem] w-[0.22rem]",
-        )}
-        style={fillStyle}
+    <svg
+      viewBox="0 0 10 20"
+      fill="none"
+      className={cn(
+        "shrink-0 drop-shadow-[0_0_4px_color-mix(in_srgb,var(--background)_34%,transparent)]",
+        variant === "compact" ? "h-4 w-[0.625rem]" : "h-[2.05rem] w-[1.05rem]",
+      )}
+    >
+      <rect
+        x="3"
+        y="1"
+        width="4"
+        height="13"
+        rx="2"
+        stroke={display.color}
+        strokeWidth="1.2"
+        fill="none"
+        opacity={active ? 1 : 0.3}
       />
-      <div
-        className={cn(
-          "absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full border border-[var(--border)]/42 bg-[var(--background)]/54 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.26),0_0_6px_color-mix(in_srgb,var(--primary)_9%,transparent)]",
-          expanded ? "h-[0.92rem] w-[0.92rem]" : "h-[0.72rem] w-[0.72rem]",
-        )}
-      >
-        <span
-          className={cn("absolute rounded-full", expanded ? "inset-[0.19rem]" : "inset-[0.15rem]")}
-          style={fillStyle}
-        />
-        <span
-          className={cn(
-            "absolute rounded-full bg-[var(--foreground)]/24",
-            expanded ? "left-[0.3rem] top-[0.26rem] h-[0.28rem] w-[0.2rem]" : "left-[0.23rem] top-[0.2rem] h-[0.22rem] w-[0.16rem]",
-          )}
-        />
-      </div>
-    </div>
+      <rect
+        x="3.8"
+        y={1 + 12 * (1 - fillRatio)}
+        width="2.4"
+        height={12 * fillRatio + 1}
+        rx="1"
+        fill={display.color}
+        opacity={active ? 0.9 : 0.2}
+      />
+      <circle cx="5" cy="17" r="2.5" fill={display.color} opacity={active ? 1 : 0.25} />
+    </svg>
   );
 }

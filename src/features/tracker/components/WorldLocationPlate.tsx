@@ -23,7 +23,7 @@ export function WorldLocationPlate({
         value={value}
         onSave={onSave}
         placeholder="Set location"
-        className="relative z-[1] grid grid-cols-[1.7rem_minmax(0,1fr)] items-center gap-1 px-1 py-1 text-left @min-[380px]:grid-cols-[1.9rem_minmax(0,1fr)] @min-[380px]:px-1.5"
+        className="relative z-[1] grid grid-cols-[1.65rem_minmax(0,1fr)] items-center gap-0.5 px-0.5 py-1 text-left @min-[380px]:grid-cols-[1.75rem_minmax(0,1fr)] @min-[380px]:px-1"
         inputClassName="text-center text-[0.75rem]"
         editHintClassName="right-1 top-1"
       >
@@ -33,7 +33,7 @@ export function WorldLocationPlate({
         </div>
         <span
           className={cn(
-            "line-clamp-2 min-w-0 max-w-full pr-3 whitespace-normal break-words text-left font-bold text-[var(--foreground)]/92 drop-shadow-sm",
+            "line-clamp-2 min-w-0 max-w-full pr-2 whitespace-normal break-words text-left font-bold text-[var(--foreground)]/92 drop-shadow-sm",
             compactLocationText ? "text-[0.625rem] leading-[0.75rem]" : "text-[0.75rem] leading-4",
           )}
         >
