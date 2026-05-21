@@ -4592,20 +4592,37 @@ export function GameSurface({
         minute: normalizeGameMinute(gameTimeMeta?.minute, parsedSnapshotTime?.minute ?? 0),
       };
       const formattedTime = formatGameTimeForHud(nextTime);
+      const previousTime =
+        (snapshot?.chatId === activeChatId ? snapshot.time : gameSnapshot?.time) ?? metaTime ?? null;
+      let patchedTime = false;
 
       try {
+        await patchVisibleGameState("time", formattedTime);
+        patchedTime = true;
         await updateChatMetadata.mutateAsync({
           id: activeChatId,
           gameTime: nextTime,
         });
 
-        await patchVisibleGameState("time", formattedTime);
         toast.success(`Set game day to ${nextTime.day}.`);
       } catch (error) {
+        if (patchedTime) {
+          await patchVisibleGameState("time", previousTime).catch((rollbackError) => {
+            console.warn("Failed to rollback visible game time patch", rollbackError);
+          });
+        }
         toast.error(error instanceof Error ? error.message : "Failed to update game day.");
       }
     },
-    [activeChatId, gameTimeMeta?.hour, gameTimeMeta?.minute, patchVisibleGameState, updateChatMetadata],
+    [
+      activeChatId,
+      gameSnapshot?.time,
+      gameTimeMeta?.hour,
+      gameTimeMeta?.minute,
+      metaTime,
+      patchVisibleGameState,
+      updateChatMetadata,
+    ],
   );
 
   const handleJsonRepairApplied = useCallback(
@@ -4854,7 +4871,7 @@ export function GameSurface({
       return addedItemName;
     } catch (error) {
       if (patchedGameState && currentPlayerStats) {
-        void patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
+        await patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
       }
       const message = error instanceof Error ? error.message : `Failed to add ${addedItemName} to inventory.`;
       toast.error(message);
@@ -4906,7 +4923,7 @@ export function GameSurface({
         toast.success(`Added 1 ${normalizedItemName}.`);
       } catch (error) {
         if (patchedGameState && currentPlayerStats) {
-          void patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
+          await patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
         }
         const message = error instanceof Error ? error.message : `Failed to increase ${normalizedItemName}.`;
         toast.error(message);
@@ -4968,7 +4985,7 @@ export function GameSurface({
         toast.success(`Removed ${itemName} from inventory.`);
       } catch (error) {
         if (patchedGameState && currentPlayerStats) {
-          void patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
+          await patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
         }
         const message = error instanceof Error ? error.message : `Failed to remove ${itemName} from inventory.`;
         toast.error(message);
@@ -5031,7 +5048,7 @@ export function GameSurface({
         toast.success(`Used ${normalizedItemName}.`);
       } catch (error) {
         if (patchedGameState && currentPlayerStats) {
-          void patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
+          await patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
         }
         const message = error instanceof Error ? error.message : `Failed to use ${normalizedItemName}.`;
         toast.error(message);
@@ -5088,7 +5105,7 @@ export function GameSurface({
         return resolvedName;
       } catch (error) {
         if (patchedGameState && currentPlayerStats) {
-          void patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
+          await patchVisibleGameState("playerStats", currentPlayerStats).catch(() => {});
         }
         const message = error instanceof Error ? error.message : `Failed to rename ${currentName} to ${resolvedName}.`;
         toast.error(message);
