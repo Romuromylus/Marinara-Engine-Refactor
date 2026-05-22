@@ -34,19 +34,32 @@ RUN mkdir -p src-tauri/src && echo "fn main() {}" > src-tauri/src/main.rs && ech
 # recompile, the registry stays warm), so this costs only the time the binary
 # actually needs to relink — typically tens of seconds, not a full rebuild.
 ARG GIT_SHA=unknown
-# The cargo-target cache mount preserves /workspace/target across builds so
-# crates stay compiled and dep downloads stay warm. But it ALSO preserves the
-# previous build's `target/release/marinara-server` binary, and cargo's
-# incremental fingerprint is happy to consider it "up to date" even when our
-# workspace source actually changed (observed 2026-05-22: Phase 3b's lifted
-# game_assets module shipped to main but cargo finished in 4.47s and reused
-# the Phase 3a binary, leaving the new routes 501-ing). Deleting the binary
-# before cargo build forces the link step to run; the per-crate object cache
-# in target/release/deps/ stays warm so this only costs the final link.
+# The cargo-target cache mount preserves /workspace/target across builds. That
+# keeps upstream deps (axum, tokio, autoagents, image, etc.) compiled across
+# deploys, which is great. But it ALSO preserves stale .rmeta/.rlib files for
+# our own workspace crates, and cargo's incremental fingerprint sometimes
+# fails to detect when a new module file lands in one of them — e.g. a fresh
+# `src-tauri/crates/handlers/src/<new>.rs` plus a `pub mod <new>;` in lib.rs.
+# When that happens, cargo links marinara-server against an out-of-date
+# marinara_handlers.rmeta and either reuses an old binary (no rebuild) or
+# emits "could not find <module> in marinara_handlers" errors (rebuild that
+# trips over the stale cache).
+#
+# Fix: cargo clean --release -p <each crate we own> before the build. This
+# drops our crates' .rmeta/.rlib/.d files so cargo regenerates them from
+# current source. Upstream deps stay cached. The `|| true` accommodates the
+# very first build, where `cargo clean -p <name>` errors because the package
+# isn't compiled yet.
 RUN --mount=type=cache,id=marinara-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=marinara-cargo-target,target=/workspace/target \
     echo "Building marinara-server at commit ${GIT_SHA}" && \
-    rm -f target/release/marinara-server target/release/deps/marinara_server-* && \
+    cargo clean --release \
+        -p marinara-core \
+        -p marinara-security \
+        -p marinara-storage \
+        -p marinara-assets \
+        -p marinara-handlers \
+        -p marinara-server 2>/dev/null || true && \
     cargo build --release --bin marinara-server && \
     cp target/release/marinara-server /usr/local/bin/marinara-server
 
