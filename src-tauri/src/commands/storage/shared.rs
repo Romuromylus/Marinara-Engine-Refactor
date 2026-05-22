@@ -1,9 +1,8 @@
 use super::*;
 
 pub(crate) use marinara_handlers::shared::{
-    decode_path, decode_uploaded_file, materialize_message_swipe_fields,
-    normalize_character_data_for_storage, required_string, string_array_from_value,
-    with_entity_defaults,
+    decode_uploaded_file, normalize_character_data_for_storage, required_string,
+    string_array_from_value, with_entity_defaults,
 };
 
 pub(crate) struct ParsedPath {

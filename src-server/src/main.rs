@@ -18,6 +18,7 @@ struct AppState {
     storage: FileStorage,
     backgrounds: AssetService,
     game_assets: AssetService,
+    lorebook_images: AssetService,
     data_dir: PathBuf,
 }
 
@@ -46,6 +47,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let game_assets = AssetService::new(data_dir.join("game-assets"))?;
     info!("game-assets dir: {}", game_assets.root().display());
 
+    let lorebook_images = AssetService::new(data_dir.join("lorebooks").join("images"))?;
+    info!("lorebook-images dir: {}", lorebook_images.root().display());
+
     let frontend_dir = std::env::var("MARINARA_FRONTEND_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/app/dist"));
@@ -55,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storage,
         backgrounds,
         game_assets,
+        lorebook_images,
         data_dir: data_dir.clone(),
     };
 
@@ -77,11 +82,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ServeDir::new(state.backgrounds.root()).append_index_html_on_directories(false);
     let game_assets_router =
         ServeDir::new(state.game_assets.root()).append_index_html_on_directories(false);
+    let lorebook_images_router =
+        ServeDir::new(state.lorebook_images.root()).append_index_html_on_directories(false);
 
     let app = Router::new()
         .nest("/api", api_router)
         .nest_service("/assets/backgrounds", backgrounds_router)
         .nest_service("/assets/game-assets", game_assets_router)
+        .nest_service("/assets/lorebook-images", lorebook_images_router)
         .fallback_service(static_service)
         .with_state(state);
 
@@ -698,6 +706,38 @@ async fn invoke_command(
         "import_st_bulk_run" => {
             let payload = args.get("payload").cloned().unwrap_or_else(|| args.clone());
             marinara_handlers::imports::import_call(storage, data_dir, &["st-bulk", "run"], payload)
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- profile snapshot + import --------------------------------------
+        // profile_import_file stays desktop-only: the Tauri command takes an
+        // OS path the desktop dialog produced. Web clients reach `import_profile`
+        // by uploading the parsed envelope JSON directly.
+        "profile_export" => marinara_handlers::profile::profile_snapshot(storage, data_dir)
+            .map(Json)
+            .map_err(error_response),
+        "profile_import" => {
+            let envelope = args
+                .get("envelope")
+                .cloned()
+                .unwrap_or_else(|| args.clone());
+            marinara_handlers::profile::import_profile(storage, data_dir, envelope)
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- lorebook images (uploads + per-file path resolver) -------------
+        "lorebook_image_upload" => {
+            let id = required_str(&args, "id")?;
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::lorebook_images::update_lorebook_image(storage, data_dir, id, body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "lorebook_image_file_path" => {
+            let filename = required_str(&args, "filename")?;
+            marinara_handlers::lorebook_images::lorebook_image_file_path(data_dir, filename)
                 .map(Json)
                 .map_err(error_response)
         }

@@ -5,7 +5,9 @@ pub mod chats;
 pub mod entities;
 pub mod game_assets;
 pub mod imports;
+pub mod lorebook_images;
 pub mod media_uploads;
+pub mod profile;
 pub mod shared;
 pub mod tracker;
 

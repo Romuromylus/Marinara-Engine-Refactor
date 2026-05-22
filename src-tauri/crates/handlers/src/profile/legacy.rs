@@ -1,9 +1,10 @@
-use super::super::shared::materialize_message_swipe_fields;
 use super::assets::{normalize_legacy_profile_asset_paths, restore_legacy_profile_json_assets};
 use super::insert_profile_import_aliases;
-use crate::state::AppState;
+use crate::shared::materialize_message_swipe_fields;
 use marinara_core::AppResult;
+use marinara_storage::FileStorage;
 use serde_json::{json, Map, Value};
+use std::path::Path;
 
 const LEGACY_PROFILE_TABLES: &[(&str, &str)] = &[
     ("characters", "characters"),
@@ -40,18 +41,20 @@ const LEGACY_PROFILE_TABLES: &[(&str, &str)] = &[
     ("game_checkpoints", "game-checkpoints"),
 ];
 
-pub(super) fn import_legacy_profile_tables(
-    state: &AppState,
+pub fn import_legacy_profile_tables(
+    storage: &FileStorage,
+    data_dir: &Path,
     data: &Map<String, Value>,
     tables: &Map<String, Value>,
 ) -> AppResult<Value> {
     let files = data.get("fileStorage").and_then(|value| value.get("files"));
-    let restored_assets = restore_legacy_profile_json_assets(state, files)?;
-    import_legacy_profile_tables_with_restored_assets(state, tables, restored_assets)
+    let restored_assets = restore_legacy_profile_json_assets(data_dir, files)?;
+    import_legacy_profile_tables_with_restored_assets(storage, data_dir, tables, restored_assets)
 }
 
-pub(super) fn import_legacy_profile_tables_with_restored_assets(
-    state: &AppState,
+pub fn import_legacy_profile_tables_with_restored_assets(
+    storage: &FileStorage,
+    data_dir: &Path,
     tables: &Map<String, Value>,
     restored_assets: usize,
 ) -> AppResult<Value> {
@@ -65,9 +68,9 @@ pub(super) fn import_legacy_profile_tables_with_restored_assets(
             _ => {}
         }
         for row in &mut rows {
-            normalize_legacy_profile_asset_paths(state, row);
+            normalize_legacy_profile_asset_paths(data_dir, row);
         }
-        state.storage.replace_all(collection, rows.clone())?;
+        storage.replace_all(collection, rows.clone())?;
         imported.insert((*collection).to_string(), json!(rows.len()));
     }
     imported.insert("files".to_string(), json!(restored_assets));

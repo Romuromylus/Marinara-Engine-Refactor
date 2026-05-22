@@ -1,5 +1,4 @@
-use super::super::images::percent_encode_component;
-use crate::state::AppState;
+use crate::shared::percent_encode_component;
 use base64::{engine::general_purpose, Engine as _};
 use marinara_core::{AppError, AppResult};
 use serde_json::{json, Value};
@@ -54,11 +53,11 @@ struct ProfileAssetRestore {
     source: ProfileAssetSource,
 }
 
-pub(super) fn profile_assets(state: &AppState) -> AppResult<Vec<Value>> {
+pub fn profile_assets(data_dir: &Path) -> AppResult<Vec<Value>> {
     let mut assets = Vec::new();
     for dir in PROFILE_ASSET_DIRS {
         let relative = Path::new(dir);
-        collect_profile_assets(&state.data_dir, relative, &mut assets)?;
+        collect_profile_assets(data_dir, relative, &mut assets)?;
     }
     Ok(assets)
 }
@@ -89,26 +88,23 @@ fn collect_profile_assets(root: &Path, relative: &Path, assets: &mut Vec<Value>)
     Ok(())
 }
 
-pub(super) fn restore_profile_assets(
-    state: &AppState,
-    raw_assets: Option<&Value>,
-) -> AppResult<usize> {
-    restore_profile_json_assets(state, raw_assets, false)
+pub fn restore_profile_assets(data_dir: &Path, raw_assets: Option<&Value>) -> AppResult<usize> {
+    restore_profile_json_assets(data_dir, raw_assets, false)
 }
 
-pub(super) fn restore_legacy_profile_json_assets(
-    state: &AppState,
+pub fn restore_legacy_profile_json_assets(
+    data_dir: &Path,
     raw_assets: Option<&Value>,
 ) -> AppResult<usize> {
-    restore_profile_json_assets(state, raw_assets, true)
+    restore_profile_json_assets(data_dir, raw_assets, true)
 }
 
 fn restore_profile_json_assets(
-    state: &AppState,
+    data_dir: &Path,
     raw_assets: Option<&Value>,
     allow_legacy_data_field: bool,
 ) -> AppResult<usize> {
-    restore_profile_json_assets_in_root(&state.data_dir, raw_assets, allow_legacy_data_field)
+    restore_profile_json_assets_in_root(data_dir, raw_assets, allow_legacy_data_field)
 }
 
 fn restore_profile_json_assets_in_root(
@@ -155,23 +151,23 @@ fn decoded_profile_json_assets(
     Ok(decoded)
 }
 
-pub(super) fn restore_profile_zip_assets<R: Read + Seek>(
-    state: &AppState,
+pub fn restore_profile_zip_assets<R: Read + Seek>(
+    data_dir: &Path,
     archive: &mut zip::ZipArchive<R>,
     names: &[String],
     profile_prefix: &str,
     raw_assets: Option<&Value>,
 ) -> AppResult<usize> {
     let assets = decoded_profile_zip_assets(raw_assets, names, profile_prefix)?;
-    clear_profile_asset_dirs(&state.data_dir)?;
+    clear_profile_asset_dirs(data_dir)?;
     let restored = assets.len();
     for asset in assets {
         match asset.source {
             ProfileAssetSource::Bytes(bytes) => {
-                write_profile_asset_in_root(&state.data_dir, &asset.relative, &bytes)?;
+                write_profile_asset_in_root(data_dir, &asset.relative, &bytes)?;
             }
             ProfileAssetSource::ZipEntry(entry_name) => {
-                let target = state.data_dir.join(asset.relative);
+                let target = data_dir.join(asset.relative);
                 if let Some(parent) = target.parent() {
                     fs::create_dir_all(parent)?;
                 }
@@ -219,11 +215,11 @@ fn decoded_profile_zip_assets(
     Ok(decoded)
 }
 
-pub(super) fn normalize_legacy_profile_asset_paths(state: &AppState, value: &mut Value) {
+pub fn normalize_legacy_profile_asset_paths(data_dir: &Path, value: &mut Value) {
     match value {
         Value::Object(object) => {
             for nested in object.values_mut() {
-                normalize_legacy_profile_asset_paths(state, nested);
+                normalize_legacy_profile_asset_paths(data_dir, nested);
             }
             for field in [
                 "avatar",
@@ -240,7 +236,7 @@ pub(super) fn normalize_legacy_profile_asset_paths(state: &AppState, value: &mut
                 let Some(raw) = object.get(field).and_then(Value::as_str) else {
                     continue;
                 };
-                let Some(asset) = legacy_profile_asset_for_path(state, raw) else {
+                let Some(asset) = legacy_profile_asset_for_path(data_dir, raw) else {
                     continue;
                 };
                 object.insert(field.to_string(), Value::String(asset.value));
@@ -268,7 +264,7 @@ pub(super) fn normalize_legacy_profile_asset_paths(state: &AppState, value: &mut
         }
         Value::Array(items) => {
             for item in items {
-                normalize_legacy_profile_asset_paths(state, item);
+                normalize_legacy_profile_asset_paths(data_dir, item);
             }
         }
         Value::String(raw) => {
@@ -280,7 +276,7 @@ pub(super) fn normalize_legacy_profile_asset_paths(state: &AppState, value: &mut
                 return;
             }
             if let Ok(mut parsed) = serde_json::from_str::<Value>(raw) {
-                normalize_legacy_profile_asset_paths(state, &mut parsed);
+                normalize_legacy_profile_asset_paths(data_dir, &mut parsed);
                 if let Ok(serialized) = serde_json::to_string(&parsed) {
                     *raw = serialized;
                 }
@@ -290,9 +286,9 @@ pub(super) fn normalize_legacy_profile_asset_paths(state: &AppState, value: &mut
     }
 }
 
-fn legacy_profile_asset_for_path(state: &AppState, value: &str) -> Option<LegacyProfileAsset> {
+fn legacy_profile_asset_for_path(data_dir: &Path, value: &str) -> Option<LegacyProfileAsset> {
     let relative = legacy_profile_asset_relative_path(value)?;
-    let absolute = state.data_dir.join(&relative);
+    let absolute = data_dir.join(&relative);
     if !absolute.is_file() {
         return None;
     }
@@ -441,18 +437,18 @@ fn clear_profile_asset_dirs(data_dir: &Path) -> AppResult<()> {
     Ok(())
 }
 
-pub(super) fn normalize_profile_path(value: &str) -> String {
+pub fn normalize_profile_path(value: &str) -> String {
     value.replace('\\', "/")
 }
 
-pub(super) fn should_skip_profile_asset_path(value: &str) -> bool {
+pub fn should_skip_profile_asset_path(value: &str) -> bool {
     let normalized = normalize_profile_path(value);
     normalized
         .split('/')
         .any(|segment| segment.is_empty() || segment.starts_with('.'))
 }
 
-pub(super) fn safe_profile_asset_path(value: &str) -> AppResult<PathBuf> {
+pub fn safe_profile_asset_path(value: &str) -> AppResult<PathBuf> {
     let normalized = normalize_profile_path(value);
     let path = Path::new(&normalized);
     if path.is_absolute() {
@@ -506,7 +502,7 @@ fn zip_asset_entry_name(
         })
 }
 
-pub(super) fn normalize_zip_entry_name(value: &str) -> String {
+pub fn normalize_zip_entry_name(value: &str) -> String {
     normalize_profile_path(value)
         .trim_start_matches('/')
         .to_string()

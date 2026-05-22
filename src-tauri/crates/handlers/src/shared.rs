@@ -309,6 +309,28 @@ pub fn decode_path(value: &str) -> String {
         .replace("%20", " ")
 }
 
+/// Minimal RFC 3986 percent-encoding of a single URL path component. Used by
+/// the managed-asset URL builders (`marinara-lorebook-image:`, etc.) so that
+/// filenames with spaces or unicode survive a round-trip through the URL.
+/// Originally lived in `src-tauri/src/commands/storage/images.rs`.
+pub fn percent_encode_component(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => {
+                encoded.push('%');
+                encoded.push(HEX[(byte >> 4) as usize] as char);
+                encoded.push(HEX[(byte & 0x0f) as usize] as char);
+            }
+        }
+    }
+    encoded
+}
+
 pub fn required_string<'a>(body: &'a Value, key: &str) -> AppResult<&'a str> {
     body.get(key)
         .and_then(Value::as_str)
