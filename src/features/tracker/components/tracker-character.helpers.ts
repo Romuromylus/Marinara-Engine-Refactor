@@ -9,7 +9,11 @@ export function getCharacterPortraitFallback(character: PresentCharacter) {
 }
 
 export function getCharacterFeatureKey(character: PresentCharacter, index: number) {
-  if (character.characterId) return character.characterId;
-  if (character.name) return `${character.name}-${index}`;
+  const trimmedId = character.characterId?.trim();
+  if (trimmedId) return trimmedId;
+
+  const trimmedName = character.name?.trim();
+  if (trimmedName) return `${trimmedName}-${index}`;
+
   return `character-${index}`;
 }
