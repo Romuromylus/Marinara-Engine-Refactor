@@ -34,9 +34,19 @@ RUN mkdir -p src-tauri/src && echo "fn main() {}" > src-tauri/src/main.rs && ech
 # recompile, the registry stays warm), so this costs only the time the binary
 # actually needs to relink — typically tens of seconds, not a full rebuild.
 ARG GIT_SHA=unknown
+# The cargo-target cache mount preserves /workspace/target across builds so
+# crates stay compiled and dep downloads stay warm. But it ALSO preserves the
+# previous build's `target/release/marinara-server` binary, and cargo's
+# incremental fingerprint is happy to consider it "up to date" even when our
+# workspace source actually changed (observed 2026-05-22: Phase 3b's lifted
+# game_assets module shipped to main but cargo finished in 4.47s and reused
+# the Phase 3a binary, leaving the new routes 501-ing). Deleting the binary
+# before cargo build forces the link step to run; the per-crate object cache
+# in target/release/deps/ stays warm so this only costs the final link.
 RUN --mount=type=cache,id=marinara-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=marinara-cargo-target,target=/workspace/target \
     echo "Building marinara-server at commit ${GIT_SHA}" && \
+    rm -f target/release/marinara-server target/release/deps/marinara_server-* && \
     cargo build --release --bin marinara-server && \
     cp target/release/marinara-server /usr/local/bin/marinara-server
 
