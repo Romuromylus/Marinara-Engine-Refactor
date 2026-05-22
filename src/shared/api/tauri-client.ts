@@ -2,10 +2,7 @@ import { ApiError } from "./api-errors";
 
 type InvokeArgs = Record<string, unknown> | undefined;
 
-const VITE_TARGET =
-  ((import.meta as unknown as { env?: Record<string, string | undefined> }).env
-    ?.VITE_TARGET as string | undefined) ?? "tauri";
-
+const VITE_TARGET = import.meta.env.VITE_TARGET ?? "tauri";
 const IS_WEB_TARGET = VITE_TARGET === "web";
 
 function normalize(error: unknown): ApiError {

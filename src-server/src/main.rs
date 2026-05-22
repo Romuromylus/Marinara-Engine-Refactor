@@ -10,7 +10,7 @@ use marinara_storage::FileStorage;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use tower_http::services::{ServeDir, ServeFile};
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Clone)]
 struct AppState {
@@ -79,15 +79,18 @@ async fn invoke_command(
                 .map(Json)
                 .map_err(error_response)
         }
-        _ => Err((
-            StatusCode::NOT_IMPLEMENTED,
-            Json(json!({
-                "code": "not_yet_implemented",
-                "message": format!(
-                    "Command '{command}' is not yet exposed on the server target"
-                ),
-            })),
-        )),
+        _ => {
+            warn!("unimplemented command: {command}");
+            Err((
+                StatusCode::NOT_IMPLEMENTED,
+                Json(json!({
+                    "code": "not_yet_implemented",
+                    "message": format!(
+                        "Command '{command}' is not yet exposed on the server target"
+                    ),
+                })),
+            ))
+        }
     }
 }
 
@@ -97,7 +100,10 @@ fn error_response(error: AppError) -> (StatusCode, Json<Value>) {
         "invalid_input" => StatusCode::BAD_REQUEST,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
-    let body = serde_json::to_value(&error)
-        .unwrap_or_else(|_| json!({ "code": "serialization_error", "message": "unknown" }));
+    let body = json!({
+        "code": error.code,
+        "message": error.message,
+        "details": error.details,
+    });
     (status, Json(body))
 }
