@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) use marinara_handlers::shared::{
-    decode_uploaded_file, decode_uploaded_file_value, decode_uploaded_files,
+    decode_path, decode_uploaded_file, decode_uploaded_file_value, decode_uploaded_files,
     materialize_message_swipe_fields, normalize_character_data_for_storage, required_string,
     string_array_from_value, with_entity_defaults,
 };
@@ -68,9 +68,3 @@ pub(crate) fn upload_gallery_image(
     )
 }
 
-pub(crate) fn decode_path(value: &str) -> String {
-    value
-        .replace("%2F", "/")
-        .replace("%5C", "\\")
-        .replace("%20", " ")
-}

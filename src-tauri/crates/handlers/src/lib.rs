@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod agents;
+pub mod backgrounds;
 pub mod chats;
 pub mod entities;
 pub mod shared;

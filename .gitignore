@@ -44,3 +44,6 @@ src-tauri/gen/android/**/*.keystore
 *.njsproj
 *.sln
 *.sw?
+
+# Local scratch dir for decoded production sourcemaps (Phase 5a diagnostic).
+.smaps/
