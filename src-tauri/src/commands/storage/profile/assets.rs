@@ -137,6 +137,9 @@ fn decoded_profile_json_assets(
         let Some(path) = asset.get("path").and_then(Value::as_str) else {
             continue;
         };
+        if is_legacy_cleanup_backup_asset_path(path) {
+            continue;
+        }
         let relative = safe_profile_asset_path(path)?;
         let raw_data = if allow_legacy_data_field {
             asset
@@ -202,6 +205,9 @@ fn decoded_profile_zip_assets(
         let Some(path) = asset.get("path").and_then(Value::as_str) else {
             continue;
         };
+        if is_legacy_cleanup_backup_asset_path(path) {
+            continue;
+        }
         let relative = safe_profile_asset_path(path)?;
         let source = if let Some(raw_data) = asset
             .get("base64")
@@ -452,6 +458,21 @@ pub(super) fn should_skip_profile_asset_path(value: &str) -> bool {
         .any(|segment| segment.is_empty() || segment.starts_with('.'))
 }
 
+fn is_legacy_cleanup_backup_asset_path(value: &str) -> bool {
+    let normalized = normalize_profile_path(value);
+    let parts = normalized.split('/').collect::<Vec<_>>();
+    if parts
+        .iter()
+        .any(|segment| segment.is_empty() || *segment == "..")
+    {
+        return false;
+    }
+    PROFILE_ASSET_DIRS
+        .iter()
+        .any(|allowed| normalized == *allowed || normalized.starts_with(&format!("{allowed}/")))
+        && parts.iter().any(|segment| *segment == ".cleanup-backups")
+}
+
 pub(super) fn safe_profile_asset_path(value: &str) -> AppResult<PathBuf> {
     let normalized = normalize_profile_path(value);
     let path = Path::new(&normalized);
@@ -627,5 +648,57 @@ mod tests {
         );
 
         fs::remove_dir_all(data_dir).unwrap();
+    }
+
+    #[test]
+    fn legacy_cleanup_backup_asset_paths_do_not_reject_profile_assets() {
+        let assets = json!([
+            {
+                "path": "sprites/character-1/.cleanup-backups/backup-1/neutral.png",
+                "base64": general_purpose::STANDARD.encode(b"backup sprite"),
+            },
+            {
+                "path": "sprites/character-1/neutral.png",
+                "base64": general_purpose::STANDARD.encode(b"live sprite"),
+            }
+        ]);
+
+        let decoded = decoded_profile_json_assets(Some(&assets), true)
+            .expect("legacy cleanup backups should be skipped, not reject the profile");
+
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(
+            decoded[0].0,
+            PathBuf::from("sprites/character-1/neutral.png")
+        );
+        assert_eq!(decoded[0].1, b"live sprite");
+    }
+
+    #[test]
+    fn legacy_cleanup_backup_zip_paths_do_not_reject_profile_assets() {
+        let assets = json!([
+            {
+                "path": "sprites/character-1/.cleanup-backups/backup-1/neutral.png",
+            },
+            {
+                "path": "sprites/character-1/neutral.png",
+            }
+        ]);
+        let names = vec!["sprites/character-1/neutral.png".to_string()];
+
+        let decoded = decoded_profile_zip_assets(Some(&assets), &names, "")
+            .expect("legacy cleanup backups should be skipped, not reject the profile zip");
+
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(
+            decoded[0].relative,
+            PathBuf::from("sprites/character-1/neutral.png")
+        );
+        match &decoded[0].source {
+            ProfileAssetSource::ZipEntry(entry) => {
+                assert_eq!(entry, "sprites/character-1/neutral.png");
+            }
+            ProfileAssetSource::Bytes(_) => panic!("zip manifest should resolve to an entry"),
+        }
     }
 }

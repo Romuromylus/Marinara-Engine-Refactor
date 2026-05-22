@@ -2825,6 +2825,7 @@ dependencies = [
  "buttplug_core",
  "chrono",
  "image",
+ "log",
  "marinara-assets",
  "marinara-core",
  "marinara-integrations",

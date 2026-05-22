@@ -322,7 +322,10 @@ fn visible_tracker_snapshot(state: &AppState, chat_id: &str) -> AppResult<Option
     bootstrap_tracker_snapshot(state, chat_id)
 }
 
-fn normalize_tracker_snapshot(chat_id: &str, body: Value) -> AppResult<Map<String, Value>> {
+pub(crate) fn normalize_tracker_snapshot(
+    chat_id: &str,
+    body: Value,
+) -> AppResult<Map<String, Value>> {
     let chat_id = required_chat_id(chat_id)?;
     let incoming = ensure_object(body)?;
     if let Some(body_chat_id) = incoming.get("chatId").and_then(Value::as_str) {
