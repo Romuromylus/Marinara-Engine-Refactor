@@ -1,19 +1,12 @@
 // Transport-agnostic LLM handlers shared by the Tauri desktop binary and the
-// Axum server. Covers the non-streaming surface (Phase 4a): completion calls,
-// model listing, and connection auth checks. The streaming variant
-// (`llm_stream_channel`) still lives on the Tauri side until Phase 4b lifts it
-// onto an SSE-aware Axum route.
+// Axum server. Covers the non-streaming surface (Phase 4a), the SSE streaming
+// surface (Phase 4b), and reaches `crate::images::providers` for the
+// `image_generation` branch of `connection_auth_check` (Phase 4c lifted the
+// canonical image-source helpers there).
 //
 // Helpers here are intentionally narrow: each function takes a `&FileStorage`
 // for connection lookups and reaches the network via `reqwest` or the
 // `marinara_llm` crate. URL guards run through `marinara_security`.
-//
-// The two image-provider helpers (`image_source`, `image_connection_base_url`)
-// are duplicated here in their pure-JSON form so `connection_auth_check`'s
-// `"image_generation"` branch keeps working without dragging the rest of
-// `commands/storage/images/providers.rs` along. Phase 4c will move the full
-// image-generation surface onto the server and the canonical helpers will
-// follow.
 
 use crate::shared::get_required;
 use marinara_core::{AppError, AppResult};
@@ -24,20 +17,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::Duration;
 use tokio::sync::watch;
-
-const DEFAULT_OPENAI_IMAGE_BASE_URL: &str = "https://api.openai.com/v1";
-const DEFAULT_STABILITY_BASE_URL: &str = "https://api.stability.ai/v2beta";
-const DEFAULT_TOGETHER_BASE_URL: &str = "https://api.together.xyz/v1";
-const DEFAULT_NOVELAI_BASE_URL: &str = "https://image.novelai.net";
-const DEFAULT_OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1";
-const DEFAULT_XAI_BASE_URL: &str = "https://api.x.ai/v1";
-const DEFAULT_POLLINATIONS_BASE_URL: &str = "https://image.pollinations.ai";
-const DEFAULT_HORDE_BASE_URL: &str = "https://stablehorde.net/api/v2";
-const DEFAULT_AUTOMATIC1111_BASE_URL: &str = "http://localhost:7860";
-const DEFAULT_COMFYUI_BASE_URL: &str = "http://127.0.0.1:8188";
-const DEFAULT_NANOGPT_BASE_URL: &str = "https://nano-gpt.com/api/v1";
-const DEFAULT_BLOCKENTROPY_BASE_URL: &str = "https://api.blockentropy.ai";
-const DEFAULT_RUNPOD_BASE_URL: &str = "https://api.runpod.ai/v2";
 
 pub fn resolve_llm_connection_for_request(storage: &FileStorage, body: &Value) -> AppResult<Value> {
     if let Some(connection) = body.get("connection").filter(|value| value.is_object()) {
@@ -1021,115 +1000,12 @@ fn sanitize_provider_body(body: &str) -> String {
     }
 }
 
-// Pure-JSON twins of `commands/storage/images/providers.rs::image_source` and
-// `connection_base_url`. Kept here so `connection_auth_check` can stay
-// transport-agnostic; will be removed when Phase 4c moves the image-generation
-// surface (which owns the canonical copies) onto the server.
-fn image_source(connection: &Value) -> String {
-    let explicit = connection
-        .get("imageGenerationSource")
-        .or_else(|| connection.get("imageService"))
-        .and_then(Value::as_str)
-        .or_else(|| connection.get("service").and_then(Value::as_str))
-        .unwrap_or("")
-        .trim();
-    let model = connection
-        .get("model")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim();
-    let base_url = connection
-        .get("baseUrl")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim();
-    infer_image_source(if explicit.is_empty() { model } else { explicit }, base_url)
-}
-
-fn infer_image_source(model_or_source: &str, base_url: &str) -> String {
-    let model = model_or_source.trim().to_ascii_lowercase();
-    let url = base_url.trim().to_ascii_lowercase();
-    match model.as_str() {
-        "openai" | "stability" | "togetherai" | "novelai" | "pollinations" | "horde"
-        | "blockentropy" | "openrouter" | "xai" | "comfyui" | "automatic1111"
-        | "runpod_comfyui" | "gemini_image" | "nanogpt" => return model,
-        "drawthings" => return "automatic1111".to_string(),
-        _ => {}
-    }
-    if url.contains("nano-gpt.com") {
-        return "nanogpt".to_string();
-    }
-    if url.contains("openrouter.ai") {
-        return "openrouter".to_string();
-    }
-    if url.contains("api.x.ai") || url.contains("x.ai") {
-        return "xai".to_string();
-    }
-    if (model.starts_with("grok-") && model.contains("image"))
-        || (model.contains("grok") && model.contains("imagine"))
-    {
-        return "xai".to_string();
-    }
-    if model.starts_with("dall-e") || model.starts_with("gpt-image") || url.contains("openai.com") {
-        return "openai".to_string();
-    }
-    if model.starts_with("sd3") || url.contains("stability.ai") {
-        return "stability".to_string();
-    }
-    if model.contains("nai-diffusion") || url.contains("novelai.net") {
-        return "novelai".to_string();
-    }
-    if model == "pollinations" || url.contains("pollinations.ai") {
-        return "pollinations".to_string();
-    }
-    if model.contains("black-forest") || model.contains("flux") || url.contains("together.xyz") {
-        return "togetherai".to_string();
-    }
-    if url.contains("stablehorde.net") {
-        return "horde".to_string();
-    }
-    if url.contains("blockentropy") {
-        return "blockentropy".to_string();
-    }
-    if url.contains(":8188") || url.contains("comfyui") {
-        return "comfyui".to_string();
-    }
-    if url.contains("runpod.ai") {
-        return "runpod_comfyui".to_string();
-    }
-    if url.contains(":7860") && !url.contains("drawthings") {
-        return "automatic1111".to_string();
-    }
-    if (model.contains("gemini") && model.contains("image")) || model.contains("imagen") {
-        return "gemini_image".to_string();
-    }
-    "openai".to_string()
-}
-
-fn image_connection_base_url(connection: &Value, source: &str) -> String {
-    let fallback = match source {
-        "stability" => DEFAULT_STABILITY_BASE_URL,
-        "togetherai" => DEFAULT_TOGETHER_BASE_URL,
-        "novelai" => DEFAULT_NOVELAI_BASE_URL,
-        "openrouter" | "gemini_image" => DEFAULT_OPENROUTER_BASE_URL,
-        "xai" => DEFAULT_XAI_BASE_URL,
-        "pollinations" => DEFAULT_POLLINATIONS_BASE_URL,
-        "horde" => DEFAULT_HORDE_BASE_URL,
-        "automatic1111" | "drawthings" => DEFAULT_AUTOMATIC1111_BASE_URL,
-        "comfyui" => DEFAULT_COMFYUI_BASE_URL,
-        "runpod_comfyui" => DEFAULT_RUNPOD_BASE_URL,
-        "nanogpt" => DEFAULT_NANOGPT_BASE_URL,
-        "blockentropy" => DEFAULT_BLOCKENTROPY_BASE_URL,
-        _ => DEFAULT_OPENAI_IMAGE_BASE_URL,
-    };
-    connection
-        .get("baseUrl")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(fallback)
-        .trim_end_matches('/')
-        .to_string()
-}
+// Image-provider source detection used to live as a duplicated pure-JSON shim
+// here so `connection_auth_check`'s "image_generation" branch could stay
+// transport-agnostic in Phase 4a. Phase 4c lifted the canonical
+// `providers::image_source` + `providers::connection_base_url` into
+// `crate::images::providers`, so this module now just re-exports those.
+use crate::images::providers::{connection_base_url as image_connection_base_url, image_source};
 
 #[cfg(test)]
 mod tests {
@@ -1361,46 +1237,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn image_source_infers_runpod_from_url() {
-        let connection = json!({
-            "provider": "image_generation",
-            "model": "anything",
-            "baseUrl": "https://api.runpod.ai/v2/whatever"
-        });
-        assert_eq!(image_source(&connection), "runpod_comfyui");
-    }
-
-    #[test]
-    fn image_source_respects_explicit_service_field() {
-        let connection = json!({
-            "provider": "image_generation",
-            "imageGenerationSource": "stability",
-            "model": "irrelevant"
-        });
-        assert_eq!(image_source(&connection), "stability");
-    }
-
-    #[test]
-    fn image_connection_base_url_falls_back_to_source_default() {
-        let connection = json!({ "provider": "image_generation" });
-        assert_eq!(
-            image_connection_base_url(&connection, "novelai"),
-            DEFAULT_NOVELAI_BASE_URL
-        );
-    }
-
-    #[test]
-    fn image_connection_base_url_strips_trailing_slash_on_override() {
-        let connection = json!({
-            "provider": "image_generation",
-            "baseUrl": "https://example.com/api/"
-        });
-        assert_eq!(
-            image_connection_base_url(&connection, "stability"),
-            "https://example.com/api"
-        );
-    }
+    // The four `image_source` / `image_connection_base_url` smoke tests that
+    // lived here in Phase 4a moved to `crate::images::providers` alongside
+    // the canonical helpers when Phase 4c removed the local duplicates.
 
     #[test]
     fn registry_cancel_pre_register_is_pending_then_consumed() {

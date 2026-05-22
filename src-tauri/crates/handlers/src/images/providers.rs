@@ -1,7 +1,17 @@
-use super::*;
+// Lifted into `marinara-handlers` from
+// `src-tauri/src/commands/storage/images/providers.rs` during Phase 4c so the
+// Axum server target can drive image generation. The module exposes a small
+// public surface (`generate_image_with_options`, `generate_image_with_connection`,
+// `is_openai_gpt_image_model`, `image_source`, `connection_base_url`,
+// `ImageGenerationOptions`); everything else stays crate-private.
+use crate::shared::percent_encode_component;
+use base64::{engine::general_purpose, Engine as _};
+use marinara_core::{now_millis, AppError, AppResult};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
+use std::time::Duration;
 
 const DEFAULT_OPENAI_IMAGE_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_STABILITY_BASE_URL: &str = "https://api.stability.ai/v2beta";
@@ -19,13 +29,13 @@ const DEFAULT_RUNPOD_BASE_URL: &str = "https://api.runpod.ai/v2";
 const NOVELAI_V4_PROMPT_HINT: &str = "NovelAI V4/V4.5 prompts support roughly 512 T5 tokens and reject most Unicode prompt characters; try a shorter ASCII prompt without emoji or non-Latin text.";
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct ImageGenerationOptions {
-    pub(crate) negative_prompt: Option<String>,
-    pub(crate) reference_images: Vec<String>,
-    pub(crate) transparent_background: bool,
+pub struct ImageGenerationOptions {
+    pub negative_prompt: Option<String>,
+    pub reference_images: Vec<String>,
+    pub transparent_background: bool,
 }
 
-pub(crate) async fn generate_image_with_connection(
+pub async fn generate_image_with_connection(
     connection: &Value,
     prompt: &str,
     width: u64,
@@ -41,7 +51,7 @@ pub(crate) async fn generate_image_with_connection(
     .await
 }
 
-pub(crate) async fn generate_image_with_options(
+pub async fn generate_image_with_options(
     connection: &Value,
     prompt: &str,
     width: u64,
@@ -89,7 +99,7 @@ pub(crate) async fn generate_image_with_options(
     }
 }
 
-pub(crate) fn image_source(connection: &Value) -> String {
+pub fn image_source(connection: &Value) -> String {
     let explicit = connection
         .get("imageGenerationSource")
         .or_else(|| connection.get("imageService"))
@@ -187,7 +197,7 @@ fn connection_api_key(connection: &Value) -> String {
         .to_string()
 }
 
-pub(crate) fn connection_base_url(connection: &Value, source: &str) -> String {
+pub fn connection_base_url(connection: &Value, source: &str) -> String {
     let fallback = match source {
         "stability" => DEFAULT_STABILITY_BASE_URL,
         "togetherai" => DEFAULT_TOGETHER_BASE_URL,
@@ -681,7 +691,7 @@ async fn generate_openai_compatible_image(
     })
 }
 
-pub(crate) fn is_openai_gpt_image_model(model: &str) -> bool {
+pub fn is_openai_gpt_image_model(model: &str) -> bool {
     let lower = model.trim().to_ascii_lowercase();
     lower == "gpt-image-1"
         || lower.starts_with("gpt-image-1-")
