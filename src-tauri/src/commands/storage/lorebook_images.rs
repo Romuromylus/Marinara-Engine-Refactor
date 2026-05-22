@@ -1,7 +1,9 @@
 use super::images::percent_encode_component;
-use super::media_uploads::{persist_image_upload, remove_managed_record_file, safe_filename};
 use super::shared::decode_path;
 use super::*;
+use marinara_handlers::media_uploads::{
+    persist_image_upload, remove_managed_record_file, safe_filename,
+};
 
 const LOREBOOK_IMAGE_PREFIX: &str = "marinara-lorebook-image:";
 
@@ -11,7 +13,13 @@ pub(crate) fn update_lorebook_image(
     body: Value,
 ) -> AppResult<Value> {
     let previous = get_required_lorebook(state, lorebook_id)?;
-    let stored = persist_image_upload(state, "lorebooks/images", lorebook_id, &body, "image")?;
+    let stored = persist_image_upload(
+        &state.data_dir,
+        "lorebooks/images",
+        lorebook_id,
+        &body,
+        "image",
+    )?;
     let updated = state.storage.patch(
         "lorebooks",
         lorebook_id,
@@ -28,7 +36,7 @@ pub(crate) fn update_lorebook_image(
 
 pub(crate) fn remove_lorebook_image_file(state: &AppState, record: &Value) {
     remove_managed_record_file(
-        state,
+        &state.data_dir,
         "lorebooks/images",
         record,
         "imageFilePath",

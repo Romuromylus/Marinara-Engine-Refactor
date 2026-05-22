@@ -1,5 +1,18 @@
-use super::*;
+use super::{
+    create_lorebook_from_payload, file_stem, import_st_character_payload, import_st_preset_payload,
+    modified_at, parse_character_file, parse_json_text, parse_object, resolve_import_folder,
+};
+use crate::shared::{
+    decode_uploaded_file_value, get_required, required_string, with_entity_defaults,
+};
+use base64::{engine::general_purpose, Engine as _};
+use marinara_core::{ensure_object, new_id, AppError, AppResult};
+use marinara_storage::FileStorage;
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::fs;
 use std::path::Component;
+use std::path::{Path, PathBuf};
 
 fn bool_option(value: Option<&Value>) -> Option<bool> {
     match value {
@@ -283,7 +296,7 @@ fn scan_item(category: &str, data_dir: &Path, path: &Path) -> Value {
     })
 }
 
-pub(super) fn scan_st_folder(body: Value) -> AppResult<Value> {
+pub fn scan_st_folder(body: Value) -> AppResult<Value> {
     let root = match resolve_import_folder(&body) {
         Ok(root) => root,
         Err(error) => {
@@ -463,7 +476,8 @@ pub(super) fn scan_st_folder(body: Value) -> AppResult<Value> {
 }
 
 fn import_st_chat_text(
-    state: &AppState,
+    storage: &FileStorage,
+    _data_dir: &Path,
     text: &str,
     chat_name: String,
     inherited: Option<Value>,
@@ -495,7 +509,7 @@ fn import_st_chat_text(
         chat.entry("importedCharacterName".to_string())
             .or_insert(Value::String(character_name));
     }
-    let chat_record = state.storage.create("chats", Value::Object(chat))?;
+    let chat_record = storage.create("chats", Value::Object(chat))?;
     let chat_id = chat_record
         .get("id")
         .and_then(Value::as_str)
@@ -524,7 +538,7 @@ fn import_st_chat_text(
         } else {
             "assistant"
         };
-        state.storage.create(
+        storage.create(
             "messages",
             json!({
                 "chatId": chat_id,
@@ -543,7 +557,7 @@ fn import_st_chat_text(
     )
 }
 
-pub(super) fn import_st_chat(state: &AppState, body: Value) -> AppResult<Value> {
+pub fn import_st_chat(storage: &FileStorage, data_dir: &Path, body: Value) -> AppResult<Value> {
     let uploaded = decode_uploaded_file_value(
         body.get("file")
             .ok_or_else(|| AppError::invalid_input("file is required"))?,
@@ -555,12 +569,16 @@ pub(super) fn import_st_chat(state: &AppState, body: Value) -> AppResult<Value> 
         .map(|name| name.to_string_lossy().replace('_', " "))
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| "Imported Chat".to_string());
-    import_st_chat_text(state, &text, chat_name, None)
+    import_st_chat_text(storage, data_dir, &text, chat_name, None)
 }
 
-pub(super) fn import_st_chat_into_group(state: &AppState, body: Value) -> AppResult<Value> {
+pub fn import_st_chat_into_group(
+    storage: &FileStorage,
+    data_dir: &Path,
+    body: Value,
+) -> AppResult<Value> {
     let target_chat_id = required_string(&body, "chatId")?;
-    let target = get_required(state, "chats", target_chat_id)?;
+    let target = get_required(storage, "chats", target_chat_id)?;
     let uploaded = decode_uploaded_file_value(
         body.get("file")
             .ok_or_else(|| AppError::invalid_input("file is required"))?,
@@ -575,20 +593,19 @@ pub(super) fn import_st_chat_into_group(state: &AppState, body: Value) -> AppRes
             .map(ToOwned::to_owned)
             .unwrap_or_else(new_id);
         object.insert("groupId".to_string(), Value::String(group_id.clone()));
-        state
-            .storage
-            .patch("chats", target_chat_id, json!({ "groupId": group_id }))?;
+        storage.patch("chats", target_chat_id, json!({ "groupId": group_id }))?;
     }
     let branch_name = Path::new(&uploaded.name)
         .file_stem()
         .map(|name| name.to_string_lossy().replace('_', " "))
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| "Imported".to_string());
-    import_st_chat_text(state, &text, branch_name, Some(inherited))
+    import_st_chat_text(storage, data_dir, &text, branch_name, Some(inherited))
 }
 
 fn import_persona_payload(
-    state: &AppState,
+    storage: &FileStorage,
+    _data_dir: &Path,
     payload: Value,
     fallback_name: &str,
 ) -> AppResult<Value> {
@@ -608,18 +625,17 @@ fn import_persona_payload(
             );
         }
     }
-    state
-        .storage
+    storage
         .create("personas", with_entity_defaults("personas", Value::Object(object)))
         .map(|record| json!({ "success": true, "id": record.get("id").cloned().unwrap_or(Value::Null), "name": record.get("name").cloned().unwrap_or(Value::Null), "persona": record }))
 }
 
-fn import_persona_file(state: &AppState, path: &Path) -> AppResult<Value> {
+fn import_persona_file(storage: &FileStorage, data_dir: &Path, path: &Path) -> AppResult<Value> {
     let raw = fs::read_to_string(path)?;
     let fallback_name = file_stem(path);
     let payload = parse_json_text(&raw)
         .unwrap_or_else(|_| json!({ "name": fallback_name, "description": raw }));
-    import_persona_payload(state, payload, &fallback_name)
+    import_persona_payload(storage, data_dir, payload, &fallback_name)
 }
 
 fn image_mime_from_path(path: &Path) -> &'static str {
@@ -636,7 +652,8 @@ fn image_mime_from_path(path: &Path) -> &'static str {
 }
 
 fn import_persona_avatar_file(
-    state: &AppState,
+    storage: &FileStorage,
+    data_dir: &Path,
     path: &Path,
     name: String,
     description: String,
@@ -655,15 +672,17 @@ fn import_persona_avatar_file(
         "avatarPath": avatar,
         "importedModifiedAt": modified,
     });
-    import_persona_payload(state, payload, &file_stem(path))
+    import_persona_payload(storage, data_dir, payload, &file_stem(path))
 }
 
-fn copy_background_file(state: &AppState, path: &Path) -> AppResult<Value> {
+fn copy_background_file(_storage: &FileStorage, data_dir: &Path, path: &Path) -> AppResult<Value> {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .ok_or_else(|| AppError::invalid_input("Background file is missing a filename"))?;
-    let target = state.backgrounds.root().join(&name);
+    let backgrounds_dir = data_dir.join("backgrounds");
+    fs::create_dir_all(&backgrounds_dir)?;
+    let target = backgrounds_dir.join(&name);
     let mut final_target = target.clone();
     if final_target.exists() {
         let stem = Path::new(&name)
@@ -675,10 +694,7 @@ fn copy_background_file(state: &AppState, path: &Path) -> AppResult<Value> {
             .map(|ext| format!(".{}", ext.to_string_lossy()))
             .unwrap_or_default();
         for index in 1..10_000 {
-            let candidate = state
-                .backgrounds
-                .root()
-                .join(format!("{stem}-{index}{ext}"));
+            let candidate = backgrounds_dir.join(format!("{stem}-{index}{ext}"));
             if !candidate.exists() {
                 final_target = candidate;
                 break;
@@ -690,12 +706,13 @@ fn copy_background_file(state: &AppState, path: &Path) -> AppResult<Value> {
 }
 
 fn run_st_bulk_import_inner(
-    state: &AppState,
+    storage: &FileStorage,
+    data_dir: &Path,
     body: Value,
     event_sink: Option<&mut dyn FnMut(Value) -> AppResult<()>>,
 ) -> AppResult<Value> {
     let root = resolve_import_folder(&body)?;
-    let data_dir = resolve_st_data_dir(&root)
+    let st_data_dir = resolve_st_data_dir(&root)
         .ok_or_else(|| AppError::invalid_input("Could not find SillyTavern data directory"))?;
     let options = body.get("options").cloned().unwrap_or_else(|| json!({}));
     let mut progress = BulkImportProgress::new(event_sink, selected_import_total(&options));
@@ -706,10 +723,10 @@ fn run_st_bulk_import_inner(
         .and_then(Value::as_str)
         .unwrap_or("all");
     let import_embedded = bool_option(options.get("importEmbeddedLorebook")).unwrap_or(true);
-    let (persona_names, persona_descriptions) = read_st_persona_settings(&data_dir);
+    let (persona_names, persona_descriptions) = read_st_persona_settings(&st_data_dir);
 
     for id in selected_ids(&options, "characters") {
-        let path = path_from_id(&data_dir, "characters", &id)?;
+        let path = path_from_id(&st_data_dir, "characters", &id)?;
         progress.emit_item("Characters", &path, &imported)?;
         let filename = path
             .file_name()
@@ -720,7 +737,8 @@ fn run_st_bulk_import_inner(
             .and_then(|bytes| parse_character_file(&filename, &bytes))
             .and_then(|payload| {
                 import_st_character_payload(
-                    state,
+                    storage,
+                    data_dir,
                     payload,
                     Some(filename.clone()),
                     &json!({ "tagImportMode": tag_mode, "importEmbeddedLorebook": import_embedded }),
@@ -737,13 +755,13 @@ fn run_st_bulk_import_inner(
     }
 
     for id in selected_ids(&options, "lorebooks") {
-        let path = path_from_id(&data_dir, "lorebooks", &id)?;
+        let path = path_from_id(&st_data_dir, "lorebooks", &id)?;
         progress.emit_item("Lorebooks", &path, &imported)?;
         let result = fs::read(&path)
             .map_err(AppError::from)
             .and_then(|bytes| parse_object(&bytes))
             .and_then(|payload| {
-                create_lorebook_from_payload(state, &payload, &file_stem(&path), None)
+                create_lorebook_from_payload(storage, data_dir, &payload, &file_stem(&path), None)
             });
         match result {
             Ok(_) => bump_imported(&mut imported, "lorebooks"),
@@ -756,12 +774,14 @@ fn run_st_bulk_import_inner(
     }
 
     for id in selected_ids(&options, "presets") {
-        let path = path_from_id(&data_dir, "presets", &id)?;
+        let path = path_from_id(&st_data_dir, "presets", &id)?;
         progress.emit_item("Presets", &path, &imported)?;
         let result = fs::read(&path)
             .map_err(AppError::from)
             .and_then(|bytes| parse_object(&bytes))
-            .and_then(|payload| import_st_preset_payload(state, payload, Some(&file_stem(&path))));
+            .and_then(|payload| {
+                import_st_preset_payload(storage, data_dir, payload, Some(&file_stem(&path)))
+            });
         match result {
             Ok(_) => bump_imported(&mut imported, "presets"),
             Err(error) => errors.push(Value::String(format!(
@@ -773,7 +793,7 @@ fn run_st_bulk_import_inner(
     }
 
     for id in selected_ids(&options, "personas") {
-        let path = path_from_id(&data_dir, "personas", &id)?;
+        let path = path_from_id(&st_data_dir, "personas", &id)?;
         progress.emit_item("Personas", &path, &imported)?;
         let is_media = path
             .extension()
@@ -791,7 +811,8 @@ fn run_st_bulk_import_inner(
                 .map(|name| name.to_string_lossy().to_string())
                 .unwrap_or_default();
             import_persona_avatar_file(
-                state,
+                storage,
+                data_dir,
                 &path,
                 persona_names
                     .get(&filename)
@@ -803,7 +824,7 @@ fn run_st_bulk_import_inner(
                     .unwrap_or_default(),
             )
         } else {
-            import_persona_file(state, &path)
+            import_persona_file(storage, data_dir, &path)
         };
         match result {
             Ok(_) => bump_imported(&mut imported, "personas"),
@@ -816,9 +837,9 @@ fn run_st_bulk_import_inner(
     }
 
     for id in selected_ids(&options, "backgrounds") {
-        let path = path_from_id(&data_dir, "backgrounds", &id)?;
+        let path = path_from_id(&st_data_dir, "backgrounds", &id)?;
         progress.emit_item("Backgrounds", &path, &imported)?;
-        match copy_background_file(state, &path) {
+        match copy_background_file(storage, data_dir, &path) {
             Ok(_) => bump_imported(&mut imported, "backgrounds"),
             Err(error) => errors.push(Value::String(format!(
                 "{}: {}",
@@ -829,12 +850,18 @@ fn run_st_bulk_import_inner(
     }
 
     for id in selected_ids(&options, "chats") {
-        let path = path_from_id(&data_dir, "chats", &id)?;
+        let path = path_from_id(&st_data_dir, "chats", &id)?;
         progress.emit_item("Chats", &path, &imported)?;
         let result = fs::read_to_string(&path)
             .map_err(AppError::from)
             .and_then(|text| {
-                import_st_chat_text(state, &text, file_stem(&path).replace('_', " "), None)
+                import_st_chat_text(
+                    storage,
+                    data_dir,
+                    &text,
+                    file_stem(&path).replace('_', " "),
+                    None,
+                )
             });
         match result {
             Ok(_) => bump_imported(&mut imported, "chats"),
@@ -847,12 +874,18 @@ fn run_st_bulk_import_inner(
     }
 
     for id in selected_ids(&options, "groupChats") {
-        let path = path_from_id(&data_dir, "groupChats", &id)?;
+        let path = path_from_id(&st_data_dir, "groupChats", &id)?;
         progress.emit_item("Group chats", &path, &imported)?;
         let result = fs::read_to_string(&path)
             .map_err(AppError::from)
             .and_then(|text| {
-                import_st_chat_text(state, &text, file_stem(&path).replace('_', " "), None)
+                import_st_chat_text(
+                    storage,
+                    data_dir,
+                    &text,
+                    file_stem(&path).replace('_', " "),
+                    None,
+                )
             });
         match result {
             Ok(_) => bump_imported(&mut imported, "groupChats"),
@@ -885,16 +918,17 @@ fn run_st_bulk_import_inner(
     Ok(result)
 }
 
-pub(super) fn run_st_bulk_import(state: &AppState, body: Value) -> AppResult<Value> {
-    run_st_bulk_import_inner(state, body, None)
+pub fn run_st_bulk_import(storage: &FileStorage, data_dir: &Path, body: Value) -> AppResult<Value> {
+    run_st_bulk_import_inner(storage, data_dir, body, None)
 }
 
-pub(super) fn run_st_bulk_import_channel(
-    state: &AppState,
+pub fn run_st_bulk_import_channel(
+    storage: &FileStorage,
+    data_dir: &Path,
     body: Value,
     mut emit: impl FnMut(Value) -> AppResult<()>,
 ) -> AppResult<()> {
-    match run_st_bulk_import_inner(state, body, Some(&mut emit)) {
+    match run_st_bulk_import_inner(storage, data_dir, body, Some(&mut emit)) {
         Ok(_) => Ok(()),
         Err(error) => emit(json!({
             "type": "error",

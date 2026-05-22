@@ -18,6 +18,7 @@ struct AppState {
     storage: FileStorage,
     backgrounds: AssetService,
     game_assets: AssetService,
+    data_dir: PathBuf,
 }
 
 type ApiError = (StatusCode, Json<Value>);
@@ -54,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storage,
         backgrounds,
         game_assets,
+        data_dir: data_dir.clone(),
     };
 
     let api_router = Router::new()
@@ -102,6 +104,7 @@ async fn invoke_command(
     let storage = &state.storage;
     let backgrounds = &state.backgrounds;
     let game_assets = &state.game_assets;
+    let data_dir = state.data_dir.as_path();
     match command.as_str() {
         // ---- entities ---------------------------------------------------------
         "storage_list" => {
@@ -249,10 +252,7 @@ async fn invoke_command(
         // ---- chat messages ---------------------------------------------------
         "chat_messages_bulk_delete" => {
             let chat_id = required_str(&args, "chatId")?;
-            let message_ids = args
-                .get("messageIds")
-                .cloned()
-                .unwrap_or_else(|| json!([]));
+            let message_ids = args.get("messageIds").cloned().unwrap_or_else(|| json!([]));
             marinara_handlers::chats::bulk_delete_messages(
                 storage,
                 chat_id,
@@ -586,6 +586,118 @@ async fn invoke_command(
         "game_assets_open_folder" => {
             let subfolder = args.get("subfolder").and_then(Value::as_str);
             marinara_handlers::game_assets::open_folder(game_assets, subfolder)
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- imports (marinara envelope, ST card/chat/preset/lorebook, bulk) -
+        // The non-streaming Tauri commands all go through a single dispatcher
+        // keyed by a scope path. We mirror that here per-command so the
+        // /api/invoke/<command> contract on the frontend stays uniform with
+        // the rest of the surface. `import_st_bulk_run_events` is the only
+        // streaming variant — it stays desktop-only because the Axum side
+        // would want SSE rather than tauri::ipc::Channel.
+        "import_marinara" => {
+            let envelope = args
+                .get("envelope")
+                .cloned()
+                .unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(storage, data_dir, &["marinara"], envelope)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "import_marinara_file" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(storage, data_dir, &["marinara-file"], body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "import_st_character" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(storage, data_dir, &["st-character"], body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "import_st_character_batch" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(
+                storage,
+                data_dir,
+                &["st-character", "batch"],
+                body,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "import_st_character_inspect" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(
+                storage,
+                data_dir,
+                &["st-character", "inspect"],
+                body,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "import_st_chat" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(storage, data_dir, &["st-chat"], body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "import_st_chat_into_group" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(
+                storage,
+                data_dir,
+                &["st-chat-into-group"],
+                body,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "import_st_preset" => {
+            let payload = args.get("payload").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(storage, data_dir, &["st-preset"], payload)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "import_st_lorebook" => {
+            let payload = args.get("payload").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(storage, data_dir, &["st-lorebook"], payload)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "import_list_directory" => {
+            let path = required_str(&args, "path")?;
+            let picker_selected = args
+                .get("pickerSelected")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            marinara_handlers::imports::import_call(
+                storage,
+                data_dir,
+                &["list-directory"],
+                json!({ "path": path, "pickerSelected": picker_selected }),
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "import_st_bulk_scan" => {
+            let payload = args.get("payload").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(
+                storage,
+                data_dir,
+                &["st-bulk", "scan"],
+                payload,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "import_st_bulk_run" => {
+            let payload = args.get("payload").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::imports::import_call(storage, data_dir, &["st-bulk", "run"], payload)
                 .map(Json)
                 .map_err(error_response)
         }
