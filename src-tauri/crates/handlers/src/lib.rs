@@ -4,6 +4,7 @@ pub mod backgrounds;
 pub mod chats;
 pub mod entities;
 pub mod game_assets;
+pub mod images;
 pub mod imports;
 pub mod llm;
 pub mod lorebook_images;

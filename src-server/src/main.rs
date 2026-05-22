@@ -801,6 +801,39 @@ async fn invoke_command(
                 .map_err(error_response)
         }
 
+        // ---- Image generation (Phase 4c) -----------------------------------
+        // `image_generate` / `avatar_generation_command` / `connection_test_image`
+        // hit the provider HTTP surface (Stability, ComfyUI, NovelAI, OpenAI
+        // image, etc.) through marinara_handlers::images. The preview command
+        // is sync; everything else is async.
+        "image_generate" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::images::generate_image(storage, body)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "avatar_generation_command" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::images::avatar_generation(storage, body)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "avatar_generation_preview_command" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::images::avatar_generation_preview(body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "connection_test_image" => {
+            let id = required_str(&args, "id")?;
+            marinara_handlers::images::test_image_generation(storage, id)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+
         // ---- LLM stream cancel (Phase 4b) -----------------------------------
         // The actual streaming endpoint is `POST /api/stream/llm` (SSE).
         // Cancel is a plain invoke because it's a fire-and-forget signal —
