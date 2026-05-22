@@ -12,6 +12,16 @@ export default defineConfig(async () => ({
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
+    // Dedupe React so a stray transitive copy can't produce two dispatchers
+    // (the classic source of "Invalid hook call" / React error #321).
+    dedupe: ["react", "react-dom"],
+  },
+
+  // Production source maps. Lets the browser show non-minified stack traces
+  // for the server-target build so renderer crashes don't surface as
+  // chunk-N:offset noise.
+  build: {
+    sourcemap: true,
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
