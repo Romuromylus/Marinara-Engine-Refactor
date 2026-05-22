@@ -17,6 +17,7 @@ use tracing::{info, warn};
 struct AppState {
     storage: FileStorage,
     backgrounds: AssetService,
+    game_assets: AssetService,
 }
 
 type ApiError = (StatusCode, Json<Value>);
@@ -41,6 +42,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backgrounds = AssetService::new(data_dir.join("backgrounds"))?;
     info!("backgrounds dir: {}", backgrounds.root().display());
 
+    let game_assets = AssetService::new(data_dir.join("game-assets"))?;
+    info!("game-assets dir: {}", game_assets.root().display());
+
     let frontend_dir = std::env::var("MARINARA_FRONTEND_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/app/dist"));
@@ -49,6 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         storage,
         backgrounds,
+        game_assets,
     };
 
     let api_router = Router::new()
@@ -81,6 +86,7 @@ async fn invoke_command(
 ) -> ApiResult {
     let storage = &state.storage;
     let backgrounds = &state.backgrounds;
+    let game_assets = &state.game_assets;
     match command.as_str() {
         // ---- entities ---------------------------------------------------------
         "storage_list" => {
@@ -430,6 +436,145 @@ async fn invoke_command(
                 .map_err(error_response)
         }
 
+        // ---- game-assets (filesystem under $MARINARA_DATA_DIR/game-assets) --
+        "game_assets_list" => {
+            let path = args.get("path").and_then(Value::as_str);
+            marinara_handlers::game_assets::list(game_assets, path)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_manifest" => marinara_handlers::game_assets::manifest(game_assets)
+            .map(Json)
+            .map_err(error_response),
+        "game_assets_tree" => marinara_handlers::game_assets::tree(game_assets)
+            .map(Json)
+            .map_err(error_response),
+        "game_assets_rescan" => marinara_handlers::game_assets::rescan(game_assets)
+            .map(Json)
+            .map_err(error_response),
+        "game_assets_create_folder" => {
+            let path = required_str(&args, "path")?;
+            marinara_handlers::game_assets::create_folder(game_assets, path)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_delete_folder" => {
+            let path = required_str(&args, "path")?;
+            let recursive = args
+                .get("recursive")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            marinara_handlers::game_assets::delete_folder(game_assets, path, recursive)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_delete_file" => {
+            let path = required_str(&args, "path")?;
+            marinara_handlers::game_assets::delete_file(game_assets, path)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_file_path" => {
+            let path = required_str(&args, "path")?;
+            marinara_handlers::game_assets::file_path(game_assets, path)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_read_text" => {
+            let path = required_str(&args, "path")?;
+            marinara_handlers::game_assets::read_text(game_assets, path)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_write_text" => {
+            let path = required_str(&args, "path")?;
+            let content = args.get("content").and_then(Value::as_str).unwrap_or("");
+            marinara_handlers::game_assets::write_text(game_assets, path, content)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_rename" => {
+            let path = required_str(&args, "path")?;
+            let new_name = required_str(&args, "newName")?;
+            marinara_handlers::game_assets::rename(game_assets, path, new_name)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_move" => {
+            let path = required_str(&args, "path")?;
+            let target = args
+                .get("targetFolder")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            marinara_handlers::game_assets::move_one(game_assets, path, target)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_copy" => {
+            let path = required_str(&args, "path")?;
+            let target = args
+                .get("targetFolder")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            marinara_handlers::game_assets::copy_one(game_assets, path, target)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_move_bulk" => {
+            let paths = required_path_array(&args, "paths")?;
+            let target = args
+                .get("targetFolder")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            marinara_handlers::game_assets::move_bulk(game_assets, &paths, target)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_copy_bulk" => {
+            let paths = required_path_array(&args, "paths")?;
+            let target = args
+                .get("targetFolder")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            marinara_handlers::game_assets::copy_bulk(game_assets, &paths, target)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_delete_bulk" => {
+            let paths = required_path_array(&args, "paths")?;
+            marinara_handlers::game_assets::delete_bulk(game_assets, &paths)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_file_info" => {
+            let path = required_str(&args, "path")?;
+            marinara_handlers::game_assets::file_info(game_assets, path)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_folder_description" => {
+            let path = required_str(&args, "path")?;
+            let description = args
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            marinara_handlers::game_assets::folder_description(game_assets, path, description)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_upload" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::game_assets::upload(game_assets, body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "game_assets_open_folder" => {
+            let subfolder = args.get("subfolder").and_then(Value::as_str);
+            marinara_handlers::game_assets::open_folder(game_assets, subfolder)
+                .map(Json)
+                .map_err(error_response)
+        }
+
         // ---- tracker snapshots -----------------------------------------------
         "tracker_snapshot_latest" => {
             let chat_id = required_str(&args, "chatId")?;
@@ -478,6 +623,23 @@ fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ApiError> {
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| error_response(AppError::invalid_input(format!("{key} is required"))))
+}
+
+fn required_path_array(args: &Value, key: &str) -> Result<Vec<String>, ApiError> {
+    args.get(key)
+        .and_then(Value::as_array)
+        .map(|array| {
+            array
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .ok_or_else(|| {
+            error_response(AppError::invalid_input(format!(
+                "{key} must be a non-empty string array"
+            )))
+        })
 }
 
 fn error_response(error: AppError) -> ApiError {
