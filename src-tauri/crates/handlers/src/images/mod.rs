@@ -292,6 +292,54 @@ mod tests {
         assert_eq!(prompt_override(&body, "avatar-missing"), None);
     }
 
+    // Follow-up coverage Phase 4c /review flagged: the four `image_source`
+    // / `image_connection_base_url` smoke tests that lived in `llm.rs`
+    // during 4a-4b need a new home now that the canonical helpers moved
+    // here. The helpers themselves are still exercised transitively through
+    // `connection_auth_check`, but pinning the inference rules independently
+    // catches drift early.
+
+    #[test]
+    fn image_source_infers_runpod_from_url() {
+        let connection = json!({
+            "provider": "image_generation",
+            "model": "anything",
+            "baseUrl": "https://api.runpod.ai/v2/whatever"
+        });
+        assert_eq!(image_source(&connection), "runpod_comfyui");
+    }
+
+    #[test]
+    fn image_source_respects_explicit_service_field() {
+        let connection = json!({
+            "provider": "image_generation",
+            "imageGenerationSource": "stability",
+            "model": "irrelevant"
+        });
+        assert_eq!(image_source(&connection), "stability");
+    }
+
+    #[test]
+    fn image_connection_base_url_falls_back_to_source_default() {
+        let connection = json!({ "provider": "image_generation" });
+        assert_eq!(
+            image_connection_base_url(&connection, "novelai"),
+            "https://image.novelai.net"
+        );
+    }
+
+    #[test]
+    fn image_connection_base_url_strips_trailing_slash_on_override() {
+        let connection = json!({
+            "provider": "image_generation",
+            "baseUrl": "https://example.com/api/"
+        });
+        assert_eq!(
+            image_connection_base_url(&connection, "stability"),
+            "https://example.com/api"
+        );
+    }
+
     #[test]
     fn avatar_generation_preview_emits_expected_item() {
         let body = json!({ "name": "Mari", "appearance": "red hair", "width": 640, "height": 960 });

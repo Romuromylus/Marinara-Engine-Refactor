@@ -6,6 +6,7 @@ pub mod entities;
 pub mod game_assets;
 pub mod images;
 pub mod imports;
+pub mod integrations;
 pub mod llm;
 pub mod lorebook_images;
 pub mod media_uploads;
