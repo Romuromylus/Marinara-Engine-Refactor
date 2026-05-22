@@ -35,19 +35,79 @@ function visibleWorldText(value: string | number | null | undefined, fallback = 
   return text.length > 0 ? text : fallback;
 }
 
+function getFreeformDateParts(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const ofMatch = normalized.match(/^(.+?)\s+of\s+(.+)$/i);
+  if (ofMatch) {
+    return {
+      main: ofMatch[2]!.trim(),
+      detail: ofMatch[1]!.trim(),
+    };
+  }
+
+  const commaParts = normalized.split(/\s*,\s*/).filter(Boolean);
+  if (commaParts.length > 1) {
+    return {
+      main: commaParts[0]!,
+      detail: commaParts.slice(1).join(", "),
+    };
+  }
+
+  const words = normalized.split(" ");
+  if (words.length > 2) {
+    return {
+      main: words.slice(0, 2).join(" "),
+      detail: words.slice(2).join(" "),
+    };
+  }
+
+  return {
+    main: normalized,
+    detail: "",
+  };
+}
+
+function getFreeformDateFallbackDay(text: string) {
+  const firstNumber = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/i);
+  if (firstNumber) return String(Number(firstNumber[1])).padStart(2, "0");
+  return text.slice(0, 3).toUpperCase();
+}
+
+function getCalendarDateDisplay({
+  month,
+  day,
+  year = "",
+  raw,
+}: {
+  month: string;
+  day: string;
+  year?: string;
+  raw: string;
+}) {
+  return {
+    kind: "calendar" as const,
+    month,
+    day,
+    year,
+    raw,
+    main: "",
+    detail: "",
+  };
+}
+
 export function getWorldDateDisplay(date: string | null | undefined) {
   const text = (date ?? "").trim();
-  if (!text) return { month: "DATE", day: "--", year: "", raw: "" };
+  if (!text) return { kind: "empty" as const, month: "DATE", day: "--", year: "", raw: "", main: "", detail: "" };
 
   const isoMatch = text.match(/\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
   if (isoMatch) {
     const monthIndex = Number(isoMatch[2]) - 1;
-    return {
+    return getCalendarDateDisplay({
       month: WORLD_MONTH_LABELS[monthIndex] ?? "DATE",
       day: String(Number(isoMatch[3])).padStart(2, "0"),
       year: isoMatch[1]!,
       raw: text,
-    };
+    });
   }
 
   const numericDate = text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\b/);
@@ -56,12 +116,12 @@ export function getWorldDateDisplay(date: string | null | undefined) {
     const second = Number(numericDate[2]);
     const day = first > 12 ? first : second;
     const monthIndex = (first > 12 ? second : first) - 1;
-    return {
+    return getCalendarDateDisplay({
       month: WORLD_MONTH_LABELS[monthIndex] ?? "DATE",
       day: String(day).padStart(2, "0"),
       year: numericDate[3]!,
       raw: text,
-    };
+    });
   }
 
   const namedMonthFirst = text.match(
@@ -69,12 +129,12 @@ export function getWorldDateDisplay(date: string | null | undefined) {
   );
   if (namedMonthFirst) {
     const monthIndex = WORLD_MONTH_ALIASES[namedMonthFirst[1]!.toLowerCase()];
-    return {
+    return getCalendarDateDisplay({
       month: monthIndex === undefined ? "DATE" : (WORLD_MONTH_LABELS[monthIndex] ?? "DATE"),
       day: String(Number(namedMonthFirst[2])).padStart(2, "0"),
       year: namedMonthFirst[3] ?? "",
       raw: text,
-    };
+    });
   }
 
   const dayFirst = text.match(
@@ -82,20 +142,23 @@ export function getWorldDateDisplay(date: string | null | undefined) {
   );
   if (dayFirst) {
     const monthIndex = WORLD_MONTH_ALIASES[dayFirst[2]!.toLowerCase()];
-    return {
+    return getCalendarDateDisplay({
       month: monthIndex === undefined ? "DATE" : (WORLD_MONTH_LABELS[monthIndex] ?? "DATE"),
       day: String(Number(dayFirst[1])).padStart(2, "0"),
       year: dayFirst[3] ?? "",
       raw: text,
-    };
+    });
   }
 
-  const firstNumber = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/);
+  const freeform = getFreeformDateParts(text);
   return {
+    kind: "freeform" as const,
     month: "DATE",
-    day: firstNumber ? String(Number(firstNumber[1])).padStart(2, "0") : text.slice(0, 3).toUpperCase(),
+    day: getFreeformDateFallbackDay(text),
     year: "",
     raw: text,
+    main: freeform.main,
+    detail: freeform.detail,
   };
 }
 

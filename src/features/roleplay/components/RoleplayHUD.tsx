@@ -15,10 +15,22 @@ import { useAgentConfigs } from "../../agents/hooks/use-agents";
 import { useChat } from "../../chats/hooks/use-chats";
 import { useTrackerStateController } from "../../world-state/hooks/use-tracker-state-controller";
 import { discardPendingGameStatePatch } from "../../world-state/hooks/use-world-state-patcher";
+import {
+  mergeNamedTrackerListUpdate,
+  mergePresentCharacterListUpdate,
+  mergeQuestProgressListUpdate,
+} from "../../world-state/lib/tracker-state-edits";
 import { TRACKER_SECTION_AGENT_TYPES, type TrackerPanelSection } from "../../world-state/lib/tracker-state-display";
 import { useUIStore } from "../../../shared/stores/ui.store";
 import type { Message } from "../../../engine/contracts/types/chat";
-import type { GameState } from "../../../engine/contracts/types/game-state";
+import type {
+  CharacterStat,
+  CustomTrackerField,
+  GameState,
+  InventoryItem,
+  PresentCharacter,
+  QuestProgress,
+} from "../../../engine/contracts/types/game-state";
 import type { HudPosition } from "../../../shared/stores/ui.store";
 import { ActionsGroup } from "./RoleplayHUDActionsGroup";
 import { CombinedPlayerWidget } from "./RoleplayHUDPlayerWidget";
@@ -71,6 +83,7 @@ export function RoleplayHUD({
     quests: activeQuests,
     customTrackerFields,
     gameStateRefreshing,
+    getSnapshot,
     patchField,
     patchPlayerStats,
   } = useTrackerStateController(chatId, "roleplay-hud");
@@ -168,6 +181,42 @@ export function RoleplayHUD({
   const weather = gameState?.weather ?? null;
   const temperature = gameState?.temperature ?? null;
   const personaStatus = playerStats?.status ?? "";
+  const updatePersonaStats = useCallback(
+    (bars: CharacterStat[]) => {
+      patchField("personaStats", mergeNamedTrackerListUpdate(personaStatBars, getSnapshot().personaStats, bars));
+    },
+    [getSnapshot, patchField, personaStatBars],
+  );
+  const updatePresentCharacters = useCallback(
+    (chars: PresentCharacter[]) => {
+      patchField(
+        "presentCharacters",
+        mergePresentCharacterListUpdate(presentCharacters, getSnapshot().presentCharacters, chars),
+      );
+    },
+    [getSnapshot, patchField, presentCharacters],
+  );
+  const updateInventory = useCallback(
+    (items: InventoryItem[]) => {
+      patchPlayerStats("inventory", mergeNamedTrackerListUpdate(inventory, getSnapshot().inventory, items));
+    },
+    [getSnapshot, inventory, patchPlayerStats],
+  );
+  const updateQuests = useCallback(
+    (quests: QuestProgress[]) => {
+      patchPlayerStats("activeQuests", mergeQuestProgressListUpdate(activeQuests, getSnapshot().quests, quests));
+    },
+    [activeQuests, getSnapshot, patchPlayerStats],
+  );
+  const updateCustomTrackerFields = useCallback(
+    (fields: CustomTrackerField[]) => {
+      patchPlayerStats(
+        "customTrackerFields",
+        mergeNamedTrackerListUpdate(customTrackerFields, getSnapshot().customTrackerFields, fields),
+      );
+    },
+    [customTrackerFields, getSnapshot, patchPlayerStats],
+  );
   const playerTrackerSections: TrackerPanelSection[] = ["persona", "characters", "quests", "custom"];
   const hasPlayerTrackerSections = playerTrackerSections.some((section) =>
     enabledAgentTypes.has(TRACKER_SECTION_AGENT_TYPES[section]),
@@ -238,17 +287,17 @@ export function RoleplayHUD({
               showQuests={enabledAgentTypes.has(TRACKER_SECTION_AGENT_TYPES.quests)}
               showCustomTracker={enabledAgentTypes.has(TRACKER_SECTION_AGENT_TYPES.custom)}
               personaStats={personaStatBars}
-              onUpdatePersonaStats={(bars) => patchField("personaStats", bars)}
+              onUpdatePersonaStats={updatePersonaStats}
               personaStatus={personaStatus}
               onUpdatePersonaStatus={(status) => patchPlayerStats("status", status)}
               characters={presentCharacters}
-              onUpdateCharacters={(chars) => patchField("presentCharacters", chars)}
+              onUpdateCharacters={updatePresentCharacters}
               inventory={inventory}
-              onUpdateInventory={(items) => patchPlayerStats("inventory", items)}
+              onUpdateInventory={updateInventory}
               quests={activeQuests}
-              onUpdateQuests={(q) => patchPlayerStats("activeQuests", q)}
+              onUpdateQuests={updateQuests}
               customTrackerFields={customTrackerFields}
-              onUpdateCustomTracker={(fields) => patchPlayerStats("customTrackerFields", fields)}
+              onUpdateCustomTracker={updateCustomTrackerFields}
               onRerunSingleTracker={onRerunSingleTracker}
               isTrackerRetryBusy={isTrackerBusy}
             />
@@ -298,7 +347,7 @@ export function RoleplayHUD({
           {enabledAgentTypes.has(TRACKER_SECTION_AGENT_TYPES.persona) && (
             <PersonaStatsWidget
               bars={personaStatBars}
-              onUpdate={(bars) => patchField("personaStats", bars)}
+              onUpdate={updatePersonaStats}
               status={personaStatus}
               onUpdateStatus={(status) => patchPlayerStats("status", status)}
               layout={layout}
@@ -310,7 +359,7 @@ export function RoleplayHUD({
           {enabledAgentTypes.has(TRACKER_SECTION_AGENT_TYPES.characters) && (
             <CharactersWidget
               characters={presentCharacters}
-              onUpdate={(chars) => patchField("presentCharacters", chars)}
+              onUpdate={updatePresentCharacters}
               chatId={chatId}
               layout={layout}
               onRerunSingleTracker={onRerunSingleTracker}
@@ -321,7 +370,7 @@ export function RoleplayHUD({
           {hasPlayerTrackerSections && (
             <InventoryWidget
               items={inventory}
-              onUpdate={(items) => patchPlayerStats("inventory", items)}
+              onUpdate={updateInventory}
               layout={layout}
             />
           )}
@@ -329,7 +378,7 @@ export function RoleplayHUD({
           {enabledAgentTypes.has(TRACKER_SECTION_AGENT_TYPES.quests) && (
             <QuestsWidget
               quests={activeQuests}
-              onUpdate={(q) => patchPlayerStats("activeQuests", q)}
+              onUpdate={updateQuests}
               layout={layout}
               onRerunSingleTracker={onRerunSingleTracker}
               isTrackerRetryBusy={isTrackerBusy}
@@ -339,7 +388,7 @@ export function RoleplayHUD({
           {enabledAgentTypes.has(TRACKER_SECTION_AGENT_TYPES.custom) && (
             <CustomTrackerWidget
               fields={customTrackerFields}
-              onUpdate={(fields) => patchPlayerStats("customTrackerFields", fields)}
+              onUpdate={updateCustomTrackerFields}
               layout={layout}
               onRerunSingleTracker={onRerunSingleTracker}
               isTrackerRetryBusy={isTrackerBusy}

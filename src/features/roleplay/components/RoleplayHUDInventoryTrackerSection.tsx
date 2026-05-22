@@ -1,5 +1,6 @@
 import { Package, Plus, X } from "lucide-react";
 import type { InventoryItem } from "../../../engine/contracts/types/game-state";
+import { getFiniteNumberInputValue } from "../../../shared/lib/number-input";
 import { cn } from "../../../shared/lib/utils";
 import {
   appendTrackerListItem,
@@ -69,8 +70,9 @@ export function InventoryTrackerSection({
               type="number"
               value={item.quantity}
               onChange={(event) => {
-                const parsed = event.currentTarget.valueAsNumber;
-                const quantity = Number.isFinite(parsed) ? Math.max(0, parsed) : item.quantity;
+                const quantity = getFiniteNumberInputValue(event.currentTarget.valueAsNumber, item.quantity, {
+                  min: 0,
+                });
                 updateItem(idx, { ...item, quantity });
               }}
               className="w-8 bg-transparent text-center text-[0.5625rem] text-[var(--foreground)]/60 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"

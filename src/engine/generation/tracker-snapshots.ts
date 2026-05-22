@@ -197,6 +197,10 @@ function parsePresentCharacter(value: unknown): PresentCharacter | null {
       typeof record.portraitFocusY === "number" && Number.isFinite(record.portraitFocusY)
         ? record.portraitFocusY
         : undefined,
+    portraitZoom:
+      typeof record.portraitZoom === "number" && Number.isFinite(record.portraitZoom)
+        ? record.portraitZoom
+        : undefined,
     customFields,
     stats: Array.isArray(record.stats) ? record.stats.map(parseStat).filter((stat): stat is CharacterStat => !!stat) : [],
     thoughts: readNullableString(record.thoughts),
