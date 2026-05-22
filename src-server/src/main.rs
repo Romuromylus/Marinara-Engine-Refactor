@@ -714,9 +714,12 @@ async fn invoke_command(
         // profile_import_file stays desktop-only: the Tauri command takes an
         // OS path the desktop dialog produced. Web clients reach `import_profile`
         // by uploading the parsed envelope JSON directly.
-        "profile_export" => marinara_handlers::profile::profile_snapshot(storage, data_dir)
-            .map(Json)
-            .map_err(error_response),
+        "profile_export" => {
+            let format = args.get("format").and_then(Value::as_str);
+            marinara_handlers::profile::export_profile(storage, data_dir, format)
+                .map(Json)
+                .map_err(error_response)
+        }
         "profile_import" => {
             let envelope = args
                 .get("envelope")

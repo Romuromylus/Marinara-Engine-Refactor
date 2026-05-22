@@ -1,3 +1,10 @@
+// Transport-agnostic profile snapshot + import handlers. Pre-lift these lived
+// in `src-tauri/src/commands/storage/profile.rs` and `profile/{assets,legacy,
+// zip_import}.rs` and used the Tauri AppState. The lifted versions take an
+// explicit (`storage: &FileStorage`, `data_dir: &Path`) pair, with the
+// asset-restoration helpers in `assets` dropping `storage` entirely since
+// they only touch the filesystem.
+
 pub mod assets;
 pub mod legacy;
 pub mod zip_import;
