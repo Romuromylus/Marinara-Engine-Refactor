@@ -745,6 +745,48 @@ async fn invoke_command(
                 .map_err(error_response)
         }
 
+        // ---- LLM non-streaming (Phase 4a) -----------------------------------
+        // Streaming (`llm_stream_channel`) stays on the Tauri-only invoke path
+        // until Phase 4b lifts it to an SSE route. Image-generation connection
+        // testing reuses the same handler because the helpers it depends on
+        // are pure-JSON shims in `marinara_handlers::llm`; image *generation*
+        // itself is deferred to Phase 4c.
+        "llm_complete" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::llm::llm_complete(storage, body)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "llm_list_models" => {
+            let connection_id = args.get("connectionId").and_then(Value::as_str);
+            marinara_handlers::llm::llm_models(storage, connection_id)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "connection_models" => {
+            let id = required_str(&args, "id")?;
+            marinara_handlers::llm::connection_models(storage, id)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "connection_test" => {
+            let id = required_str(&args, "id")?;
+            marinara_handlers::llm::connection_test(storage, id)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "connection_test_message" => {
+            let id = required_str(&args, "id")?;
+            marinara_handlers::llm::connection_test_message(storage, id)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+
         // ---- tracker snapshots -----------------------------------------------
         "tracker_snapshot_latest" => {
             let chat_id = required_str(&args, "chatId")?;
