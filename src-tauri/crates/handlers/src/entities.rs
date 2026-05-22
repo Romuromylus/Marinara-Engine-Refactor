@@ -239,4 +239,116 @@ mod tests {
         assert_eq!(copy["name"], "Mari Copy");
         assert_ne!(copy["id"], original["id"]);
     }
+
+    fn seed_messages(storage: &FileStorage) {
+        for (created_at, content) in [
+            ("2026-05-22T10:00:00Z", "first"),
+            ("2026-05-22T10:01:00Z", "second"),
+            ("2026-05-22T10:02:00Z", "third"),
+            ("2026-05-22T10:03:00Z", "fourth"),
+            ("2026-05-22T10:04:00Z", "fifth"),
+        ] {
+            storage
+                .create(
+                    "messages",
+                    json!({
+                        "chatId": "chat-1",
+                        "content": content,
+                        "createdAt": created_at,
+                    }),
+                )
+                .expect("seed message");
+        }
+    }
+
+    #[test]
+    fn list_messages_applies_limit_from_the_tail() {
+        let temp = TempDir::new().expect("tempdir");
+        let storage = FileStorage::new(temp.path().join("data")).expect("storage");
+        seed_messages(&storage);
+
+        let result = list(&storage, "messages", Some(json!({ "limit": 2 }))).expect("list");
+        let rows = result.as_array().expect("array");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["content"], "fourth");
+        assert_eq!(rows[1]["content"], "fifth");
+    }
+
+    #[test]
+    fn list_messages_filters_by_before_cursor() {
+        let temp = TempDir::new().expect("tempdir");
+        let storage = FileStorage::new(temp.path().join("data")).expect("storage");
+        seed_messages(&storage);
+        let all = list(&storage, "messages", None).expect("list");
+        let cursor_row = &all.as_array().unwrap()[3];
+        let created_at = cursor_row["createdAt"].as_str().unwrap();
+        let id = cursor_row["id"].as_str().unwrap();
+        let cursor = format!("{created_at}|{id}");
+
+        let result = list(
+            &storage,
+            "messages",
+            Some(json!({ "before": cursor, "limit": 10 })),
+        )
+        .expect("list");
+        let rows = result.as_array().expect("array");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0]["content"], "first");
+        assert_eq!(rows[2]["content"], "third");
+    }
+
+    #[test]
+    fn list_messages_materializes_swipe_fields() {
+        let temp = TempDir::new().expect("tempdir");
+        let storage = FileStorage::new(temp.path().join("data")).expect("storage");
+        storage
+            .create(
+                "messages",
+                json!({
+                    "chatId": "chat-1",
+                    "createdAt": "2026-05-22T10:00:00Z",
+                    "content": "original",
+                    "activeSwipeIndex": 1,
+                    "swipes": [
+                        { "content": "first variant" },
+                        { "content": "second variant" },
+                    ],
+                }),
+            )
+            .expect("seed message");
+
+        let result = list(&storage, "messages", None).expect("list");
+        let row = &result.as_array().unwrap()[0];
+        assert_eq!(row["swipeCount"], json!(2));
+        assert_eq!(row["activeSwipeIndex"], json!(1));
+        assert_eq!(row["content"], "second variant");
+    }
+
+    #[test]
+    fn materialize_swipe_fields_clamps_active_index_out_of_range() {
+        let mut message = json!({
+            "content": "original",
+            "activeSwipeIndex": 99,
+            "swipes": [
+                { "content": "only variant" },
+            ],
+        });
+        crate::shared::materialize_message_swipe_fields(&mut message);
+        assert_eq!(message["swipeCount"], json!(1));
+        assert_eq!(message["activeSwipeIndex"], json!(0));
+        assert_eq!(message["content"], "only variant");
+    }
+
+    #[test]
+    fn materialize_swipe_fields_handles_empty_swipes() {
+        let mut message = json!({
+            "content": "kept",
+            "activeSwipeIndex": 4,
+            "swipes": [],
+        });
+        crate::shared::materialize_message_swipe_fields(&mut message);
+        assert_eq!(message["swipeCount"], json!(0));
+        assert_eq!(message["activeSwipeIndex"], json!(0));
+        assert_eq!(message["content"], "kept");
+    }
 }
