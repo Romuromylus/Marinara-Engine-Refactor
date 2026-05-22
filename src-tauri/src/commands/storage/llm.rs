@@ -9,7 +9,7 @@ use marinara_core::AppError;
 
 // Re-exported so existing call sites in this crate keep their import path.
 pub(crate) use marinara_handlers::llm::{
-    llm_connection_from_value, llm_request_from_body, resolve_llm_connection_for_request,
+    llm_connection_from_value, resolve_llm_connection_for_request,
 };
 
 pub(crate) async fn llm_complete(state: &AppState, body: Value) -> AppResult<Value> {
@@ -30,24 +30,20 @@ pub(crate) async fn llm_stream_channel(
     body: Value,
     on_event: tauri::ipc::Channel<Value>,
 ) -> AppResult<()> {
-    let request = llm_request_from_body(&state.storage, body)?;
-    let mut cancellation = state.register_llm_stream(&stream_id)?;
-    if *cancellation.borrow() {
-        state.unregister_llm_stream(&stream_id);
-        return Ok(());
-    }
-    let result = tokio::select! {
-        result = marinara_llm::stream_events(request, |event| {
+    marinara_handlers::llm::llm_stream(
+        &state.storage,
+        &state.llm_streams,
+        &stream_id,
+        body,
+        move |event| {
             on_event
                 .send(event)
                 .map_err(|error| AppError::new("stream_channel_error", error.to_string()))
-        }) => result,
-        _ = cancellation.changed() => Ok(()),
-    };
-    state.unregister_llm_stream(&stream_id);
-    result
+        },
+    )
+    .await
 }
 
 pub(crate) fn llm_stream_cancel(state: &AppState, stream_id: &str) -> AppResult<Value> {
-    Ok(json!({ "cancelled": state.cancel_llm_stream(stream_id)? }))
+    marinara_handlers::llm::llm_stream_cancel(&state.llm_streams, stream_id)
 }

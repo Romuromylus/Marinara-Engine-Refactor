@@ -1,15 +1,23 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::Json,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Json,
+    },
     routing::{get, post},
     Router,
 };
+use futures_util::stream::Stream;
 use marinara_assets::AssetService;
 use marinara_core::AppError;
+use marinara_handlers::llm::LlmStreamRegistry;
 use marinara_storage::FileStorage;
 use serde_json::{json, Value};
+use std::convert::Infallible;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{info, warn};
 
@@ -20,6 +28,10 @@ struct AppState {
     game_assets: AssetService,
     lorebook_images: AssetService,
     data_dir: PathBuf,
+    /// Per-process registry of in-flight LLM streams. The Tauri binary holds
+    /// the exact same `Arc<LlmStreamRegistry>` on its AppState — Phase 4b
+    /// lifted the type into `marinara-handlers` so both transports share it.
+    llm_streams: Arc<LlmStreamRegistry>,
 }
 
 type ApiError = (StatusCode, Json<Value>);
@@ -61,11 +73,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         game_assets,
         lorebook_images,
         data_dir: data_dir.clone(),
+        llm_streams: Arc::new(LlmStreamRegistry::new()),
     };
 
     let api_router = Router::new()
         .route("/health", get(health))
-        .route("/invoke/:command", post(invoke_command));
+        .route("/invoke/:command", post(invoke_command))
+        .route("/stream/llm", post(llm_stream_sse));
 
     let static_service = ServeDir::new(&frontend_dir)
         .not_found_service(ServeFile::new(frontend_dir.join("index.html")));
@@ -787,6 +801,17 @@ async fn invoke_command(
                 .map_err(error_response)
         }
 
+        // ---- LLM stream cancel (Phase 4b) -----------------------------------
+        // The actual streaming endpoint is `POST /api/stream/llm` (SSE).
+        // Cancel is a plain invoke because it's a fire-and-forget signal —
+        // no event stream to return.
+        "llm_stream_cancel" => {
+            let stream_id = required_str(&args, "streamId")?;
+            marinara_handlers::llm::llm_stream_cancel(&state.llm_streams, stream_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+
         // ---- tracker snapshots -----------------------------------------------
         "tracker_snapshot_latest" => {
             let chat_id = required_str(&args, "chatId")?;
@@ -852,6 +877,81 @@ fn required_path_array(args: &Value, key: &str) -> Result<Vec<String>, ApiError>
                 "{key} must be a non-empty string array"
             )))
         })
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4b: SSE streaming for llm_stream_channel
+//
+// The Tauri-side command rides on `tauri::ipc::Channel<Value>`; the browser
+// gets the same event payloads via Server-Sent Events on this route. We POST
+// rather than use EventSource because the request body (messages + tools +
+// parameters) is too large for a query string, and EventSource only allows
+// GET. The frontend `llm-api.ts` web path uses `fetch()` with a
+// `ReadableStream` reader to parse the `data:` lines.
+//
+// Cancellation: the frontend separately POSTs `/api/invoke/llm_stream_cancel`
+// with the same `streamId`. That handler reaches the per-process
+// `LlmStreamRegistry` and flips the watch the spawned task is selecting on,
+// so the in-flight provider request gets dropped mid-flight.
+//
+// Errors before the stream task spawns (missing streamId, bad body shape)
+// surface as a normal HTTP 4xx/5xx via the IntoResponse impl on the Err arm.
+// Errors *during* streaming (provider hangup, JSON parse) get emitted as a
+// final `{"type":"error","text":...}` event so the consumer notices and
+// closes the stream cleanly.
+// ---------------------------------------------------------------------------
+async fn llm_stream_sse(
+    State(state): State<AppState>,
+    Json(args): Json<Value>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let stream_id = required_str(&args, "streamId")?.to_string();
+    let request_body = args
+        .get("request")
+        .cloned()
+        .or_else(|| args.get("body").cloned())
+        .unwrap_or_else(|| {
+            let mut clone = args.clone();
+            if let Some(object) = clone.as_object_mut() {
+                object.remove("streamId");
+            }
+            clone
+        });
+
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Result<Event, Infallible>>();
+    let storage = state.storage.clone();
+    let registry = state.llm_streams.clone();
+    let emit_tx = tx.clone();
+    tokio::spawn(async move {
+        let result = marinara_handlers::llm::llm_stream(
+            &storage,
+            &registry,
+            &stream_id,
+            request_body,
+            move |event| {
+                let payload = Event::default()
+                    .json_data(&event)
+                    .map_err(|error| AppError::new("sse_serialize_error", error.to_string()))?;
+                emit_tx
+                    .send(Ok(payload))
+                    .map_err(|error| AppError::new("sse_send_error", error.to_string()))
+            },
+        )
+        .await;
+        if let Err(error) = result {
+            let payload = json!({
+                "type": "error",
+                "text": error.message,
+                "code": error.code,
+            });
+            if let Ok(event) = Event::default().json_data(&payload) {
+                let _ = tx.send(Ok(event));
+            }
+        }
+        // Dropping `tx` ends the receiver stream and lets Axum flush the
+        // final response chunk.
+    });
+
+    Ok(Sse::new(UnboundedReceiverStream::new(rx)).keep_alive(KeepAlive::default()))
 }
 
 fn error_response(error: AppError) -> ApiError {
