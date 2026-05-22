@@ -29,6 +29,14 @@ export interface TrackerSnapshotReadContext {
   rows: Array<Record<string, unknown>>;
 }
 
+export interface TrackerSnapshotMessageRebase {
+  sourceMessageId: string;
+  targetMessageId: string;
+  role?: unknown;
+  activeSwipeIndex?: unknown;
+  swipeCount?: unknown;
+}
+
 type TrackerStatePatch = Partial<
   Pick<
     GameState,
@@ -367,6 +375,28 @@ export function trackerSnapshotTargetFromMessage(message: unknown): TrackerSnaps
   };
 }
 
+function trackerSnapshotTargetFromRebasedMessage(
+  message: TrackerSnapshotMessageRebase,
+): TrackerSnapshotTurnTarget | null {
+  const messageId = readString(message.targetMessageId).trim();
+  if (message.role !== "assistant" || !messageId) return null;
+  const fallbackSwipeIndex = Math.max(0, readNonNegativeInteger(message.swipeCount, 1) - 1);
+  return {
+    messageId,
+    swipeIndex: readNonNegativeInteger(message.activeSwipeIndex, fallbackSwipeIndex),
+  };
+}
+
+export function resolveVisibleGameStateFallbackMessageIds(messages: Array<{ role?: unknown; id?: unknown }>): string[] {
+  const ids = new Set<string>([""]);
+  for (const message of messages) {
+    if (message.role === "assistant" && typeof message.id === "string" && message.id.trim()) {
+      ids.add(message.id.trim());
+    }
+  }
+  return Array.from(ids);
+}
+
 async function listTrackerSnapshotRows(storage: StorageGateway, chatId: string): Promise<Array<Record<string, unknown>>> {
   const rows = await storage.list<Record<string, unknown>>("game-state-snapshots", {
     filters: { chatId, kind: "tracker" },
@@ -415,6 +445,45 @@ export async function getTrackerSnapshotForTarget(
   if (!target) return null;
   const rows = context?.rows ?? (await listTrackerSnapshotRows(storage, chatId));
   return newestMatchingSnapshot(rows, chatId, (row) => targetMatches(row, target));
+}
+
+export async function copyTrackerSnapshotsForRebasedMessages(
+  storage: StorageGateway,
+  sourceChatId: string,
+  targetChatId: string,
+  messages: readonly TrackerSnapshotMessageRebase[],
+): Promise<GameState | null> {
+  if (!sourceChatId || !targetChatId || messages.length === 0) return null;
+
+  const messageIdMap = new Map<string, string>();
+  let visibleTarget: TrackerSnapshotTurnTarget | null = null;
+  for (const message of messages) {
+    const sourceMessageId = readString(message.sourceMessageId).trim();
+    const targetMessageId = readString(message.targetMessageId).trim();
+    if (!sourceMessageId || !targetMessageId) continue;
+    messageIdMap.set(sourceMessageId, targetMessageId);
+    visibleTarget = trackerSnapshotTargetFromRebasedMessage(message) ?? visibleTarget;
+  }
+
+  if (messageIdMap.size === 0) return null;
+
+  let copied = false;
+  const rows = await listTrackerSnapshotRows(storage, sourceChatId);
+  for (const row of rows) {
+    const sourceTarget = trackerSnapshotTargetFromRecord(row);
+    const targetMessageId = sourceTarget ? messageIdMap.get(sourceTarget.messageId) : null;
+    if (!sourceTarget || !targetMessageId) continue;
+    const next: Record<string, unknown> = {
+      ...row,
+      chatId: targetChatId,
+      messageId: targetMessageId,
+    };
+    delete next.id;
+    await storage.create("game-state-snapshots", next);
+    copied = true;
+  }
+
+  return copied ? getTrackerSnapshotForTarget(storage, targetChatId, visibleTarget) : null;
 }
 
 export async function selectTrackerSnapshotForGeneration(

@@ -29,6 +29,7 @@ import {
   createTrackerSnapshotReadContext,
   getTrackerSnapshotForTarget,
   persistTrackerSnapshotForTurn,
+  resolveVisibleGameStateFallbackMessageIds,
   selectTrackerSnapshotForGeneration,
   trackerSnapshotTargetFromMessage,
 } from "./tracker-snapshots";
@@ -397,7 +398,9 @@ async function selectGenerationTrackerBaseline(
     }),
     visibleAnchor,
     excludeMessageId: regenerateMessageId || null,
-    fallbackMessageIds: resolveRegenerationGameStateFallbackMessageIds(storedMessages, regenerateMessageId),
+    fallbackMessageIds:
+      resolveRegenerationGameStateFallbackMessageIds(storedMessages, regenerateMessageId) ??
+      resolveVisibleGameStateFallbackMessageIds(storedMessages),
   });
 }
 
@@ -424,6 +427,10 @@ export async function retryGenerationAgents(
       preferLatestVisible: true,
       visibleAnchor: targetTrackerTarget,
       excludeMessageId: targetTrackerTarget?.messageId ?? null,
+      fallbackMessageIds: resolveRegenerationGameStateFallbackMessageIds(
+        storedMessages,
+        targetTrackerTarget?.messageId,
+      ),
     },
     trackerReadContext,
   );

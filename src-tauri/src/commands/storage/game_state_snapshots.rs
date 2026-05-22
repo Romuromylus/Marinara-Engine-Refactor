@@ -24,6 +24,74 @@ pub(crate) fn tracker_snapshot_for_target(
     Ok(rows.into_iter().next())
 }
 
+pub(crate) fn copy_tracker_snapshots_for_message(
+    state: &AppState,
+    source_chat_id: &str,
+    target_chat_id: &str,
+    source_message_id: &str,
+    target_message_id: &str,
+) -> AppResult<Vec<Value>> {
+    let source_chat_id = required_chat_id(source_chat_id)?;
+    let target_chat_id = required_chat_id(target_chat_id)?;
+    let source_message_id = tracker_message_id(Some(source_message_id))?;
+    let target_message_id = tracker_message_id(Some(target_message_id))?;
+    let rows = tracker_snapshots_for_message(state, source_chat_id, source_message_id)?;
+    let mut copied = Vec::new();
+
+    for row in rows {
+        let Some(object) = row.as_object() else {
+            continue;
+        };
+        let mut snapshot = object.clone();
+        snapshot.remove("id");
+        snapshot.insert(
+            "chatId".to_string(),
+            Value::String(target_chat_id.to_string()),
+        );
+        snapshot.insert(
+            "messageId".to_string(),
+            Value::String(target_message_id.to_string()),
+        );
+        copied.push(
+            state
+                .storage
+                .create(SNAPSHOT_COLLECTION, Value::Object(snapshot))?,
+        );
+    }
+
+    Ok(copied)
+}
+
+pub(crate) fn delete_tracker_snapshot_swipe(
+    state: &AppState,
+    chat_id: &str,
+    message_id: &str,
+    deleted_swipe_index: i64,
+) -> AppResult<()> {
+    let rows = tracker_snapshots_for_message(state, chat_id, message_id)?;
+    let deleted_swipe_index = deleted_swipe_index.max(0);
+
+    for row in rows {
+        let Some(id) = non_empty_string(&row, "id").map(ToOwned::to_owned) else {
+            continue;
+        };
+        let Some(swipe_index) = swipe_index_value(row.get("swipeIndex")) else {
+            continue;
+        };
+        if swipe_index == deleted_swipe_index {
+            state.storage.delete(SNAPSHOT_COLLECTION, &id)?;
+        } else if swipe_index > deleted_swipe_index {
+            state.storage.patch(
+                SNAPSHOT_COLLECTION,
+                &id,
+                json!({ "swipeIndex": swipe_index - 1 }),
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
 pub(crate) fn save_tracker_snapshot(
     state: &AppState,
     chat_id: &str,
@@ -66,6 +134,27 @@ fn tracker_snapshots_for_chat(state: &AppState, chat_id: &str) -> AppResult<Vec<
     let chat_id = required_chat_id(chat_id)?;
     let mut filters = Map::new();
     filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
+    Ok(state
+        .storage
+        .list_where(SNAPSHOT_COLLECTION, &filters)?
+        .into_iter()
+        .filter(is_tracker_snapshot)
+        .collect())
+}
+
+fn tracker_snapshots_for_message(
+    state: &AppState,
+    chat_id: &str,
+    message_id: &str,
+) -> AppResult<Vec<Value>> {
+    let chat_id = required_chat_id(chat_id)?;
+    let message_id = tracker_message_id(Some(message_id))?;
+    let mut filters = Map::new();
+    filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
+    filters.insert(
+        "messageId".to_string(),
+        Value::String(message_id.to_string()),
+    );
     Ok(state
         .storage
         .list_where(SNAPSHOT_COLLECTION, &filters)?

@@ -1,3 +1,4 @@
+use super::game_state_snapshots;
 use super::shared::*;
 use super::*;
 use crate::builtins::is_protected_record;
@@ -65,6 +66,28 @@ fn is_hidden_from_ai(message: &Value) -> bool {
         .and_then(|object| object.get("hiddenFromAi"))
         .and_then(Value::as_bool)
         .unwrap_or(false)
+}
+
+fn active_swipe_index(message: &Value) -> i64 {
+    let fallback = message
+        .get("swipeCount")
+        .and_then(Value::as_u64)
+        .map(|count| count.saturating_sub(1) as i64)
+        .unwrap_or(0);
+    match message.get("activeSwipeIndex") {
+        Some(Value::Number(number)) => number
+            .as_i64()
+            .or_else(|| number.as_u64().map(|value| value as i64))
+            .map(|value| value.max(0))
+            .unwrap_or(fallback),
+        Some(Value::String(raw)) => raw
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .map(|value| value.max(0))
+            .unwrap_or(fallback),
+        _ => fallback,
+    }
 }
 
 fn merge_chat_metadata(
@@ -169,7 +192,7 @@ pub(crate) fn set_active_swipe(
 
 pub(crate) fn delete_swipe(
     state: &AppState,
-    _chat_id: &str,
+    chat_id: &str,
     message_id: &str,
     index: &str,
 ) -> AppResult<Value> {
@@ -188,7 +211,9 @@ pub(crate) fn delete_swipe(
         }
     }
     materialize_message_swipe_fields(&mut message);
-    state.storage.patch("messages", message_id, message)
+    let updated = state.storage.patch("messages", message_id, message)?;
+    game_state_snapshots::delete_tracker_snapshot_swipe(state, chat_id, message_id, index as i64)?;
+    Ok(updated)
 }
 
 pub(crate) fn bulk_delete_messages(
@@ -471,18 +496,68 @@ pub(crate) fn branch_chat(state: &AppState, chat_id: &str, body: Value) -> AppRe
         Value::String(format!("{base_name} Branch")),
     );
     object.insert("groupId".to_string(), Value::String(group_id));
-    let new_chat = state.storage.create("chats", chat)?;
+    let source_has_tracker_snapshots =
+        game_state_snapshots::latest_tracker_snapshot(state, chat_id)?.is_some();
+    let mut new_chat = state.storage.create("chats", chat)?;
     let up_to = body.get("upToMessageId").and_then(Value::as_str);
+    let mut visible_tracker_target: Option<(String, i64)> = None;
     for mut message in messages_for_chat(state, chat_id)? {
+        let source_message_id = message
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(ToOwned::to_owned);
+        let source_role = message
+            .get("role")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
         let stop = up_to.is_some_and(|id| message.get("id").and_then(Value::as_str) == Some(id));
         if let Some(obj) = message.as_object_mut() {
             obj.remove("id");
             obj.insert("chatId".to_string(), Value::String(new_chat_id.clone()));
         }
-        state.storage.create("messages", message)?;
+        let created = state.storage.create("messages", message)?;
+        let target_message_id = created
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(ToOwned::to_owned);
+        if let (Some(source_message_id), Some(target_message_id)) =
+            (source_message_id, target_message_id)
+        {
+            game_state_snapshots::copy_tracker_snapshots_for_message(
+                state,
+                chat_id,
+                &new_chat_id,
+                &source_message_id,
+                &target_message_id,
+            )?;
+            if source_role.as_deref() == Some("assistant") {
+                visible_tracker_target = Some((target_message_id, active_swipe_index(&created)));
+            }
+        }
         if stop {
             break;
         }
+    }
+    if source_has_tracker_snapshots {
+        let visible_game_state = match visible_tracker_target {
+            Some((message_id, swipe_index)) => game_state_snapshots::tracker_snapshot_for_target(
+                state,
+                &new_chat_id,
+                &message_id,
+                swipe_index,
+            )?
+            .unwrap_or(Value::Null),
+            None => Value::Null,
+        };
+        new_chat = state.storage.patch(
+            "chats",
+            &new_chat_id,
+            json!({ "gameState": visible_game_state }),
+        )?;
     }
     Ok(new_chat)
 }

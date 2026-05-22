@@ -99,6 +99,13 @@ function withTarget(state: WorldState, chatId: string, target: ResolvedWorldStat
   return { ...state, chatId, messageId: target.messageId, swipeIndex: target.swipeIndex };
 }
 
+function canUseChatGameStateFallback(state: WorldState | undefined, target: ResolvedWorldStateTarget | null) {
+  if (!state || !target) return !!state;
+  const stateTarget = readTarget(state);
+  if (!stateTarget?.messageId) return true;
+  return stateTarget.messageId === target.messageId && stateTarget.swipeIndex === target.swipeIndex;
+}
+
 async function latestAssistantTarget(chatId: string): Promise<ResolvedWorldStateTarget | null> {
   const messages = await storageApi.listChatMessages<Record<string, unknown>>(chatId);
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -138,7 +145,9 @@ async function getWorldState(
     throwIfAborted(init);
     if (snapshot) return snapshot;
   }
-  return chat?.gameState ? withTarget(chat.gameState, chatId, target) : null;
+  return canUseChatGameStateFallback(chat?.gameState, target) && chat?.gameState
+    ? withTarget(chat.gameState, chatId, target)
+    : null;
 }
 
 export const worldStateApi: WorldStateApi = {
