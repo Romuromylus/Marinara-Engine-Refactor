@@ -20,7 +20,10 @@ use marinara_core::{AppError, AppResult};
 use marinara_security::is_allowed_outbound_url;
 use marinara_storage::FileStorage;
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
 use std::time::Duration;
+use tokio::sync::watch;
 
 const DEFAULT_OPENAI_IMAGE_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_STABILITY_BASE_URL: &str = "https://api.stability.ai/v2beta";
@@ -1398,4 +1401,167 @@ mod tests {
             "https://example.com/api"
         );
     }
+
+    #[test]
+    fn registry_cancel_pre_register_is_pending_then_consumed() {
+        let registry = LlmStreamRegistry::new();
+        // Cancelling an unknown id stashes a pending mark and returns false
+        // (no active stream was actually cancelled).
+        let cancelled = registry.cancel("stream-1").expect("cancel");
+        assert!(!cancelled);
+        // Registering after the pending mark surfaces the cancellation up
+        // front: the watch starts in the cancelled state.
+        let rx = registry.register("stream-1").expect("register");
+        assert!(*rx.borrow(), "pre-cancel must surface on register");
+        // And the pending mark must be consumed so a fresh register is clean.
+        registry.unregister("stream-1");
+        let rx2 = registry.register("stream-1").expect("re-register");
+        assert!(!*rx2.borrow(), "pending mark must be consumed once");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn registry_cancel_signals_active_watcher() {
+        let registry = LlmStreamRegistry::new();
+        let mut rx = registry.register("stream-2").expect("register");
+        // cancel() while active returns true and triggers the watcher.
+        let cancelled = registry.cancel("stream-2").expect("cancel");
+        assert!(cancelled);
+        // changed() resolves because the watch flipped to true.
+        rx.changed().await.expect("watch should fire");
+        assert!(*rx.borrow());
+    }
+
+    #[test]
+    fn registry_unregister_clears_active_and_pending() {
+        let registry = LlmStreamRegistry::new();
+        registry.register("stream-3").expect("register");
+        // Stash a separate pending cancel so we can confirm it goes away too.
+        registry.cancel("stream-4").expect("cancel pending");
+        registry.unregister("stream-3");
+        registry.unregister("stream-4");
+        // Re-registering either id must start in a non-cancelled state.
+        let rx3 = registry.register("stream-3").expect("re-register 3");
+        let rx4 = registry.register("stream-4").expect("re-register 4");
+        assert!(!*rx3.borrow());
+        assert!(!*rx4.borrow());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4b: streaming surface
+//
+// The cancellation registry that used to live on `src-tauri/src/state.rs`
+// moves here so the Axum server can use the same code. Both binaries hold an
+// `Arc<LlmStreamRegistry>` on their respective `AppState`. The Tauri command
+// continues to ride on `tauri::ipc::Channel` for the emit closure; the Axum
+// route adapts the same closure shape to an SSE stream by feeding events
+// through an mpsc channel.
+// ---------------------------------------------------------------------------
+
+/// Per-process registry of in-flight LLM streams. Each entry is a tokio
+/// `watch::Sender<bool>` whose value flips to `true` when the stream is
+/// cancelled; the streaming task `tokio::select!`s on the matching receiver
+/// so cancellation interrupts the underlying `marinara_llm::stream_events`
+/// call mid-flight.
+///
+/// Cancel-before-register is a real race (the frontend can fire the cancel
+/// invoke before the stream invoke even reaches Rust), so cancels for unknown
+/// ids stash a "pending" mark and a subsequent register sees the watch start
+/// in the cancelled state.
+pub struct LlmStreamRegistry {
+    inner: Mutex<LlmStreamState>,
+}
+
+#[derive(Default)]
+struct LlmStreamState {
+    active: HashMap<String, watch::Sender<bool>>,
+    pending: HashSet<String>,
+}
+
+impl LlmStreamRegistry {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(LlmStreamState::default()),
+        }
+    }
+
+    pub fn register(&self, stream_id: &str) -> AppResult<watch::Receiver<bool>> {
+        let mut state = self.lock()?;
+        let starts_cancelled = state.pending.remove(stream_id);
+        let (tx, rx) = watch::channel(starts_cancelled);
+        state.active.insert(stream_id.to_string(), tx);
+        Ok(rx)
+    }
+
+    pub fn unregister(&self, stream_id: &str) {
+        if let Ok(mut state) = self.inner.lock() {
+            state.active.remove(stream_id);
+            state.pending.remove(stream_id);
+        }
+    }
+
+    pub fn cancel(&self, stream_id: &str) -> AppResult<bool> {
+        let mut state = self.lock()?;
+        if let Some(tx) = state.active.get(stream_id) {
+            let _ = tx.send(true);
+            Ok(true)
+        } else {
+            state.pending.insert(stream_id.to_string());
+            Ok(false)
+        }
+    }
+
+    fn lock(&self) -> AppResult<std::sync::MutexGuard<'_, LlmStreamState>> {
+        self.inner.lock().map_err(|_| {
+            AppError::new(
+                "llm_stream_cancel_error",
+                "LLM stream cancellation registry is unavailable",
+            )
+        })
+    }
+}
+
+impl Default for LlmStreamRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Drive a streaming completion. The `emit` closure handles the transport
+/// side: the Tauri shim wraps `tauri::ipc::Channel::send`, the Axum SSE route
+/// wraps an `mpsc::UnboundedSender<Event>`. Either way the underlying
+/// `marinara_llm::stream_events` walks the provider response and forwards
+/// `{type, ...}` event payloads through the closure.
+///
+/// Cancellation surfaces in two ways: a pre-register cancel (caller hit the
+/// cancel endpoint before this future ran) returns immediately with no events
+/// emitted; an in-flight cancel interrupts the `stream_events` future via
+/// `tokio::select!` on the watch receiver. Either path always unregisters
+/// the stream before returning so the registry doesn't leak entries.
+pub async fn llm_stream<F>(
+    storage: &FileStorage,
+    registry: &LlmStreamRegistry,
+    stream_id: &str,
+    body: Value,
+    emit: F,
+) -> AppResult<()>
+where
+    F: FnMut(Value) -> AppResult<()> + Send,
+{
+    let request = llm_request_from_body(storage, body)?;
+    let mut cancellation = registry.register(stream_id)?;
+    if *cancellation.borrow() {
+        registry.unregister(stream_id);
+        return Ok(());
+    }
+    let result = tokio::select! {
+        result = marinara_llm::stream_events(request, emit) => result,
+        _ = cancellation.changed() => Ok(()),
+    };
+    registry.unregister(stream_id);
+    result
+}
+
+pub fn llm_stream_cancel(registry: &LlmStreamRegistry, stream_id: &str) -> AppResult<Value> {
+    Ok(json!({ "cancelled": registry.cancel(stream_id)? }))
 }

@@ -2966,12 +2966,14 @@ name = "marinara-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "marinara-assets",
  "marinara-core",
  "marinara-handlers",
  "marinara-storage",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "tower-http",
  "tracing",
  "tracing-subscriber",

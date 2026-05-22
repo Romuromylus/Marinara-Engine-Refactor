@@ -1,11 +1,10 @@
 use marinara_assets::AssetService;
 use marinara_core::{AppError, AppResult};
+use marinara_handlers::llm::LlmStreamRegistry;
 use marinara_storage::FileStorage;
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tauri::{AppHandle, Manager};
-use tokio::sync::watch;
 
 use crate::seed_defaults::seed_bundled_defaults;
 
@@ -15,13 +14,10 @@ pub struct AppState {
     pub game_assets: AssetService,
     pub backgrounds: AssetService,
     pub data_dir: PathBuf,
-    llm_stream_cancellations: Arc<Mutex<LlmStreamCancellations>>,
-}
-
-#[derive(Default)]
-struct LlmStreamCancellations {
-    active: HashMap<String, watch::Sender<bool>>,
-    pending: HashSet<String>,
+    /// Phase 4b lifted the registry into `marinara-handlers` so the Axum
+    /// server target can share the same cancellation surface. The Tauri
+    /// AppState just holds the same `Arc<LlmStreamRegistry>` the server does.
+    pub llm_streams: Arc<LlmStreamRegistry>,
 }
 
 impl AppState {
@@ -57,50 +53,7 @@ impl AppState {
             game_assets,
             backgrounds,
             data_dir,
-            llm_stream_cancellations: Arc::new(Mutex::new(LlmStreamCancellations::default())),
+            llm_streams: Arc::new(LlmStreamRegistry::new()),
         })
-    }
-
-    pub fn register_llm_stream(&self, stream_id: &str) -> AppResult<watch::Receiver<bool>> {
-        let mut cancellations = self.llm_stream_cancellations.lock().map_err(|_| {
-            AppError::new(
-                "llm_stream_cancel_error",
-                "LLM stream cancellation registry is unavailable",
-            )
-        })?;
-        let starts_cancelled = cancellations.pending.remove(stream_id);
-        let (tx, rx) = watch::channel(starts_cancelled);
-        cancellations.active.insert(stream_id.to_string(), tx);
-        Ok(rx)
-    }
-
-    pub fn unregister_llm_stream(&self, stream_id: &str) {
-        if let Ok(mut cancellations) = self.llm_stream_cancellations.lock() {
-            cancellations.active.remove(stream_id);
-            cancellations.pending.remove(stream_id);
-        }
-    }
-
-    pub fn cancel_llm_stream(&self, stream_id: &str) -> AppResult<bool> {
-        let cancellations = self.llm_stream_cancellations.lock().map_err(|_| {
-            AppError::new(
-                "llm_stream_cancel_error",
-                "LLM stream cancellation registry is unavailable",
-            )
-        })?;
-        if let Some(tx) = cancellations.active.get(stream_id) {
-            let _ = tx.send(true);
-            Ok(true)
-        } else {
-            drop(cancellations);
-            let mut cancellations = self.llm_stream_cancellations.lock().map_err(|_| {
-                AppError::new(
-                    "llm_stream_cancel_error",
-                    "LLM stream cancellation registry is unavailable",
-                )
-            })?;
-            cancellations.pending.insert(stream_id.to_string());
-            Ok(false)
-        }
     }
 }
