@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use marinara_assets::AssetService;
 use marinara_core::AppError;
 use marinara_storage::FileStorage;
 use serde_json::{json, Value};
@@ -15,6 +16,7 @@ use tracing::{info, warn};
 #[derive(Clone)]
 struct AppState {
     storage: FileStorage,
+    backgrounds: AssetService,
 }
 
 type ApiError = (StatusCode, Json<Value>);
@@ -36,12 +38,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let storage = FileStorage::new(data_dir.join("data"))?;
     info!("data dir: {}", data_dir.display());
 
+    let backgrounds = AssetService::new(data_dir.join("backgrounds"))?;
+    info!("backgrounds dir: {}", backgrounds.root().display());
+
     let frontend_dir = std::env::var("MARINARA_FRONTEND_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/app/dist"));
     info!("frontend dir: {}", frontend_dir.display());
 
-    let state = AppState { storage };
+    let state = AppState {
+        storage,
+        backgrounds,
+    };
 
     let api_router = Router::new()
         .route("/health", get(health))
@@ -72,6 +80,7 @@ async fn invoke_command(
     Json(args): Json<Value>,
 ) -> ApiResult {
     let storage = &state.storage;
+    let backgrounds = &state.backgrounds;
     match command.as_str() {
         // ---- entities ---------------------------------------------------------
         "storage_list" => {
@@ -374,6 +383,51 @@ async fn invoke_command(
         "admin_clear_all_command" => {
             marinara_handlers::admin::clear_all_storage(storage).map_err(error_response)?;
             Ok(Json(marinara_handlers::admin::clear_all_response()))
+        }
+
+        // ---- backgrounds (filesystem under $MARINARA_DATA_DIR/backgrounds) --
+        "backgrounds_list" => marinara_handlers::backgrounds::list(storage, backgrounds)
+            .map(Json)
+            .map_err(error_response),
+        "backgrounds_tags" => marinara_handlers::backgrounds::tags(storage)
+            .map(Json)
+            .map_err(error_response),
+        "background_upload" => {
+            let body = args.get("body").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::backgrounds::upload(storage, backgrounds, body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "background_tags_update" => {
+            let filename = required_str(&args, "filename")?;
+            let tags = args.get("tags").cloned().unwrap_or_else(|| json!([]));
+            marinara_handlers::backgrounds::update_tags(storage, filename, json!({ "tags": tags }))
+                .map(Json)
+                .map_err(error_response)
+        }
+        "background_rename" => {
+            let filename = required_str(&args, "filename")?;
+            let name = required_str(&args, "name")?;
+            marinara_handlers::backgrounds::rename(
+                storage,
+                backgrounds,
+                filename,
+                json!({ "name": name }),
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "background_delete" => {
+            let filename = required_str(&args, "filename")?;
+            marinara_handlers::backgrounds::delete(storage, backgrounds, filename)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "background_file_path" => {
+            let filename = required_str(&args, "filename")?;
+            marinara_handlers::backgrounds::file_path(backgrounds, filename)
+                .map(Json)
+                .map_err(error_response)
         }
 
         // ---- tracker snapshots -----------------------------------------------

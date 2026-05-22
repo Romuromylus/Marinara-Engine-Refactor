@@ -2921,6 +2921,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "marinara-assets",
  "marinara-core",
  "marinara-storage",
  "serde_json",
@@ -2960,6 +2961,7 @@ name = "marinara-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "marinara-assets",
  "marinara-core",
  "marinara-handlers",
  "marinara-storage",

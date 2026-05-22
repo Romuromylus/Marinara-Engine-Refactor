@@ -301,6 +301,17 @@ pub fn find_by_field(
         .next())
 }
 
+/// Decode the minimal percent-escape set the Tauri command shims (and now the
+/// Axum server) use for path arguments. We don't want a full URL decoder —
+/// these IDs come from app-internal callers, not arbitrary user input. The
+/// pre-lift Tauri code restricted itself to slash, backslash, and space.
+pub fn decode_path(value: &str) -> String {
+    value
+        .replace("%2F", "/")
+        .replace("%5C", "\\")
+        .replace("%20", " ")
+}
+
 pub fn required_string<'a>(body: &'a Value, key: &str) -> AppResult<&'a str> {
     body.get(key)
         .and_then(Value::as_str)
