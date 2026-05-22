@@ -42,15 +42,6 @@ pub(crate) fn get_required(state: &AppState, collection: &str, id: &str) -> AppR
     marinara_handlers::shared::get_required(&state.storage, collection, id)
 }
 
-pub(crate) fn find_by_field(
-    state: &AppState,
-    collection: &str,
-    field: &str,
-    value: &str,
-) -> AppResult<Option<Value>> {
-    marinara_handlers::shared::find_by_field(&state.storage, collection, field, value)
-}
-
 pub(crate) fn upload_gallery_image(
     state: &AppState,
     collection: &str,
