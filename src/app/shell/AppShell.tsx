@@ -4,6 +4,7 @@
 import { ChatSidebar, type ChatSidebarTab } from "./ChatSidebar";
 import { TopBar } from "./TopBar";
 import { WindowTitleBar } from "./WindowTitleBar";
+import { ModeSurface } from "../../features/modes/components/ModeSurface";
 import { SpotifyMobileWidget } from "../../features/spotify/components/SpotifyMiniPlayer";
 import { ChatNotificationBubbles } from "../../features/chats/components/ChatNotificationBubbles";
 import {
@@ -36,9 +37,6 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
-const ModeSurface = lazy(() =>
-  import("../../features/modes/components/ModeSurface").then((module) => ({ default: module.ModeSurface })),
-);
 const BotBrowserView = lazy(() =>
   import("../../features/bot-browser/components/BotBrowserView").then((module) => ({ default: module.BotBrowserView })),
 );

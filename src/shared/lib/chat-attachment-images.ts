@@ -73,7 +73,13 @@ async function canvasToBlob(canvas: OffscreenCanvas | HTMLCanvasElement, type: s
 async function renderBitmapAsJpeg(bitmap: ImageBitmap, edge: number, quality: number): Promise<Blob> {
   const size = fitWithinEdge(bitmap.width, bitmap.height, edge);
   const canvas = createCanvasSurface(size.width, size.height);
-  const ctx = canvas.getContext("2d");
+  // getContext("2d") returns CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
+  // when called on either canvas type, but TypeScript widens to the union of all overload
+  // return types when the receiver itself is a union. Narrow back.
+  const ctx = canvas.getContext("2d") as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D
+    | null;
   if (!ctx) {
     throw new Error("Failed to prepare image attachment");
   }
