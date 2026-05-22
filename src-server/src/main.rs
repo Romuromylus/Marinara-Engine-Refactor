@@ -17,6 +17,9 @@ struct AppState {
     storage: FileStorage,
 }
 
+type ApiError = (StatusCode, Json<Value>);
+type ApiResult = Result<Json<Value>, ApiError>;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -67,18 +70,340 @@ async fn invoke_command(
     State(state): State<AppState>,
     Path(command): Path<String>,
     Json(args): Json<Value>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> ApiResult {
+    let storage = &state.storage;
     match command.as_str() {
+        // ---- entities ---------------------------------------------------------
         "storage_list" => {
-            let entity = args
-                .get("entity")
-                .and_then(Value::as_str)
-                .ok_or_else(|| error_response(AppError::invalid_input("entity is required")))?;
+            let entity = required_str(&args, "entity")?;
             let options = args.get("options").cloned();
-            marinara_handlers::storage::list(&state.storage, entity, options)
+            marinara_handlers::entities::list(storage, entity, options)
                 .map(Json)
                 .map_err(error_response)
         }
+        "storage_get" => {
+            let entity = required_str(&args, "entity")?;
+            let id = required_str(&args, "id")?;
+            marinara_handlers::entities::get(storage, entity, id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "storage_create" => {
+            let entity = required_str(&args, "entity")?;
+            let value = args.get("value").cloned().unwrap_or(Value::Null);
+            marinara_handlers::entities::create(storage, entity, value)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "storage_update" => {
+            let entity = required_str(&args, "entity")?;
+            let id = required_str(&args, "id")?;
+            let patch = args.get("patch").cloned().unwrap_or(Value::Null);
+            marinara_handlers::entities::update(storage, entity, id, patch)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "storage_delete" => {
+            let entity = required_str(&args, "entity")?;
+            let id = required_str(&args, "id")?;
+            marinara_handlers::entities::delete(storage, entity, id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "storage_duplicate" => {
+            let entity = required_str(&args, "entity")?;
+            let id = required_str(&args, "id")?;
+            marinara_handlers::entities::duplicate(storage, entity, id)
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- chat memories/notes ---------------------------------------------
+        "chat_memories_list" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::chat_array_field(storage, chat_id, "memories")
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_memory_delete" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let memory_id = required_str(&args, "memoryId")?;
+            marinara_handlers::chats::delete_chat_array_item(
+                storage, chat_id, "memories", memory_id,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "chat_memories_clear" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::set_chat_array_field(storage, chat_id, "memories", Vec::new())
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_memories_refresh" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::refresh_chat_memories(storage, chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_memories_export" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::export_chat_memories(storage, chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_memories_import" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let body = args.get("body").cloned().unwrap_or(Value::Null);
+            marinara_handlers::chats::import_chat_memories(storage, chat_id, body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_notes_list" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::chat_array_field(storage, chat_id, "notes")
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_note_delete" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let note_id = required_str(&args, "noteId")?;
+            marinara_handlers::chats::delete_chat_array_item(storage, chat_id, "notes", note_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_notes_clear" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::set_chat_array_field(storage, chat_id, "notes", Vec::new())
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- chat groups + branches ------------------------------------------
+        "chat_group_delete" => {
+            let group_id = required_str(&args, "groupId")?;
+            marinara_handlers::chats::delete_chat_group(storage, group_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_branch" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let up_to = args
+                .get("upToMessageId")
+                .and_then(Value::as_str)
+                .map(|value| value.to_string());
+            marinara_handlers::chats::branch_chat(
+                storage,
+                chat_id,
+                json!({ "upToMessageId": up_to }),
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+
+        // ---- chat autonomous unread ------------------------------------------
+        "chat_autonomous_unread_mark" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let body = args.get("body").cloned().unwrap_or(Value::Null);
+            marinara_handlers::chats::mark_autonomous_unread(storage, chat_id, body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_autonomous_unread_clear" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::clear_autonomous_unread(storage, chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- chat messages ---------------------------------------------------
+        "chat_messages_bulk_delete" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let message_ids = args
+                .get("messageIds")
+                .cloned()
+                .unwrap_or_else(|| json!([]));
+            marinara_handlers::chats::bulk_delete_messages(
+                storage,
+                chat_id,
+                json!({ "messageIds": message_ids }),
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "chat_message_swipes" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let message_id = required_str(&args, "messageId")?;
+            marinara_handlers::chats::message_swipes(
+                storage,
+                "GET",
+                chat_id,
+                message_id,
+                Value::Null,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "chat_message_add_swipe" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let message_id = required_str(&args, "messageId")?;
+            let body = args.get("body").cloned().unwrap_or(Value::Null);
+            marinara_handlers::chats::message_swipes(storage, "POST", chat_id, message_id, body)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_message_set_active_swipe" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let message_id = required_str(&args, "messageId")?;
+            let index = args.get("index").and_then(Value::as_i64).unwrap_or(0);
+            marinara_handlers::chats::set_active_swipe(
+                storage,
+                chat_id,
+                message_id,
+                json!({ "index": index }),
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "chat_message_delete_swipe" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let message_id = required_str(&args, "messageId")?;
+            let index = required_str(&args, "index")?;
+            marinara_handlers::chats::delete_swipe(storage, chat_id, message_id, index)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_connect" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let target_chat_id = required_str(&args, "targetChatId")?;
+            marinara_handlers::chats::connect(storage, chat_id, target_chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "chat_disconnect" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::chats::disconnect(storage, chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- agents ----------------------------------------------------------
+        "agent_patch_by_type" => {
+            let agent_type = required_str(&args, "agentType")?;
+            let patch = args.get("patch").cloned().unwrap_or(Value::Null);
+            marinara_handlers::agents::patch_agent_type(storage, agent_type, patch)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "agent_toggle_by_type" => {
+            let agent_type = required_str(&args, "agentType")?;
+            marinara_handlers::agents::toggle_agent_type(storage, agent_type)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "agent_cadence_status" => {
+            let agent_type = required_str(&args, "agentType")?;
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::agents::agent_cadence_status(storage, agent_type, chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "agent_memory_get" => {
+            let agent_type = required_str(&args, "agentType")?;
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::agents::agent_memory(
+                storage,
+                "GET",
+                agent_type,
+                chat_id,
+                Value::Null,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "agent_memory_patch" => {
+            let agent_type = required_str(&args, "agentType")?;
+            let chat_id = required_str(&args, "chatId")?;
+            let patch = args.get("patch").cloned().unwrap_or(Value::Null);
+            marinara_handlers::agents::agent_memory(
+                storage,
+                "PATCH",
+                agent_type,
+                chat_id,
+                json!({ "patch": patch }),
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "agent_memory_clear" => {
+            let agent_type = required_str(&args, "agentType")?;
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::agents::agent_memory(
+                storage,
+                "DELETE",
+                agent_type,
+                chat_id,
+                Value::Null,
+            )
+            .map(Json)
+            .map_err(error_response)
+        }
+        "agent_runs_clear_for_chat" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::agents::clear_agent_runs_and_memory_for_chat(storage, chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "agent_echo_messages_clear" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::agents::echo_messages(storage, "DELETE", chat_id)
+                .map(Json)
+                .map_err(error_response)
+        }
+
+        // ---- admin -----------------------------------------------------------
+        "admin_expunge_command" => {
+            let scopes = args.get("scopes").cloned().unwrap_or_else(|| json!([]));
+            let outcome = marinara_handlers::admin::expunge(
+                storage,
+                json!({ "confirm": true, "scopes": scopes }),
+            )
+            .map_err(error_response)?;
+            Ok(Json(marinara_handlers::admin::expunge_response(&outcome)))
+        }
+        "admin_clear_all_command" => {
+            marinara_handlers::admin::clear_all_storage(storage).map_err(error_response)?;
+            Ok(Json(marinara_handlers::admin::clear_all_response()))
+        }
+
+        // ---- tracker snapshots -----------------------------------------------
+        "tracker_snapshot_latest" => {
+            let chat_id = required_str(&args, "chatId")?;
+            marinara_handlers::tracker::latest_snapshot(storage, chat_id)
+                .map(|value| Json(value.unwrap_or(Value::Null)))
+                .map_err(error_response)
+        }
+        "tracker_snapshot_get" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let message_id = required_str(&args, "messageId")?;
+            let swipe_index = args.get("swipeIndex").and_then(Value::as_i64).unwrap_or(0);
+            marinara_handlers::tracker::snapshot_for_target(
+                storage,
+                chat_id,
+                message_id,
+                swipe_index,
+            )
+            .map(|value| Json(value.unwrap_or(Value::Null)))
+            .map_err(error_response)
+        }
+        "tracker_snapshot_save" => {
+            let chat_id = required_str(&args, "chatId")?;
+            let snapshot = args.get("snapshot").cloned().unwrap_or(Value::Null);
+            marinara_handlers::tracker::save_snapshot(storage, chat_id, snapshot)
+                .map(Json)
+                .map_err(error_response)
+        }
+
         _ => {
             warn!("unimplemented command: {command}");
             Err((
@@ -94,7 +419,14 @@ async fn invoke_command(
     }
 }
 
-fn error_response(error: AppError) -> (StatusCode, Json<Value>) {
+fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ApiError> {
+    args.get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| error_response(AppError::invalid_input(format!("{key} is required"))))
+}
+
+fn error_response(error: AppError) -> ApiError {
     let status = match error.code.as_str() {
         "not_found" => StatusCode::NOT_FOUND,
         "invalid_input" => StatusCode::BAD_REQUEST,
