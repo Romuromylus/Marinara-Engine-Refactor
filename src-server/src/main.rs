@@ -801,6 +801,38 @@ async fn invoke_command(
                 .map_err(error_response)
         }
 
+        // ---- TTS (Phase 4d) --------------------------------------------------
+        // All four routes dispatch through `tts_call`, mirroring the Tauri
+        // integration command shim. The audio bytes come back as base64
+        // inside the JSON envelope (`audioBase64` + `contentType`); the
+        // frontend already handles that shape.
+        "tts_config" => {
+            marinara_handlers::integrations::tts::tts_call(storage, "GET", &["config"], Value::Null)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "tts_update_config" => {
+            let config = args.get("config").cloned().unwrap_or(Value::Null);
+            marinara_handlers::integrations::tts::tts_call(storage, "PUT", &["config"], config)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "tts_voices" => {
+            marinara_handlers::integrations::tts::tts_call(storage, "GET", &["voices"], Value::Null)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+        "tts_speak" => {
+            let input = args.get("input").cloned().unwrap_or_else(|| args.clone());
+            marinara_handlers::integrations::tts::tts_call(storage, "POST", &["speak"], input)
+                .await
+                .map(Json)
+                .map_err(error_response)
+        }
+
         // ---- Image generation (Phase 4c) -----------------------------------
         // `image_generate` / `avatar_generation_command` / `connection_test_image`
         // hit the provider HTTP surface (Stability, ComfyUI, NovelAI, OpenAI
