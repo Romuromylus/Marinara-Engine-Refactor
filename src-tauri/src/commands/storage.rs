@@ -6,10 +6,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::time::Duration;
 
-#[path = "storage/admin.rs"]
-mod admin;
-#[path = "storage/agents.rs"]
-mod agents;
 #[path = "storage/avatars.rs"]
 mod avatars;
 #[path = "storage/backgrounds.rs"]
@@ -18,8 +14,6 @@ mod backgrounds;
 mod bot_browser;
 #[path = "storage/characters.rs"]
 mod characters;
-#[path = "storage/chats.rs"]
-mod chats;
 #[path = "storage/custom_tools.rs"]
 mod custom_tools;
 #[path = "storage/exports.rs"]
@@ -28,8 +22,6 @@ mod exports;
 mod fonts;
 #[path = "storage/game_assets.rs"]
 mod game_assets;
-#[path = "storage/game_state_snapshots.rs"]
-mod game_state_snapshots;
 #[path = "storage/generation.rs"]
 mod generation;
 #[path = "storage/http.rs"]

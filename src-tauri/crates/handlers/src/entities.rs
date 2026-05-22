@@ -1,3 +1,7 @@
+use crate::shared::{
+    duplicate_record, materialize_message_swipe_fields, normalize_update_patch,
+    with_entity_defaults,
+};
 use marinara_core::AppError;
 use marinara_storage::FileStorage;
 use serde_json::{json, Value};
@@ -66,45 +70,39 @@ pub fn list(
     Ok(Value::Array(rows))
 }
 
-pub fn materialize_message_swipe_fields(message: &mut Value) {
-    let Some(object) = message.as_object_mut() else {
-        return;
-    };
-    let Some((swipe_count, active_index, active_content)) = object
-        .get("swipes")
-        .and_then(Value::as_array)
-        .map(|swipes| {
-            let swipe_count = swipes.len();
-            if swipe_count == 0 {
-                return (0, 0, None);
-            }
-
-            let requested_index = object
-                .get("activeSwipeIndex")
-                .and_then(Value::as_u64)
-                .map(|value| value as usize)
-                .unwrap_or(0);
-            let active_index = requested_index.min(swipe_count.saturating_sub(1));
-            let active_content = swipes
-                .get(active_index)
-                .and_then(|swipe| swipe.get("content"))
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned);
-            (swipe_count, active_index, active_content)
-        })
-    else {
-        return;
-    };
-    object.insert("swipeCount".to_string(), json!(swipe_count));
-    if swipe_count == 0 {
-        object.insert("activeSwipeIndex".to_string(), json!(0));
-        return;
+pub fn get(storage: &FileStorage, entity: &str, id: &str) -> Result<Value, AppError> {
+    let mut value = storage.get(entity, id)?.unwrap_or(Value::Null);
+    if entity == "messages" {
+        materialize_message_swipe_fields(&mut value);
     }
+    Ok(value)
+}
 
-    object.insert("activeSwipeIndex".to_string(), json!(active_index));
-    if let Some(content) = active_content {
-        object.insert("content".to_string(), Value::String(content));
+pub fn create(storage: &FileStorage, entity: &str, value: Value) -> Result<Value, AppError> {
+    storage.create(entity, with_entity_defaults(entity, value))
+}
+
+pub fn update(
+    storage: &FileStorage,
+    entity: &str,
+    id: &str,
+    patch: Value,
+) -> Result<Value, AppError> {
+    storage.patch(entity, id, normalize_update_patch(entity, patch)?)
+}
+
+pub fn delete(storage: &FileStorage, entity: &str, id: &str) -> Result<Value, AppError> {
+    if crate::is_protected_record(entity, id) {
+        return Err(AppError::invalid_input(
+            "Built-in Professor Mari cannot be deleted",
+        ));
     }
+    let deleted = storage.delete(entity, id)?;
+    Ok(json!({ "deleted": deleted }))
+}
+
+pub fn duplicate(storage: &FileStorage, entity: &str, id: &str) -> Result<Value, AppError> {
+    duplicate_record(storage, entity, id)
 }
 
 fn compare_json_values(left: Option<&Value>, right: Option<&Value>) -> std::cmp::Ordering {
@@ -210,12 +208,8 @@ mod tests {
     #[test]
     fn list_descending_reverses_order() {
         let (_temp, storage) = seed_storage();
-        let result = list(
-            &storage,
-            "characters",
-            Some(json!({ "descending": true })),
-        )
-        .expect("list");
+        let result = list(&storage, "characters", Some(json!({ "descending": true })))
+            .expect("list");
         let names: Vec<&str> = result
             .as_array()
             .unwrap()
@@ -223,5 +217,26 @@ mod tests {
             .filter_map(|row| row.get("name").and_then(Value::as_str))
             .collect();
         assert_eq!(names, vec!["Bravo", "Alpha"]);
+    }
+
+    #[test]
+    fn create_applies_chat_defaults() {
+        let temp = TempDir::new().expect("tempdir");
+        let storage = FileStorage::new(temp.path().join("data")).expect("storage");
+        let created = create(&storage, "chats", json!({ "name": "Test" })).expect("create");
+        assert!(created.get("metadata").is_some());
+        assert!(created.get("gameState").is_some());
+        assert_eq!(created["characterIds"], json!([]));
+    }
+
+    #[test]
+    fn duplicate_appends_copy_suffix() {
+        let temp = TempDir::new().expect("tempdir");
+        let storage = FileStorage::new(temp.path().join("data")).expect("storage");
+        let original = create(&storage, "personas", json!({ "name": "Mari" })).expect("create");
+        let original_id = original["id"].as_str().expect("id").to_string();
+        let copy = duplicate(&storage, "personas", &original_id).expect("duplicate");
+        assert_eq!(copy["name"], "Mari Copy");
+        assert_ne!(copy["id"], original["id"]);
     }
 }

@@ -8,6 +8,8 @@ description = "Transport-agnostic command handlers shared by the Tauri desktop b
 path = "src/lib.rs"
 
 [dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 marinara-core = { path = "../core" }
 marinara-storage = { path = "../storage" }
 serde_json = "1"

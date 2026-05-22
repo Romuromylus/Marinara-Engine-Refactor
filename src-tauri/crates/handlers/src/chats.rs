@@ -1,14 +1,16 @@
-use super::shared::*;
-use super::*;
-use crate::builtins::is_protected_record;
+use crate::is_protected_record;
+use crate::shared::{get_required, list_collection, materialize_message_swipe_fields, metadata_map};
+use marinara_core::{new_id, now_iso, AppError, AppResult};
+use marinara_storage::FileStorage;
+use serde_json::{json, Map, Value};
 
 const MEMORY_CHUNK_SIZE: usize = 5;
 const MEMORY_EMBEDDING_DIMS: usize = 256;
 
-pub(crate) fn messages_for_chat(state: &AppState, chat_id: &str) -> AppResult<Vec<Value>> {
+pub fn messages_for_chat(storage: &FileStorage, chat_id: &str) -> AppResult<Vec<Value>> {
     let mut filters = Map::new();
     filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
-    let mut rows = state.storage.list_where("messages", &filters)?;
+    let mut rows = storage.list_where("messages", &filters)?;
     rows.sort_by(|a, b| {
         let a_time = a.get("createdAt").and_then(Value::as_str).unwrap_or("");
         let b_time = b.get("createdAt").and_then(Value::as_str).unwrap_or("");
@@ -68,11 +70,11 @@ fn is_hidden_from_ai(message: &Value) -> bool {
 }
 
 fn merge_chat_metadata(
-    state: &AppState,
+    storage: &FileStorage,
     chat_id: &str,
     patch: Map<String, Value>,
 ) -> AppResult<Value> {
-    let mut chat = get_required(state, "chats", chat_id)?;
+    let mut chat = get_required(storage, "chats", chat_id)?;
     let mut metadata = metadata_map(&chat);
     for (key, value) in patch {
         metadata.insert(key, value);
@@ -80,17 +82,17 @@ fn merge_chat_metadata(
     chat.as_object_mut()
         .ok_or_else(|| AppError::invalid_input("Chat is not an object"))?
         .insert("metadata".to_string(), Value::Object(metadata));
-    state.storage.patch("chats", chat_id, chat)
+    storage.patch("chats", chat_id, chat)
 }
 
-pub(crate) fn message_swipes(
-    state: &AppState,
+pub fn message_swipes(
+    storage: &FileStorage,
     _method: &str,
     _chat_id: &str,
     message_id: &str,
     body: Value,
 ) -> AppResult<Value> {
-    let mut message = get_required(state, "messages", message_id)?;
+    let mut message = get_required(storage, "messages", message_id)?;
     if body.is_null() {
         return Ok(message.get("swipes").cloned().unwrap_or_else(|| json!([])));
     }
@@ -118,12 +120,11 @@ pub(crate) fn message_swipes(
     object.insert("activeSwipeIndex".to_string(), json!(active_index));
     object.insert("swipeCount".to_string(), json!(swipe_count));
     object.insert("content".to_string(), active_content);
-    let updated = state.storage.patch("messages", message_id, message)?;
-    Ok(updated)
+    storage.patch("messages", message_id, message)
 }
 
-pub(crate) fn set_active_swipe(
-    state: &AppState,
+pub fn set_active_swipe(
+    storage: &FileStorage,
     _chat_id: &str,
     message_id: &str,
     body: Value,
@@ -133,7 +134,7 @@ pub(crate) fn set_active_swipe(
         .and_then(Value::as_u64)
         .map(|value| value as usize)
         .unwrap_or(0);
-    let mut message = get_required(state, "messages", message_id)?;
+    let mut message = get_required(storage, "messages", message_id)?;
     let object = message
         .as_object_mut()
         .ok_or_else(|| AppError::invalid_input("Message is not an object"))?;
@@ -153,7 +154,7 @@ pub(crate) fn set_active_swipe(
             }
         })
     else {
-        return state.storage.patch(
+        return storage.patch(
             "messages",
             message_id,
             json!({ "activeSwipeIndex": requested_index }),
@@ -164,11 +165,11 @@ pub(crate) fn set_active_swipe(
     if let Some(content) = active_content {
         object.insert("content".to_string(), content);
     }
-    state.storage.patch("messages", message_id, message)
+    storage.patch("messages", message_id, message)
 }
 
-pub(crate) fn delete_swipe(
-    state: &AppState,
+pub fn delete_swipe(
+    storage: &FileStorage,
     _chat_id: &str,
     message_id: &str,
     index: &str,
@@ -176,7 +177,7 @@ pub(crate) fn delete_swipe(
     let index = index
         .parse::<usize>()
         .map_err(|_| AppError::invalid_input("Invalid swipe index"))?;
-    let mut message = get_required(state, "messages", message_id)?;
+    let mut message = get_required(storage, "messages", message_id)?;
     {
         let object = message
             .as_object_mut()
@@ -188,11 +189,11 @@ pub(crate) fn delete_swipe(
         }
     }
     materialize_message_swipe_fields(&mut message);
-    state.storage.patch("messages", message_id, message)
+    storage.patch("messages", message_id, message)
 }
 
-pub(crate) fn bulk_delete_messages(
-    state: &AppState,
+pub fn bulk_delete_messages(
+    storage: &FileStorage,
     chat_id: &str,
     body: Value,
 ) -> AppResult<Value> {
@@ -203,20 +204,20 @@ pub(crate) fn bulk_delete_messages(
         .unwrap_or_default();
     let mut deleted = 0;
     for id in ids.iter().filter_map(Value::as_str) {
-        if state.storage.delete("messages", id)? {
+        if storage.delete("messages", id)? {
             deleted += 1;
         }
     }
-    touch_chat(state, chat_id)?;
+    touch_chat(storage, chat_id)?;
     Ok(json!({ "deleted": deleted }))
 }
 
-pub(crate) fn mark_autonomous_unread(
-    state: &AppState,
+pub fn mark_autonomous_unread(
+    storage: &FileStorage,
     chat_id: &str,
     body: Value,
 ) -> AppResult<Value> {
-    get_required(state, "chats", chat_id)?;
+    get_required(storage, "chats", chat_id)?;
     let mut patch = Map::new();
     let count = body
         .get("count")
@@ -237,40 +238,38 @@ pub(crate) fn mark_autonomous_unread(
         Value::Array(character_ids),
     );
     patch.insert("autonomousUnreadAt".to_string(), Value::String(now_iso()));
-    merge_chat_metadata(state, chat_id, patch)
+    merge_chat_metadata(storage, chat_id, patch)
 }
 
-pub(crate) fn clear_autonomous_unread(state: &AppState, chat_id: &str) -> AppResult<Value> {
+pub fn clear_autonomous_unread(storage: &FileStorage, chat_id: &str) -> AppResult<Value> {
     let mut patch = Map::new();
     patch.insert("autonomousUnreadCount".to_string(), json!(0));
     patch.insert("autonomousUnreadCharacterIds".to_string(), json!([]));
     patch.insert("autonomousUnreadAt".to_string(), Value::Null);
-    merge_chat_metadata(state, chat_id, patch)
+    merge_chat_metadata(storage, chat_id, patch)
 }
 
-pub(crate) fn chat_array_field(state: &AppState, chat_id: &str, field: &str) -> AppResult<Value> {
-    let chat = get_required(state, "chats", chat_id)?;
+pub fn chat_array_field(storage: &FileStorage, chat_id: &str, field: &str) -> AppResult<Value> {
+    let chat = get_required(storage, "chats", chat_id)?;
     Ok(chat.get(field).cloned().unwrap_or_else(|| json!([])))
 }
 
-pub(crate) fn set_chat_array_field(
-    state: &AppState,
+pub fn set_chat_array_field(
+    storage: &FileStorage,
     chat_id: &str,
     field: &str,
     values: Vec<Value>,
 ) -> AppResult<Value> {
-    state
-        .storage
-        .patch("chats", chat_id, json!({ field: values }))
+    storage.patch("chats", chat_id, json!({ field: values }))
 }
 
-pub(crate) fn delete_chat_array_item(
-    state: &AppState,
+pub fn delete_chat_array_item(
+    storage: &FileStorage,
     chat_id: &str,
     field: &str,
     item_id: &str,
 ) -> AppResult<Value> {
-    let chat = get_required(state, "chats", chat_id)?;
+    let chat = get_required(storage, "chats", chat_id)?;
     let values = chat
         .get(field)
         .and_then(Value::as_array)
@@ -279,12 +278,12 @@ pub(crate) fn delete_chat_array_item(
         .into_iter()
         .filter(|item| item.get("id").and_then(Value::as_str) != Some(item_id))
         .collect::<Vec<_>>();
-    set_chat_array_field(state, chat_id, field, values)
+    set_chat_array_field(storage, chat_id, field, values)
 }
 
-pub(crate) fn refresh_chat_memories(state: &AppState, chat_id: &str) -> AppResult<Value> {
-    get_required(state, "chats", chat_id)?;
-    let visible_messages = messages_for_chat(state, chat_id)?
+pub fn refresh_chat_memories(storage: &FileStorage, chat_id: &str) -> AppResult<Value> {
+    get_required(storage, "chats", chat_id)?;
+    let visible_messages = messages_for_chat(storage, chat_id)?
         .into_iter()
         .filter(|message| !is_hidden_from_ai(message) && !message_content(message).is_empty())
         .collect::<Vec<_>>();
@@ -295,7 +294,10 @@ pub(crate) fn refresh_chat_memories(state: &AppState, chat_id: &str) -> AppResul
             let content = chunk
                 .iter()
                 .map(|message| {
-                    let role = message.get("role").and_then(Value::as_str).unwrap_or("message");
+                    let role = message
+                        .get("role")
+                        .and_then(Value::as_str)
+                        .unwrap_or("message");
                     format!("{role}: {}", message_content(message))
                 })
                 .collect::<Vec<_>>()
@@ -315,15 +317,13 @@ pub(crate) fn refresh_chat_memories(state: &AppState, chat_id: &str) -> AppResul
             })
         })
         .collect::<Vec<_>>();
-    state
-        .storage
-        .patch("chats", chat_id, json!({ "memories": chunks }))?;
+    storage.patch("chats", chat_id, json!({ "memories": chunks }))?;
     Ok(json!({ "rebuilt": chunks.len(), "chunks": chunks }))
 }
 
-pub(crate) fn export_chat_memories(state: &AppState, chat_id: &str) -> AppResult<Value> {
-    let chat = get_required(state, "chats", chat_id)?;
-    let memories = chat_array_field(state, chat_id, "memories")?;
+pub fn export_chat_memories(storage: &FileStorage, chat_id: &str) -> AppResult<Value> {
+    let chat = get_required(storage, "chats", chat_id)?;
+    let memories = chat_array_field(storage, chat_id, "memories")?;
     let memory_count = memories.as_array().map(Vec::len).unwrap_or(0);
     Ok(json!({
         "type": "marinara_memory_recall",
@@ -341,12 +341,12 @@ pub(crate) fn export_chat_memories(state: &AppState, chat_id: &str) -> AppResult
     }))
 }
 
-pub(crate) fn import_chat_memories(
-    state: &AppState,
+pub fn import_chat_memories(
+    storage: &FileStorage,
     chat_id: &str,
     body: Value,
 ) -> AppResult<Value> {
-    get_required(state, "chats", chat_id)?;
+    get_required(storage, "chats", chat_id)?;
     let incoming = body
         .get("data")
         .and_then(|data| data.get("chunks"))
@@ -355,7 +355,7 @@ pub(crate) fn import_chat_memories(
         .ok_or_else(|| {
             AppError::invalid_input("Memory Recall import must contain a data.chunks array")
         })?;
-    let mut memories = chat_array_field(state, chat_id, "memories")?
+    let mut memories = chat_array_field(storage, chat_id, "memories")?
         .as_array()
         .cloned()
         .unwrap_or_default();
@@ -418,21 +418,19 @@ pub(crate) fn import_chat_memories(
         memories.push(Value::Object(memory));
         imported += 1;
     }
-    set_chat_array_field(state, chat_id, "memories", memories)?;
+    set_chat_array_field(storage, chat_id, "memories", memories)?;
     Ok(json!({ "imported": imported, "skipped": skipped }))
 }
 
-pub(crate) fn touch_chat(state: &AppState, chat_id: &str) -> AppResult<()> {
-    if state.storage.get("chats", chat_id)?.is_some() {
-        state
-            .storage
-            .patch("chats", chat_id, json!({ "lastMessageAt": now_iso() }))?;
+pub fn touch_chat(storage: &FileStorage, chat_id: &str) -> AppResult<()> {
+    if storage.get("chats", chat_id)?.is_some() {
+        storage.patch("chats", chat_id, json!({ "lastMessageAt": now_iso() }))?;
     }
     Ok(())
 }
 
-pub(crate) fn delete_chat_group(state: &AppState, group_id: &str) -> AppResult<Value> {
-    let chats = match list_collection(state, "chats", Some(("groupId", group_id)))? {
+pub fn delete_chat_group(storage: &FileStorage, group_id: &str) -> AppResult<Value> {
+    let chats = match list_collection(storage, "chats", Some(("groupId", group_id)))? {
         Value::Array(rows) => rows,
         _ => Vec::new(),
     };
@@ -442,15 +440,15 @@ pub(crate) fn delete_chat_group(state: &AppState, group_id: &str) -> AppResult<V
             if is_protected_record("chats", id) {
                 continue;
             }
-            delete_chat_with_messages(state, id)?;
+            delete_chat_with_messages(storage, id)?;
             deleted += 1;
         }
     }
     Ok(json!({ "deleted": deleted }))
 }
 
-pub(crate) fn branch_chat(state: &AppState, chat_id: &str, body: Value) -> AppResult<Value> {
-    let mut chat = get_required(state, "chats", chat_id)?;
+pub fn branch_chat(storage: &FileStorage, chat_id: &str, body: Value) -> AppResult<Value> {
+    let mut chat = get_required(storage, "chats", chat_id)?;
     let new_chat_id = new_id();
     let object = chat
         .as_object_mut()
@@ -471,15 +469,15 @@ pub(crate) fn branch_chat(state: &AppState, chat_id: &str, body: Value) -> AppRe
         Value::String(format!("{base_name} Branch")),
     );
     object.insert("groupId".to_string(), Value::String(group_id));
-    let new_chat = state.storage.create("chats", chat)?;
+    let new_chat = storage.create("chats", chat)?;
     let up_to = body.get("upToMessageId").and_then(Value::as_str);
-    for mut message in messages_for_chat(state, chat_id)? {
+    for mut message in messages_for_chat(storage, chat_id)? {
         let stop = up_to.is_some_and(|id| message.get("id").and_then(Value::as_str) == Some(id));
         if let Some(obj) = message.as_object_mut() {
             obj.remove("id");
             obj.insert("chatId".to_string(), Value::String(new_chat_id.clone()));
         }
-        state.storage.create("messages", message)?;
+        storage.create("messages", message)?;
         if stop {
             break;
         }
@@ -487,17 +485,36 @@ pub(crate) fn branch_chat(state: &AppState, chat_id: &str, body: Value) -> AppRe
     Ok(new_chat)
 }
 
-pub(crate) fn delete_chat_with_messages(state: &AppState, chat_id: &str) -> AppResult<()> {
+pub fn delete_chat_with_messages(storage: &FileStorage, chat_id: &str) -> AppResult<()> {
     if is_protected_record("chats", chat_id) {
         return Err(AppError::invalid_input(
             "Built-in Professor Mari cannot be deleted",
         ));
     }
-    for message in messages_for_chat(state, chat_id)? {
+    for message in messages_for_chat(storage, chat_id)? {
         if let Some(id) = message.get("id").and_then(Value::as_str) {
-            state.storage.delete("messages", id)?;
+            storage.delete("messages", id)?;
         }
     }
-    state.storage.delete("chats", chat_id)?;
+    storage.delete("chats", chat_id)?;
     Ok(())
+}
+
+pub fn connect(storage: &FileStorage, chat_id: &str, target_chat_id: &str) -> AppResult<Value> {
+    storage.patch(
+        "chats",
+        chat_id,
+        json!({ "connectedChatId": target_chat_id }),
+    )?;
+    storage.patch(
+        "chats",
+        target_chat_id,
+        json!({ "connectedChatId": chat_id }),
+    )?;
+    Ok(json!({ "connected": true }))
+}
+
+pub fn disconnect(storage: &FileStorage, chat_id: &str) -> AppResult<Value> {
+    storage.patch("chats", chat_id, json!({ "connectedChatId": Value::Null }))?;
+    Ok(json!({ "disconnected": true }))
 }

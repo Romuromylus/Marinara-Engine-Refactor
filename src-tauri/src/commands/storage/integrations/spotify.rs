@@ -785,7 +785,7 @@ fn build_recent_chat_context(
             continue;
         };
         let chat_id = chat.get("id").and_then(Value::as_str).unwrap_or("");
-        let mut messages = super::super::chats::messages_for_chat(state, chat_id)?;
+        let mut messages = marinara_handlers::chats::messages_for_chat(&state.storage, chat_id)?;
         let skip = messages.len().saturating_sub(RECENT_CHAT_MESSAGE_LIMIT);
         messages = messages.into_iter().skip(skip).collect();
         contexts.push(json!({
