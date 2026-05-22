@@ -94,7 +94,7 @@ import {
 import { generateConversationSchedules as runGenerateConversationSchedules } from "../../../engine/modes/chat/schedules/schedule.service";
 import { llmApi } from "../../../shared/api/llm-api";
 import { storageApi } from "../../../shared/api/storage-api";
-import { invokeTauri } from "../../../shared/api/tauri-client";
+import { invokeTauri, platform } from "../../../shared/api/tauri-client";
 import { spotifyApi } from "../../../shared/api/integration-utility-api";
 import { spriteApi } from "../../../shared/api/image-generation-api";
 import { exportApi } from "../../../shared/api/export-api";
@@ -4112,8 +4112,8 @@ export function ChatSettingsDrawer({
                   </button>
                 )}
 
-                {/* Love Toys Control — not for game mode */}
-                {metadata.enableAgents && !isGame && (
+                {/* Love Toys Control — desktop-only (needs local Buttplug/Intiface connection), not for game mode */}
+                {metadata.enableAgents && !isGame && platform.isDesktop && (
                   <div className="space-y-1.5">
                     <button
                       onClick={() => {

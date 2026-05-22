@@ -40,7 +40,8 @@ export function WindowTitleBar({
 }) {
   const platform = useMemo(inferDesktopPlatform, []);
   const [isMaximized, setIsMaximized] = useState(false);
-  const appWindow = useMemo(() => (isTauriRuntime() ? getCurrentWindow() : null), []);
+  const isTauri = useMemo(isTauriRuntime, []);
+  const appWindow = useMemo(() => (isTauri ? getCurrentWindow() : null), [isTauri]);
   const setActiveChatId = useChatStore((s) => s.setActiveChatId);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
@@ -107,7 +108,9 @@ export function WindowTitleBar({
     onOpenProfessorMari?.();
   }, [closeAllDetails, onOpenProfessorMari, setActiveChatId]);
   const controlActions = platform === "darwin" ? (["close", "minimize", "maximize"] as const) : (["minimize", "maximize", "close"] as const);
-  const controls = (
+  // Web target: the browser/OS owns minimize/maximize/close. Don't render
+  // controls that can't possibly work — they'd just be dead pixels.
+  const controls = isTauri ? (
     <div
       className={cn(
         "mari-window-controls flex h-full shrink-0 items-center",
@@ -145,7 +148,7 @@ export function WindowTitleBar({
         );
       })}
     </div>
-  );
+  ) : null;
 
   return (
     <header
