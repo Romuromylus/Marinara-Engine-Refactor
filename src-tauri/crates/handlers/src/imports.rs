@@ -5,7 +5,8 @@
 // either binary.
 
 use crate::media_uploads::{
-    decode_image_payload, extension_for_image_mime, safe_filename, unique_file_path,
+    decode_image_payload, extension_for_image_mime, extension_from_filename, safe_filename,
+    unique_file_path,
 };
 use crate::shared::{
     decode_uploaded_file, decode_uploaded_file_value, decode_uploaded_files, get_required,
@@ -1346,24 +1347,6 @@ fn array_from_envelope(data: &Value, envelope: &Map<String, Value>, key: &str) -
         .unwrap_or_default()
 }
 
-fn extension_from_filename(filename: &str) -> Option<&'static str> {
-    match Path::new(filename)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "jpg" | "jpeg" => Some("jpg"),
-        "webp" => Some("webp"),
-        "gif" => Some("gif"),
-        "avif" => Some("avif"),
-        "png" => Some("png"),
-        "svg" => Some("svg"),
-        _ => None,
-    }
-}
-
 fn import_image_filename(raw: Option<&str>, fallback: &str, ext: &str) -> String {
     let mut filename = raw
         .filter(|value| !value.trim().is_empty())
@@ -2441,5 +2424,23 @@ mod tests {
         let err = import_call(&storage, dir.path(), &["nonsense"], json!({}))
             .expect_err("unknown route should be rejected");
         assert_eq!(err.code, "route_not_found");
+    }
+
+    #[test]
+    fn import_marinara_file_rejects_non_zip_payload() {
+        let (dir, storage) = setup();
+        // First two bytes should be 0x50 0x4b ("PK", the zip magic). Sending
+        // a plain JSON blob must be rejected before we try to read entries.
+        let body = json!({
+            "file": {
+                "name": "fake.marinara",
+                "type": "application/zip",
+                "base64": general_purpose::STANDARD.encode(b"{\"version\":1}")
+            }
+        });
+        let err = import_call(&storage, dir.path(), &["marinara-file"], body)
+            .expect_err("non-zip payload should be rejected");
+        assert_eq!(err.code, "invalid_input");
+        assert!(err.message.contains("zip signature"));
     }
 }

@@ -676,6 +676,12 @@ fn import_persona_avatar_file(
 }
 
 fn copy_background_file(_storage: &FileStorage, data_dir: &Path, path: &Path) -> AppResult<Value> {
+    // Pre-lift this routed through `state.backgrounds.root()` (an AssetService
+    // whose absolute_path enforces a canonicalize + starts_with guard). We
+    // write directly to data_dir/backgrounds here because the input `path` was
+    // already constrained by `path_from_id` to live under the SillyTavern data
+    // dir, and `file_name()` cannot contain path separators. The avatar+sprite
+    // restore paths still go through `safe_filename` for the same reason.
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
@@ -937,5 +943,58 @@ pub fn run_st_bulk_import_channel(
                 "code": error.code
             }
         })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn path_from_id_resolves_into_data_dir() {
+        let dir = TempDir::new().expect("temp dir");
+        let characters = dir.path().join("characters");
+        fs::create_dir_all(&characters).unwrap();
+        let file = characters.join("alice.png");
+        fs::write(&file, b"X").unwrap();
+        let id = format!("characters:characters/alice.png");
+        let resolved = path_from_id(dir.path(), "characters", &id).expect("resolved");
+        assert!(
+            resolved.ends_with("characters/alice.png")
+                || resolved.ends_with(r"characters\alice.png")
+        );
+    }
+
+    #[test]
+    fn path_from_id_rejects_parent_segments() {
+        let dir = TempDir::new().expect("temp dir");
+        fs::create_dir_all(dir.path().join("characters")).unwrap();
+        let err = path_from_id(dir.path(), "characters", "characters:../../etc/passwd")
+            .expect_err("parent segments should be rejected");
+        assert_eq!(err.code, "invalid_input");
+    }
+
+    #[test]
+    fn path_from_id_rejects_absolute_paths() {
+        let dir = TempDir::new().expect("temp dir");
+        fs::create_dir_all(dir.path().join("characters")).unwrap();
+        // Both Unix-absolute and Windows-style root paths must be rejected.
+        let absolute = if cfg!(windows) {
+            r"characters:C:\Windows\System32\config\sam"
+        } else {
+            "characters:/etc/passwd"
+        };
+        let err = path_from_id(dir.path(), "characters", absolute)
+            .expect_err("absolute paths should be rejected");
+        assert_eq!(err.code, "invalid_input");
+    }
+
+    #[test]
+    fn path_from_id_rejects_missing_prefix() {
+        let dir = TempDir::new().expect("temp dir");
+        let err = path_from_id(dir.path(), "characters", "no-prefix/alice.png")
+            .expect_err("missing prefix should fail");
+        assert_eq!(err.code, "invalid_input");
     }
 }
