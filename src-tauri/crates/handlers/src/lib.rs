@@ -4,6 +4,8 @@ pub mod backgrounds;
 pub mod chats;
 pub mod entities;
 pub mod game_assets;
+pub mod imports;
+pub mod media_uploads;
 pub mod shared;
 pub mod tracker;
 

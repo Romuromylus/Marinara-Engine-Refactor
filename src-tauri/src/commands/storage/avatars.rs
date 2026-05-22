@@ -1,5 +1,7 @@
-use super::media_uploads::{persist_image_upload, remove_managed_record_file, safe_filename};
 use super::*;
+use marinara_handlers::media_uploads::{
+    persist_image_upload, remove_managed_record_file, safe_filename,
+};
 
 pub(crate) fn update_character_avatar(
     state: &AppState,
@@ -9,7 +11,7 @@ pub(crate) fn update_character_avatar(
 ) -> AppResult<Value> {
     let previous = shared::get_required(state, collection, id)?;
     let stored = persist_image_upload(
-        state,
+        &state.data_dir,
         &format!("avatars/{}", safe_filename(collection)),
         id,
         &body,
@@ -32,7 +34,7 @@ pub(crate) fn update_character_avatar(
 
 pub(crate) fn remove_avatar_file(state: &AppState, collection: &str, record: &Value) {
     remove_managed_record_file(
-        state,
+        &state.data_dir,
         &format!("avatars/{}", safe_filename(collection)),
         record,
         "avatarFilePath",
@@ -48,7 +50,7 @@ pub(crate) fn update_npc_avatar(state: &AppState, chat_id: &str, body: Value) ->
         .unwrap_or("npc")
         .to_string();
     let stored = persist_image_upload(
-        state,
+        &state.data_dir,
         "avatars/npc",
         &format!("{chat_id}-{name}"),
         &body,

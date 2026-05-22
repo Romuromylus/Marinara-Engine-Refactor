@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use base64::{engine::general_purpose, Engine as _};
-use marinara_core::{ensure_object, new_id, now_iso, now_millis, AppError, AppResult};
+use marinara_core::{new_id, now_iso, now_millis, AppError, AppResult};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::fs;
@@ -40,8 +40,6 @@ mod llm;
 mod lorebook_images;
 #[path = "storage/mari.rs"]
 mod mari;
-#[path = "storage/media_uploads.rs"]
-mod media_uploads;
 #[path = "storage/profile.rs"]
 mod profile;
 #[path = "storage/prompts.rs"]

@@ -1,14 +1,22 @@
-use super::*;
+// Transport-agnostic image-upload helpers shared by the Tauri shims and the
+// Axum server. Pre-lift these lived in `src-tauri/src/commands/storage/media_uploads.rs`
+// and took the Tauri `AppState`. The lifted versions take an explicit
+// `data_dir: &Path` so the same code runs from either binary.
+
+use base64::{engine::general_purpose, Engine as _};
+use marinara_core::{new_id, now_millis, AppError, AppResult};
+use serde_json::Value;
+use std::fs;
 use std::path::{Path, PathBuf};
 
-pub(crate) struct StoredImageUpload {
-    pub(crate) data_url: String,
-    pub(crate) absolute_path: String,
-    pub(crate) filename: String,
+pub struct StoredImageUpload {
+    pub data_url: String,
+    pub absolute_path: String,
+    pub filename: String,
 }
 
-pub(crate) fn persist_image_upload(
-    state: &AppState,
+pub fn persist_image_upload(
+    data_dir: &Path,
     folder: &str,
     id: &str,
     body: &Value,
@@ -33,7 +41,7 @@ pub(crate) fn persist_image_upload(
         .filter(|value| !value.trim().is_empty())
         .map(safe_filename)
         .unwrap_or_else(|| format!("{}-{}.{}", safe_filename(id), now_millis(), ext));
-    let dir = state.data_dir.join(folder);
+    let dir = data_dir.join(folder);
     fs::create_dir_all(&dir)?;
     let target = unique_file_path(&dir.join(&filename))?;
     fs::write(&target, &bytes)?;
@@ -50,14 +58,14 @@ pub(crate) fn persist_image_upload(
     })
 }
 
-pub(crate) fn remove_managed_record_file(
-    state: &AppState,
+pub fn remove_managed_record_file(
+    data_dir: &Path,
     folder: &str,
     record: &Value,
     path_key: &str,
     filename_key: &str,
 ) {
-    let Ok(Some(path)) = managed_record_file_path(state, folder, record, path_key, filename_key)
+    let Ok(Some(path)) = managed_record_file_path(data_dir, folder, record, path_key, filename_key)
     else {
         return;
     };
@@ -76,13 +84,13 @@ pub(crate) fn remove_managed_record_file(
 }
 
 fn managed_record_file_path(
-    state: &AppState,
+    data_dir: &Path,
     folder: &str,
     record: &Value,
     path_key: &str,
     filename_key: &str,
 ) -> AppResult<Option<PathBuf>> {
-    let managed_dir = state.data_dir.join(folder);
+    let managed_dir = data_dir.join(folder);
     let candidate = record
         .get(filename_key)
         .and_then(Value::as_str)
@@ -121,7 +129,7 @@ fn is_path_inside_dir(path: &Path, dir: &Path) -> AppResult<bool> {
     Ok(path.starts_with(dir))
 }
 
-pub(crate) fn decode_image_payload(value: &str, field_name: &str) -> AppResult<(String, Vec<u8>)> {
+pub fn decode_image_payload(value: &str, field_name: &str) -> AppResult<(String, Vec<u8>)> {
     if let Some((header, payload)) = value.split_once(',') {
         if header.starts_with("data:") {
             let mime = header
@@ -143,7 +151,7 @@ pub(crate) fn decode_image_payload(value: &str, field_name: &str) -> AppResult<(
     Ok(("image/png".to_string(), bytes))
 }
 
-pub(crate) fn extension_for_image_mime(mime: &str) -> Option<&'static str> {
+pub fn extension_for_image_mime(mime: &str) -> Option<&'static str> {
     match mime.to_ascii_lowercase().as_str() {
         "image/jpeg" | "image/jpg" => Some("jpg"),
         "image/webp" => Some("webp"),
@@ -155,7 +163,7 @@ pub(crate) fn extension_for_image_mime(mime: &str) -> Option<&'static str> {
     }
 }
 
-pub(crate) fn extension_from_filename(filename: &str) -> Option<&'static str> {
+pub fn extension_from_filename(filename: &str) -> Option<&'static str> {
     match Path::new(filename)
         .extension()
         .and_then(|value| value.to_str())
@@ -173,7 +181,7 @@ pub(crate) fn extension_from_filename(filename: &str) -> Option<&'static str> {
     }
 }
 
-pub(crate) fn safe_filename(value: &str) -> String {
+pub fn safe_filename(value: &str) -> String {
     let sanitized = value
         .chars()
         .map(|ch| {
@@ -193,7 +201,7 @@ pub(crate) fn safe_filename(value: &str) -> String {
     }
 }
 
-pub(crate) fn unique_file_path(target: &Path) -> AppResult<PathBuf> {
+pub fn unique_file_path(target: &Path) -> AppResult<PathBuf> {
     if !target.exists() {
         return Ok(target.to_path_buf());
     }
@@ -213,4 +221,77 @@ pub(crate) fn unique_file_path(target: &Path) -> AppResult<PathBuf> {
         }
     }
     Err(AppError::invalid_input("Could not allocate image filename"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    #[test]
+    fn safe_filename_replaces_disallowed_chars() {
+        assert_eq!(safe_filename("foo/bar"), "foo_bar");
+        // Slashes become underscores; dots (which are alphanumeric-adjacent in
+        // the allowlist) are retained but the trim-on-underscore drops the
+        // leading/trailing separator we just introduced.
+        assert_eq!(safe_filename("../etc/passwd"), ".._etc_passwd");
+        assert_eq!(safe_filename("safe-name_1.png"), "safe-name_1.png");
+        // Empty / pathologically scrubbed names fall through to a generated id.
+        let scrubbed = safe_filename("/////");
+        assert!(!scrubbed.is_empty());
+        assert!(!scrubbed.contains('/'));
+    }
+
+    #[test]
+    fn decode_image_payload_accepts_data_url() {
+        let data_url = format!(
+            "data:image/jpeg;base64,{}",
+            general_purpose::STANDARD.encode(b"FAKEJPG")
+        );
+        let (mime, bytes) = decode_image_payload(&data_url, "avatar").expect("decode");
+        assert_eq!(mime, "image/jpeg");
+        assert_eq!(bytes, b"FAKEJPG");
+    }
+
+    #[test]
+    fn decode_image_payload_accepts_raw_base64() {
+        let raw = general_purpose::STANDARD.encode(b"FAKEPNG");
+        let (mime, bytes) = decode_image_payload(&raw, "avatar").expect("decode");
+        assert_eq!(mime, "image/png");
+        assert_eq!(bytes, b"FAKEPNG");
+    }
+
+    #[test]
+    fn unique_file_path_allocates_suffix_when_taken() {
+        let dir = TempDir::new().expect("temp dir");
+        let target = dir.path().join("photo.png");
+        fs::write(&target, b"X").expect("seed file");
+        let next = unique_file_path(&target).expect("path");
+        assert_eq!(
+            next.file_name().and_then(|name| name.to_str()),
+            Some("photo-1.png")
+        );
+    }
+
+    #[test]
+    fn persist_image_upload_writes_to_data_dir() {
+        let dir = TempDir::new().expect("temp dir");
+        let body = json!({
+            "image": format!(
+                "data:image/png;base64,{}",
+                general_purpose::STANDARD.encode(b"PNG")
+            ),
+            "filename": "portrait.png"
+        });
+        let stored =
+            persist_image_upload(dir.path(), "avatars", "char-1", &body, "image").expect("persist");
+        assert_eq!(stored.filename, "portrait.png");
+        let absolute = PathBuf::from(stored.absolute_path);
+        assert!(absolute.exists(), "file should be written to disk");
+        assert!(
+            absolute.starts_with(dir.path().join("avatars")),
+            "should be under avatars subdir"
+        );
+    }
 }

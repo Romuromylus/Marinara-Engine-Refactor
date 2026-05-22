@@ -295,10 +295,7 @@ pub fn find_by_field(
 ) -> AppResult<Option<Value>> {
     let mut filters = Map::new();
     filters.insert(field.to_string(), Value::String(value.to_string()));
-    Ok(storage
-        .list_where(collection, &filters)?
-        .into_iter()
-        .next())
+    Ok(storage.list_where(collection, &filters)?.into_iter().next())
 }
 
 /// Decode the minimal percent-escape set the Tauri command shims (and now the

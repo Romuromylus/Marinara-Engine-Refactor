@@ -42,7 +42,7 @@ fn parse_trusted_timestamp(value: Option<&Value>) -> Option<String> {
     }
 }
 
-pub(super) fn timestamp_overrides_from_value(value: Option<&Value>) -> Option<(String, String)> {
+pub fn timestamp_overrides_from_value(value: Option<&Value>) -> Option<(String, String)> {
     let value = value?;
     match value {
         Value::String(raw) => {
@@ -90,7 +90,7 @@ fn timestamp_overrides_from_body_and_payload(
     })
 }
 
-pub(super) fn apply_timestamp_overrides(record: &mut Value, body: &Value, payload: &Value) {
+pub fn apply_timestamp_overrides(record: &mut Value, body: &Value, payload: &Value) {
     let Some((created_at, updated_at)) = timestamp_overrides_from_body_and_payload(body, payload)
     else {
         return;
@@ -98,5 +98,41 @@ pub(super) fn apply_timestamp_overrides(record: &mut Value, body: &Value, payloa
     if let Some(object) = record.as_object_mut() {
         object.insert("createdAt".to_string(), Value::String(created_at));
         object.insert("updatedAt".to_string(), Value::String(updated_at));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn epoch_seconds_become_rfc3339() {
+        let overrides = timestamp_overrides_from_value(Some(&json!({
+            "createdAt": 1_700_000_000,
+            "updatedAt": 1_700_000_000
+        })))
+        .expect("overrides");
+        assert!(overrides.0.starts_with("2023-"));
+    }
+
+    #[test]
+    fn missing_updated_falls_back_to_created() {
+        let (created, updated) = timestamp_overrides_from_value(Some(&json!({
+            "createdAt": "2024-05-01T00:00:00Z"
+        })))
+        .expect("overrides");
+        assert_eq!(created, updated);
+    }
+
+    #[test]
+    fn apply_overrides_sets_record_fields() {
+        let mut record = json!({ "name": "test" });
+        apply_timestamp_overrides(
+            &mut record,
+            &json!({ "timestampOverrides": { "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-06-01T00:00:00Z" } }),
+            &Value::Null,
+        );
+        assert_eq!(record["createdAt"], "2024-01-01T00:00:00+00:00");
+        assert_eq!(record["updatedAt"], "2024-06-01T00:00:00+00:00");
     }
 }
