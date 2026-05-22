@@ -68,46 +68,7 @@ pub(crate) fn get_required(state: &AppState, collection: &str, id: &str) -> AppR
         .ok_or_else(|| AppError::not_found(format!("{collection}/{id} was not found")))
 }
 
-pub(crate) fn materialize_message_swipe_fields(message: &mut Value) {
-    let Some(object) = message.as_object_mut() else {
-        return;
-    };
-    let Some((swipe_count, active_index, active_content)) = object
-        .get("swipes")
-        .and_then(Value::as_array)
-        .map(|swipes| {
-            let swipe_count = swipes.len();
-            if swipe_count == 0 {
-                return (0, 0, None);
-            }
-
-            let requested_index = object
-                .get("activeSwipeIndex")
-                .and_then(Value::as_u64)
-                .map(|value| value as usize)
-                .unwrap_or(0);
-            let active_index = requested_index.min(swipe_count.saturating_sub(1));
-            let active_content = swipes
-                .get(active_index)
-                .and_then(|swipe| swipe.get("content"))
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned);
-            (swipe_count, active_index, active_content)
-        })
-    else {
-        return;
-    };
-    object.insert("swipeCount".to_string(), json!(swipe_count));
-    if swipe_count == 0 {
-        object.insert("activeSwipeIndex".to_string(), json!(0));
-        return;
-    }
-
-    object.insert("activeSwipeIndex".to_string(), json!(active_index));
-    if let Some(content) = active_content {
-        object.insert("content".to_string(), Value::String(content));
-    }
-}
+pub(crate) use marinara_handlers::storage::materialize_message_swipe_fields;
 
 pub(crate) fn normalize_character_data_for_storage(data: &Value) -> AppResult<Value> {
     match data {

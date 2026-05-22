@@ -1,0 +1,16 @@
+[package]
+name = "marinara-handlers"
+version = "0.1.0"
+edition = "2021"
+description = "Transport-agnostic command handlers shared by the Tauri desktop binary and the Axum server binary."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+marinara-core = { path = "../core" }
+marinara-storage = { path = "../storage" }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

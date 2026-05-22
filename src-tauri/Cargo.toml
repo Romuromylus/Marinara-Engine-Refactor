@@ -7,21 +7,6 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[workspace]
-resolver = "2"
-members = [
-  "crates/assets",
-  "crates/core",
-  "crates/integrations",
-  "crates/llm",
-  "crates/security",
-  "crates/storage",
-]
-
-[workspace.metadata.marinara.bindings]
-output_dir = "../src/shared/types/generated"
-source = "Rust domain crates own Tauri boundary DTOs and export TypeScript bindings here."
-
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -56,6 +41,7 @@ marinara-storage = { path = "crates/storage" }
 marinara-assets = { path = "crates/assets" }
 marinara-integrations = { path = "crates/integrations" }
 marinara-llm = { path = "crates/llm" }
+marinara-handlers = { path = "crates/handlers" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-window-state = "2"

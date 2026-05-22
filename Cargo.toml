@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+  "src-tauri",
+  "src-tauri/crates/assets",
+  "src-tauri/crates/core",
+  "src-tauri/crates/handlers",
+  "src-tauri/crates/integrations",
+  "src-tauri/crates/llm",
+  "src-tauri/crates/security",
+  "src-tauri/crates/storage",
+  "src-server",
+]
+
+[workspace.metadata.marinara.bindings]
+output_dir = "src/shared/types/generated"
+source = "Rust domain crates own Tauri boundary DTOs and export TypeScript bindings here."

@@ -1,0 +1,16 @@
+.git
+.github
+.vscode
+.idea
+node_modules
+dist
+target
+src-tauri/target
+src-tauri/gen
+src-tauri/.tauri
+docs
+skills
+updates
+*.log
+*.md
+!README.md
