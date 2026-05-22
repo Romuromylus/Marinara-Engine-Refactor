@@ -5,6 +5,10 @@ import { fileURLToPath, URL } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// Build a server-target image when the Dockerfile sets VITE_TARGET=web. The
+// Tauri build leaves this unset and gets the desktop bundle.
+const isWebTarget = process.env.VITE_TARGET === "web";
+
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
@@ -17,14 +21,17 @@ export default defineConfig(async () => ({
     dedupe: ["react", "react-dom"],
   },
 
-  // Production source maps. Lets the browser show non-minified stack traces
-  // for the server-target build so renderer crashes don't surface as
-  // chunk-N:offset noise.
+  // Production source maps for the server-target image so the browser shows
+  // real stack traces instead of chunk-N:offset noise. The desktop Tauri
+  // bundle skips them — they'd bloat the installer ~30% for users who can't
+  // open them anyway.
   build: {
-    sourcemap: true,
+    sourcemap: isWebTarget,
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+  // The dev server section below is Tauri-specific (port 1420 + HMR host
+  // negotiation matches `tauri dev`). The build/resolve options above apply
+  // to both targets.
   //
   // 1. prevent vite from obscuring rust errors
   clearScreen: false,
