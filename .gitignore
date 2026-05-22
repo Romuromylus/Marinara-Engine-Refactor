@@ -44,3 +44,4 @@ src-tauri/gen/android/**/*.keystore
 *.njsproj
 *.sln
 *.sw?
+.smaps/
