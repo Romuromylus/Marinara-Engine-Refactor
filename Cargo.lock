@@ -2919,6 +2919,8 @@ dependencies = [
 name = "marinara-handlers"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "chrono",
  "marinara-core",
  "marinara-storage",
  "serde_json",

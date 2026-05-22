@@ -1,5 +1,4 @@
 mod app;
-mod builtins;
 mod seed_defaults;
 mod state;
 #[path = "commands/storage.rs"]

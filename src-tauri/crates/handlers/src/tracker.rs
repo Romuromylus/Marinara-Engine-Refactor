@@ -1,73 +1,62 @@
-use crate::state::AppState;
 use chrono::{DateTime, Utc};
 use marinara_core::{ensure_object, AppError, AppResult};
+use marinara_storage::FileStorage;
 use serde_json::{json, Map, Value};
 
 const SNAPSHOT_COLLECTION: &str = "game-state-snapshots";
 const TRACKER_KIND: &str = "tracker";
 const TEXT_FIELDS: [&str; 5] = ["date", "time", "location", "weather", "temperature"];
 
-pub(crate) fn latest_tracker_snapshot(state: &AppState, chat_id: &str) -> AppResult<Option<Value>> {
-    let mut rows = tracker_snapshots_for_chat(state, chat_id)?;
+pub fn latest_snapshot(storage: &FileStorage, chat_id: &str) -> AppResult<Option<Value>> {
+    let mut rows = tracker_snapshots_for_chat(storage, chat_id)?;
     sort_newest_first(&mut rows);
     Ok(rows.into_iter().next())
 }
 
-pub(crate) fn tracker_snapshot_for_target(
-    state: &AppState,
+pub fn snapshot_for_target(
+    storage: &FileStorage,
     chat_id: &str,
     message_id: &str,
     swipe_index: i64,
 ) -> AppResult<Option<Value>> {
-    let mut rows = tracker_snapshots_for_target(state, chat_id, message_id, swipe_index)?;
+    let mut rows = tracker_snapshots_for_target(storage, chat_id, message_id, swipe_index)?;
     sort_newest_first(&mut rows);
     Ok(rows.into_iter().next())
 }
 
-pub(crate) fn save_tracker_snapshot(
-    state: &AppState,
-    chat_id: &str,
-    body: Value,
-) -> AppResult<Value> {
+pub fn save_snapshot(storage: &FileStorage, chat_id: &str, body: Value) -> AppResult<Value> {
     let mut snapshot = normalize_tracker_snapshot(chat_id, body)?;
     let message_id =
         tracker_message_id(string_value(&snapshot, "messageId").as_deref())?.to_string();
     let swipe_index = parse_swipe_index(snapshot.get("swipeIndex"))?;
-    let mut existing = tracker_snapshots_for_target(state, chat_id, &message_id, swipe_index)?;
+    let mut existing = tracker_snapshots_for_target(storage, chat_id, &message_id, swipe_index)?;
     sort_newest_first(&mut existing);
 
     for duplicate in existing.iter().skip(1) {
         if let Some(id) = non_empty_string(duplicate, "id") {
-            state.storage.delete(SNAPSHOT_COLLECTION, id)?;
+            storage.delete(SNAPSHOT_COLLECTION, id)?;
         }
     }
 
     let Some(primary) = existing.into_iter().next() else {
-        return state
-            .storage
-            .create(SNAPSHOT_COLLECTION, Value::Object(snapshot));
+        return storage.create(SNAPSHOT_COLLECTION, Value::Object(snapshot));
     };
     let Some(id) = non_empty_string(&primary, "id") else {
-        return state
-            .storage
-            .create(SNAPSHOT_COLLECTION, Value::Object(snapshot));
+        return storage.create(SNAPSHOT_COLLECTION, Value::Object(snapshot));
     };
     if !snapshot.contains_key("createdAt") {
         if let Some(created_at) = normalized_timestamp(primary.get("createdAt")) {
             snapshot.insert("createdAt".to_string(), Value::String(created_at));
         }
     }
-    state
-        .storage
-        .upsert_with_id(SNAPSHOT_COLLECTION, id, Value::Object(snapshot))
+    storage.upsert_with_id(SNAPSHOT_COLLECTION, id, Value::Object(snapshot))
 }
 
-fn tracker_snapshots_for_chat(state: &AppState, chat_id: &str) -> AppResult<Vec<Value>> {
+fn tracker_snapshots_for_chat(storage: &FileStorage, chat_id: &str) -> AppResult<Vec<Value>> {
     let chat_id = required_chat_id(chat_id)?;
     let mut filters = Map::new();
     filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
-    Ok(state
-        .storage
+    Ok(storage
         .list_where(SNAPSHOT_COLLECTION, &filters)?
         .into_iter()
         .filter(is_tracker_snapshot)
@@ -75,7 +64,7 @@ fn tracker_snapshots_for_chat(state: &AppState, chat_id: &str) -> AppResult<Vec<
 }
 
 fn tracker_snapshots_for_target(
-    state: &AppState,
+    storage: &FileStorage,
     chat_id: &str,
     message_id: &str,
     swipe_index: i64,
@@ -89,8 +78,7 @@ fn tracker_snapshots_for_target(
         "messageId".to_string(),
         Value::String(message_id.to_string()),
     );
-    Ok(state
-        .storage
+    Ok(storage
         .list_where(SNAPSHOT_COLLECTION, &filters)?
         .into_iter()
         .filter(|row| is_tracker_snapshot(row))

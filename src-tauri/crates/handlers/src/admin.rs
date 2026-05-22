@@ -1,13 +1,26 @@
-use super::shared::*;
-use super::*;
+use crate::shared::string_array_from_value;
+use marinara_core::{AppError, AppResult};
+use marinara_storage::FileStorage;
+use serde_json::{json, Value};
 
-pub(crate) fn admin_clear_all(state: &AppState) -> AppResult<Value> {
-    state.storage.clear_all()?;
-    clear_runtime_media(state)?;
-    Ok(json!({ "success": true, "cleared": "all" }))
+/// Returns the list of collections to clean up in the caller's media layer
+/// (filesystem on Tauri, server-storage on Axum) when scopes include "media"
+/// or the destructive `clear_all` is invoked.
+#[derive(Debug, Default)]
+pub struct AdminOutcome {
+    pub cleared_collections: Vec<String>,
+    pub clear_runtime_media: bool,
 }
 
-pub(crate) fn admin_expunge(state: &AppState, body: Value) -> AppResult<Value> {
+pub fn clear_all_storage(storage: &FileStorage) -> AppResult<AdminOutcome> {
+    storage.clear_all()?;
+    Ok(AdminOutcome {
+        cleared_collections: Vec::new(),
+        clear_runtime_media: true,
+    })
+}
+
+pub fn expunge(storage: &FileStorage, body: Value) -> AppResult<AdminOutcome> {
     if body.get("confirm").and_then(Value::as_bool) != Some(true) {
         return Err(AppError::invalid_input("confirm must be true"));
     }
@@ -18,10 +31,11 @@ pub(crate) fn admin_expunge(state: &AppState, body: Value) -> AppResult<Value> {
         ));
     }
     let mut cleared_collections = Vec::new();
+    let mut clear_runtime_media = false;
     for scope in scopes {
         match scope.as_str() {
             "chats" => clear_collections(
-                state,
+                storage,
                 &[
                     "chats",
                     "chat-folders",
@@ -32,31 +46,29 @@ pub(crate) fn admin_expunge(state: &AppState, body: Value) -> AppResult<Value> {
                 ],
                 &mut cleared_collections,
             )?,
-            "characters" => {
-                clear_collections(
-                    state,
-                    &[
-                        "characters",
-                        "character-groups",
-                        "character-versions",
-                        "character-gallery",
-                        "sprites",
-                    ],
-                    &mut cleared_collections,
-                )?;
-            }
+            "characters" => clear_collections(
+                storage,
+                &[
+                    "characters",
+                    "character-groups",
+                    "character-versions",
+                    "character-gallery",
+                    "sprites",
+                ],
+                &mut cleared_collections,
+            )?,
             "personas" => clear_collections(
-                state,
+                storage,
                 &["personas", "persona-groups"],
                 &mut cleared_collections,
             )?,
             "lorebooks" => clear_collections(
-                state,
+                storage,
                 &["lorebooks", "lorebook-entries", "lorebook-folders"],
                 &mut cleared_collections,
             )?,
             "presets" => clear_collections(
-                state,
+                storage,
                 &[
                     "prompts",
                     "prompt-groups",
@@ -67,12 +79,12 @@ pub(crate) fn admin_expunge(state: &AppState, body: Value) -> AppResult<Value> {
                 &mut cleared_collections,
             )?,
             "connections" => clear_collections(
-                state,
+                storage,
                 &["connections", "connection-folders"],
                 &mut cleared_collections,
             )?,
             "automation" => clear_collections(
-                state,
+                storage,
                 &[
                     "agents",
                     "custom-tools",
@@ -84,7 +96,7 @@ pub(crate) fn admin_expunge(state: &AppState, body: Value) -> AppResult<Value> {
             )?,
             "media" => {
                 clear_collections(
-                    state,
+                    storage,
                     &[
                         "gallery",
                         "character-gallery",
@@ -94,7 +106,7 @@ pub(crate) fn admin_expunge(state: &AppState, body: Value) -> AppResult<Value> {
                     ],
                     &mut cleared_collections,
                 )?;
-                clear_runtime_media(state)?;
+                clear_runtime_media = true;
             }
             other => {
                 return Err(AppError::invalid_input(format!(
@@ -105,33 +117,34 @@ pub(crate) fn admin_expunge(state: &AppState, body: Value) -> AppResult<Value> {
     }
     cleared_collections.sort();
     cleared_collections.dedup();
-    Ok(json!({ "success": true, "clearedCollections": cleared_collections }))
+    Ok(AdminOutcome {
+        cleared_collections,
+        clear_runtime_media,
+    })
+}
+
+/// Returns the JSON response shape that matches the legacy `admin_expunge` Tauri
+/// command response. Callers that need the raw outcome (so they can also do
+/// runtime-media cleanup) should use `expunge` directly.
+pub fn expunge_response(outcome: &AdminOutcome) -> Value {
+    json!({
+        "success": true,
+        "clearedCollections": outcome.cleared_collections,
+    })
+}
+
+pub fn clear_all_response() -> Value {
+    json!({ "success": true, "cleared": "all" })
 }
 
 fn clear_collections(
-    state: &AppState,
+    storage: &FileStorage,
     collections: &[&str],
     cleared: &mut Vec<String>,
 ) -> AppResult<()> {
     for collection in collections {
-        state.storage.replace_all(collection, Vec::new())?;
+        storage.replace_all(collection, Vec::new())?;
         cleared.push((*collection).to_string());
-    }
-    Ok(())
-}
-
-fn clear_runtime_media(state: &AppState) -> AppResult<()> {
-    for path in [
-        state.data_dir.join("avatars"),
-        state.data_dir.join("fonts"),
-        state.data_dir.join("knowledge-sources"),
-        state.game_assets.root().to_path_buf(),
-        state.backgrounds.root().to_path_buf(),
-    ] {
-        if path.exists() {
-            fs::remove_dir_all(&path)?;
-        }
-        fs::create_dir_all(&path)?;
     }
     Ok(())
 }

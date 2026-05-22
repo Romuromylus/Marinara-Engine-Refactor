@@ -1,6 +1,8 @@
-use super::chats::messages_for_chat;
-use super::shared::*;
-use super::*;
+use crate::chats::messages_for_chat;
+use crate::shared::find_by_field;
+use marinara_core::{ensure_object, AppError, AppResult};
+use marinara_storage::FileStorage;
+use serde_json::{json, Map, Value};
 
 fn parse_settings(value: Option<&Value>) -> Map<String, Value> {
     match value {
@@ -13,18 +15,18 @@ fn parse_settings(value: Option<&Value>) -> Map<String, Value> {
     }
 }
 
-fn find_agent_config(state: &AppState, agent_type: &str) -> AppResult<Option<Value>> {
-    if let Some(agent) = find_by_field(state, "agents", "type", agent_type)? {
+fn find_agent_config(storage: &FileStorage, agent_type: &str) -> AppResult<Option<Value>> {
+    if let Some(agent) = find_by_field(storage, "agents", "type", agent_type)? {
         return Ok(Some(agent));
     }
-    find_by_field(state, "agents", "agentType", agent_type)
+    find_by_field(storage, "agents", "agentType", agent_type)
 }
 
-fn get_or_create_agent_config(state: &AppState, agent_type: &str) -> AppResult<Value> {
-    if let Some(agent) = find_agent_config(state, agent_type)? {
+fn get_or_create_agent_config(storage: &FileStorage, agent_type: &str) -> AppResult<Value> {
+    if let Some(agent) = find_agent_config(storage, agent_type)? {
         return Ok(agent);
     }
-    state.storage.create(
+    storage.create(
         "agents",
         json!({
             "type": agent_type,
@@ -35,11 +37,15 @@ fn get_or_create_agent_config(state: &AppState, agent_type: &str) -> AppResult<V
     )
 }
 
-fn agent_config_id(state: &AppState, agent_type: &str, create: bool) -> AppResult<Option<String>> {
+fn agent_config_id(
+    storage: &FileStorage,
+    agent_type: &str,
+    create: bool,
+) -> AppResult<Option<String>> {
     let agent = if create {
-        Some(get_or_create_agent_config(state, agent_type)?)
+        Some(get_or_create_agent_config(storage, agent_type)?)
     } else {
-        find_agent_config(state, agent_type)?
+        find_agent_config(storage, agent_type)?
     };
     Ok(agent.and_then(|agent| agent.get("id").and_then(Value::as_str).map(str::to_string)))
 }
@@ -54,8 +60,8 @@ fn run_message_id(run: &Value) -> Option<&str> {
     run.get("messageId").and_then(Value::as_str)
 }
 
-pub(crate) fn toggle_agent_type(state: &AppState, agent_type: &str) -> AppResult<Value> {
-    if let Some(agent) = find_agent_config(state, agent_type)? {
+pub fn toggle_agent_type(storage: &FileStorage, agent_type: &str) -> AppResult<Value> {
+    if let Some(agent) = find_agent_config(storage, agent_type)? {
         let id = agent
             .get("id")
             .and_then(Value::as_str)
@@ -64,40 +70,36 @@ pub(crate) fn toggle_agent_type(state: &AppState, agent_type: &str) -> AppResult
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true);
-        state
-            .storage
-            .patch("agents", id, json!({ "enabled": enabled }))
+        storage.patch("agents", id, json!({ "enabled": enabled }))
     } else {
-        state
-            .storage
-            .create("agents", json!({ "type": agent_type, "enabled": true }))
+        storage.create("agents", json!({ "type": agent_type, "enabled": true }))
     }
 }
 
-pub(crate) fn patch_agent_type(
-    state: &AppState,
+pub fn patch_agent_type(
+    storage: &FileStorage,
     agent_type: &str,
     body: Value,
 ) -> AppResult<Value> {
-    if let Some(agent) = find_agent_config(state, agent_type)? {
+    if let Some(agent) = find_agent_config(storage, agent_type)? {
         let id = agent
             .get("id")
             .and_then(Value::as_str)
             .unwrap_or(agent_type);
-        state.storage.patch("agents", id, body)
+        storage.patch("agents", id, body)
     } else {
         let mut object = ensure_object(body)?;
         object.insert("type".to_string(), Value::String(agent_type.to_string()));
-        state.storage.create("agents", Value::Object(object))
+        storage.create("agents", Value::Object(object))
     }
 }
 
-pub(crate) fn agent_cadence_status(
-    state: &AppState,
+pub fn agent_cadence_status(
+    storage: &FileStorage,
     agent_type: &str,
     chat_id: &str,
 ) -> AppResult<Value> {
-    let config = find_agent_config(state, agent_type)?;
+    let config = find_agent_config(storage, agent_type)?;
     let settings = parse_settings(config.as_ref().and_then(|agent| agent.get("settings")));
     let run_interval = settings
         .get("runInterval")
@@ -110,9 +112,8 @@ pub(crate) fn agent_cadence_status(
         })
         .unwrap_or(1)
         .clamp(1, 100);
-    let messages = messages_for_chat(state, chat_id)?;
-    let runs = state
-        .storage
+    let messages = messages_for_chat(storage, chat_id)?;
+    let runs = storage
         .list_where("agent-runs", &{
             let mut filters = Map::new();
             filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
@@ -170,8 +171,8 @@ pub(crate) fn agent_cadence_status(
     }))
 }
 
-pub(crate) fn agent_memory(
-    state: &AppState,
+pub fn agent_memory(
+    storage: &FileStorage,
     method: &str,
     agent_type: &str,
     chat_id: &str,
@@ -179,16 +180,16 @@ pub(crate) fn agent_memory(
 ) -> AppResult<Value> {
     match method {
         "GET" => {
-            let Some(agent_config_id) = agent_config_id(state, agent_type, false)? else {
+            let Some(agent_config_id) = agent_config_id(storage, agent_type, false)? else {
                 return Err(AppError::not_found("Agent is not configured"));
             };
             Ok(json!({
                 "agentConfigId": agent_config_id,
-                "memory": read_agent_memory(state, &agent_config_id, chat_id)?
+                "memory": read_agent_memory(storage, &agent_config_id, chat_id)?
             }))
         }
         "PATCH" => {
-            let agent_config_id = agent_config_id(state, agent_type, true)?
+            let agent_config_id = agent_config_id(storage, agent_type, true)?
                 .ok_or_else(|| AppError::not_found("Agent is not configured"))?;
             let patch = body
                 .get("patch")
@@ -198,16 +199,16 @@ pub(crate) fn agent_memory(
                     AppError::invalid_input("Body must be { patch: { key: value, ... } }")
                 })?;
             for (key, value) in patch {
-                set_agent_memory_value(state, &agent_config_id, chat_id, &key, value)?;
+                set_agent_memory_value(storage, &agent_config_id, chat_id, &key, value)?;
             }
             Ok(json!({
                 "agentConfigId": agent_config_id,
-                "memory": read_agent_memory(state, &agent_config_id, chat_id)?
+                "memory": read_agent_memory(storage, &agent_config_id, chat_id)?
             }))
         }
         "DELETE" => {
-            if let Some(agent_config_id) = agent_config_id(state, agent_type, false)? {
-                clear_agent_memory(state, &agent_config_id, chat_id)?;
+            if let Some(agent_config_id) = agent_config_id(storage, agent_type, false)? {
+                clear_agent_memory(storage, &agent_config_id, chat_id)?;
             }
             Ok(json!({ "deleted": true }))
         }
@@ -218,20 +219,20 @@ pub(crate) fn agent_memory(
     }
 }
 
-pub(crate) fn clear_agent_runs_and_memory_for_chat(
-    state: &AppState,
+pub fn clear_agent_runs_and_memory_for_chat(
+    storage: &FileStorage,
     chat_id: &str,
 ) -> AppResult<Value> {
     let mut preserved_arc: Option<Value> = None;
     let mut secret_plot_config_id: Option<String> = None;
 
-    if let Some(secret_plot_config) = find_agent_config(state, "secret-plot-driver")? {
+    if let Some(secret_plot_config) = find_agent_config(storage, "secret-plot-driver")? {
         if let Some(config_id) = secret_plot_config
             .get("id")
             .and_then(Value::as_str)
             .map(str::to_string)
         {
-            let memory = read_agent_memory(state, &config_id, chat_id).unwrap_or_default();
+            let memory = read_agent_memory(storage, &config_id, chat_id).unwrap_or_default();
             if let Some(arc) = memory.get("overarchingArc") {
                 preserved_arc = Some(arc.clone());
                 secret_plot_config_id = Some(config_id);
@@ -243,18 +244,18 @@ pub(crate) fn clear_agent_runs_and_memory_for_chat(
     filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
 
     let mut deleted_runs = 0;
-    for row in state.storage.list_where("agent-runs", &filters)? {
+    for row in storage.list_where("agent-runs", &filters)? {
         if let Some(id) = row.get("id").and_then(Value::as_str) {
-            if state.storage.delete("agent-runs", id)? {
+            if storage.delete("agent-runs", id)? {
                 deleted_runs += 1;
             }
         }
     }
 
     let mut deleted_memory = 0;
-    for row in state.storage.list_where("agent-memory", &filters)? {
+    for row in storage.list_where("agent-memory", &filters)? {
         if let Some(id) = row.get("id").and_then(Value::as_str) {
-            if state.storage.delete("agent-memory", id)? {
+            if storage.delete("agent-memory", id)? {
                 deleted_memory += 1;
             }
         }
@@ -262,7 +263,7 @@ pub(crate) fn clear_agent_runs_and_memory_for_chat(
 
     let preserved_secret_plot_arc = secret_plot_config_id.is_some() && preserved_arc.is_some();
     if let (Some(config_id), Some(arc)) = (secret_plot_config_id, preserved_arc) {
-        set_agent_memory_value(state, &config_id, chat_id, "overarchingArc", arc)?;
+        set_agent_memory_value(storage, &config_id, chat_id, "overarchingArc", arc)?;
     }
 
     Ok(json!({
@@ -273,7 +274,7 @@ pub(crate) fn clear_agent_runs_and_memory_for_chat(
 }
 
 fn read_agent_memory(
-    state: &AppState,
+    storage: &FileStorage,
     agent_config_id: &str,
     chat_id: &str,
 ) -> AppResult<Map<String, Value>> {
@@ -284,7 +285,7 @@ fn read_agent_memory(
     );
     filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
     let mut memory = Map::new();
-    for row in state.storage.list_where("agent-memory", &filters)? {
+    for row in storage.list_where("agent-memory", &filters)? {
         let Some(key) = row.get("key").and_then(Value::as_str) else {
             continue;
         };
@@ -299,7 +300,7 @@ fn read_agent_memory(
 }
 
 fn set_agent_memory_value(
-    state: &AppState,
+    storage: &FileStorage,
     agent_config_id: &str,
     chat_id: &str,
     key: &str,
@@ -316,8 +317,7 @@ fn set_agent_memory_value(
         Value::String(raw) => Value::String(raw),
         other => Value::String(serde_json::to_string(&other)?),
     };
-    if let Some(existing) = state
-        .storage
+    if let Some(existing) = storage
         .list_where("agent-memory", &filters)?
         .into_iter()
         .next()
@@ -326,11 +326,9 @@ fn set_agent_memory_value(
             .get("id")
             .and_then(Value::as_str)
             .ok_or_else(|| AppError::invalid_input("Agent memory row is missing id"))?;
-        state
-            .storage
-            .patch("agent-memory", id, json!({ "value": stored_value }))?;
+        storage.patch("agent-memory", id, json!({ "value": stored_value }))?;
     } else {
-        state.storage.create(
+        storage.create(
             "agent-memory",
             json!({
                 "agentConfigId": agent_config_id,
@@ -343,25 +341,29 @@ fn set_agent_memory_value(
     Ok(())
 }
 
-fn clear_agent_memory(state: &AppState, agent_config_id: &str, chat_id: &str) -> AppResult<()> {
+fn clear_agent_memory(
+    storage: &FileStorage,
+    agent_config_id: &str,
+    chat_id: &str,
+) -> AppResult<()> {
     let mut filters = Map::new();
     filters.insert(
         "agentConfigId".to_string(),
         Value::String(agent_config_id.to_string()),
     );
     filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
-    for row in state.storage.list_where("agent-memory", &filters)? {
+    for row in storage.list_where("agent-memory", &filters)? {
         if let Some(id) = row.get("id").and_then(Value::as_str) {
-            state.storage.delete("agent-memory", id)?;
+            storage.delete("agent-memory", id)?;
         }
     }
     Ok(())
 }
 
-pub(crate) fn echo_messages(state: &AppState, method: &str, chat_id: &str) -> AppResult<Value> {
+pub fn echo_messages(storage: &FileStorage, method: &str, chat_id: &str) -> AppResult<Value> {
     let mut filters = Map::new();
     filters.insert("chatId".to_string(), Value::String(chat_id.to_string()));
-    let rows = state.storage.list_where("agent-runs", &filters)?;
+    let rows = storage.list_where("agent-runs", &filters)?;
     match method {
         "GET" => Ok(Value::Array(
             rows.into_iter()
@@ -375,7 +377,7 @@ pub(crate) fn echo_messages(state: &AppState, method: &str, chat_id: &str) -> Ap
                 .filter(|run| run.get("resultType").and_then(Value::as_str) == Some("echo_message"))
             {
                 if let Some(id) = row.get("id").and_then(Value::as_str) {
-                    if state.storage.delete("agent-runs", id)? {
+                    if storage.delete("agent-runs", id)? {
                         deleted += 1;
                     }
                 }
