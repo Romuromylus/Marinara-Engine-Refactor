@@ -13,6 +13,7 @@ pub struct AppState {
     pub storage: FileStorage,
     pub game_assets: AssetService,
     pub backgrounds: AssetService,
+    pub fonts: AssetService,
     pub data_dir: PathBuf,
     /// Phase 4b lifted the registry into `marinara-handlers` so the Axum
     /// server target can share the same cancellation surface. The Tauri
@@ -30,6 +31,7 @@ impl AppState {
         let storage = FileStorage::new(data_dir.join("data"))?;
         let game_assets = AssetService::new(data_dir.join("game-assets"))?;
         let backgrounds = AssetService::new(data_dir.join("backgrounds"))?;
+        let fonts = AssetService::new(data_dir.join("fonts"))?;
         let mut default_data_roots = Vec::new();
         if let Ok(resource_dir) = app.path().resource_dir() {
             default_data_roots.push(resource_dir.join("resources").join("default-data"));
@@ -52,6 +54,7 @@ impl AppState {
             storage,
             game_assets,
             backgrounds,
+            fonts,
             data_dir,
             llm_streams: Arc::new(LlmStreamRegistry::new()),
         })

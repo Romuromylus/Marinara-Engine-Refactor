@@ -28,6 +28,7 @@ struct AppState {
     backgrounds: AssetService,
     game_assets: AssetService,
     lorebook_images: AssetService,
+    fonts: AssetService,
     data_dir: PathBuf,
     /// Per-process registry of in-flight LLM streams. The Tauri binary holds
     /// the exact same `Arc<LlmStreamRegistry>` on its AppState — Phase 4b
@@ -70,6 +71,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lorebook_images = AssetService::new(data_dir.join("lorebooks").join("images"))?;
     info!("lorebook-images dir: {}", lorebook_images.root().display());
 
+    let fonts = AssetService::new(data_dir.join("fonts"))?;
+    info!("fonts dir: {}", fonts.root().display());
+
     let frontend_dir = std::env::var("MARINARA_FRONTEND_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/app/dist"));
@@ -92,6 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         backgrounds,
         game_assets,
         lorebook_images,
+        fonts,
         data_dir: data_dir.clone(),
         llm_streams: Arc::new(LlmStreamRegistry::new()),
         spotify_redirect_uri,
@@ -120,12 +125,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ServeDir::new(state.game_assets.root()).append_index_html_on_directories(false);
     let lorebook_images_router =
         ServeDir::new(state.lorebook_images.root()).append_index_html_on_directories(false);
+    let fonts_router = ServeDir::new(state.fonts.root()).append_index_html_on_directories(false);
 
     let app = Router::new()
         .nest("/api", api_router)
         .nest_service("/assets/backgrounds", backgrounds_router)
         .nest_service("/assets/game-assets", game_assets_router)
         .nest_service("/assets/lorebook-images", lorebook_images_router)
+        .nest_service("/assets/fonts", fonts_router)
         .fallback_service(static_service)
         .with_state(state);
 
@@ -148,6 +155,7 @@ async fn invoke_command(
     let storage = &state.storage;
     let backgrounds = &state.backgrounds;
     let game_assets = &state.game_assets;
+    let fonts = &state.fonts;
     let data_dir = state.data_dir.as_path();
     match command.as_str() {
         // ---- entities ---------------------------------------------------------
@@ -633,6 +641,30 @@ async fn invoke_command(
                 .map(Json)
                 .map_err(error_response)
         }
+
+        // ---- fonts (filesystem under $MARINARA_DATA_DIR/fonts) -----------------
+        // The browser loads font files via the `/assets/fonts/` ServeDir mount
+        // configured above; `fonts_file` is a base64 fallback that nobody on
+        // the web target should hit in practice but stays wired for symmetry
+        // with the Tauri side. `fonts_open_folder` succeeds with `opened: false`
+        // — the server has no GUI to pop, and the frontend already treats the
+        // call as fire-and-forget (see SettingsPanel.tsx).
+        "fonts_list" => marinara_handlers::fonts::list(fonts)
+            .map(Json)
+            .map_err(error_response),
+        "fonts_file" => {
+            let filename = required_str(&args, "filename")?;
+            marinara_handlers::fonts::file(fonts, filename)
+                .map(Json)
+                .map_err(error_response)
+        }
+        "fonts_open_folder" => marinara_handlers::fonts::open_folder(fonts)
+            .map(Json)
+            .map_err(error_response),
+        "fonts_google_download" => marinara_handlers::fonts::download_google(fonts, args.clone())
+            .await
+            .map(Json)
+            .map_err(error_response),
 
         // ---- imports (marinara envelope, ST card/chat/preset/lorebook, bulk) -
         // The non-streaming Tauri commands all go through a single dispatcher

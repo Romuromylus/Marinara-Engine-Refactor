@@ -3,6 +3,7 @@ pub mod agents;
 pub mod backgrounds;
 pub mod chats;
 pub mod entities;
+pub mod fonts;
 pub mod game_assets;
 pub mod images;
 pub mod imports;
