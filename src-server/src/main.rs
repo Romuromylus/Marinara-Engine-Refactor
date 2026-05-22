@@ -801,6 +801,91 @@ async fn invoke_command(
                 .map_err(error_response)
         }
 
+        // ---- Spotify (Phase 4e) ---------------------------------------------
+        // 22 commands wrapping the Spotify Web API. The shared dispatcher
+        // takes a ParsedPath (path + query map) the Tauri integration shim
+        // constructs from the request URL; on the server side we build one
+        // from scratch using the original Tauri command's path string so
+        // body-fallback lookups inside the dispatcher keep working.
+        //
+        // Loopback OAuth callback (localhost:8754 TCP listener) stays
+        // Tauri-only. The new HTTPS callback route the web client needs
+        // arrives in Phase 4f; until then, `authorize` returns
+        // `callbackListenerStarted: false` on the server target — users
+        // with a token already saved on the /data volume can still hit the
+        // other endpoints.
+        "spotify_status" => spotify_invoke(&state, "POST", &["status"], "/spotify", args).await,
+        "spotify_authorize" => {
+            spotify_invoke(&state, "POST", &["authorize"], "/spotify", args).await
+        }
+        "spotify_exchange" => {
+            let body = args
+                .get("body")
+                .cloned()
+                .or_else(|| {
+                    args.get("callbackUrl")
+                        .map(|url| json!({ "callbackUrl": url }))
+                })
+                .unwrap_or_else(|| args.clone());
+            spotify_dispatch(&state, "POST", &["exchange"], "/spotify", body).await
+        }
+        "spotify_disconnect" => {
+            spotify_invoke(&state, "POST", &["disconnect"], "/spotify", args).await
+        }
+        "spotify_player" => spotify_invoke(&state, "GET", &["player"], "/spotify", args).await,
+        "spotify_devices" => spotify_invoke(&state, "GET", &["devices"], "/spotify", args).await,
+        "spotify_access_token" => {
+            spotify_invoke(&state, "GET", &["access-token"], "/spotify", args).await
+        }
+        "spotify_playlists" => {
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50);
+            let agent_id = args.get("agentId").cloned().unwrap_or(Value::Null);
+            spotify_dispatch(
+                &state,
+                "GET",
+                &["playlists"],
+                &format!("/spotify/playlists?limit={limit}"),
+                json!({ "agentId": agent_id }),
+            )
+            .await
+        }
+        "spotify_playlist_tracks" => {
+            spotify_invoke(&state, "POST", &["playlist-tracks"], "/spotify", args).await
+        }
+        "spotify_search_tracks" => {
+            spotify_invoke(&state, "POST", &["search-tracks"], "/spotify", args).await
+        }
+        "spotify_play_track" => {
+            spotify_invoke(&state, "POST", &["play-track"], "/spotify", args).await
+        }
+        "spotify_dj_mari_playlist" => {
+            spotify_invoke(&state, "POST", &["dj-mari-playlist"], "/spotify", args).await
+        }
+        "spotify_player_play" => {
+            spotify_invoke(&state, "PUT", &["player", "play"], "/spotify", args).await
+        }
+        "spotify_player_pause" => {
+            spotify_invoke(&state, "PUT", &["player", "pause"], "/spotify", args).await
+        }
+        "spotify_player_next" => {
+            spotify_invoke(&state, "POST", &["player", "next"], "/spotify", args).await
+        }
+        "spotify_player_previous" => {
+            spotify_invoke(&state, "POST", &["player", "previous"], "/spotify", args).await
+        }
+        "spotify_player_transfer" => {
+            spotify_invoke(&state, "PUT", &["player", "transfer"], "/spotify", args).await
+        }
+        "spotify_player_volume" => {
+            spotify_invoke(&state, "PUT", &["player", "volume"], "/spotify", args).await
+        }
+        "spotify_player_shuffle" => {
+            spotify_invoke(&state, "PUT", &["player", "shuffle"], "/spotify", args).await
+        }
+        "spotify_player_repeat" => {
+            spotify_invoke(&state, "PUT", &["player", "repeat"], "/spotify", args).await
+        }
+
         // ---- TTS (Phase 4d) --------------------------------------------------
         // All four routes dispatch through `tts_call`, mirroring the Tauri
         // integration command shim. The audio bytes come back as base64
@@ -1017,6 +1102,46 @@ async fn llm_stream_sse(
     });
 
     Ok(Sse::new(UnboundedReceiverStream::new(rx)).keep_alive(KeepAlive::default()))
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4e: Spotify dispatch helpers
+//
+// The lifted Spotify module reads `agentId`, `limit`, etc. from either a
+// ParsedPath query map (Tauri integration shim path) or from the request
+// body. Most server-side routes just need an empty path (body-only lookup);
+// `spotify_playlists` is the lone exception that puts `limit` in the URL.
+// `spotify_invoke` covers the common case; `spotify_dispatch` lets the
+// caller supply a custom path + body for the exceptions.
+// ---------------------------------------------------------------------------
+async fn spotify_invoke(
+    state: &AppState,
+    method: &str,
+    rest: &[&str],
+    path: &str,
+    body: Value,
+) -> ApiResult {
+    spotify_dispatch(state, method, rest, path, body).await
+}
+
+async fn spotify_dispatch(
+    state: &AppState,
+    method: &str,
+    rest: &[&str],
+    path: &str,
+    body: Value,
+) -> ApiResult {
+    let route = marinara_handlers::integrations::spotify::ParsedPath::new(path);
+    marinara_handlers::integrations::spotify::spotify_call(
+        &state.storage,
+        method,
+        rest,
+        &route,
+        body,
+    )
+    .await
+    .map(Json)
+    .map_err(error_response)
 }
 
 fn error_response(error: AppError) -> ApiError {
