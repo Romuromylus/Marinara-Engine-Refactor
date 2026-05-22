@@ -24,7 +24,7 @@ export function TrackerPanelToggleButton({ onToggle }: { onToggle: () => void })
       title="Show Tracker Panel"
       aria-label="Show Tracker Panel"
     >
-      <TrackerPanelIcon size="1.05rem" strokeWidth={1.95} className="shrink-0" />
+      <TrackerPanelIcon size="1.25rem" strokeWidth={1.95} className="shrink-0" />
       <span className="sr-only">Tracker Panel</span>
     </button>
   );

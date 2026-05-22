@@ -1,0 +1,140 @@
+.tracker-world-tile-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 3.125rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 36%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--background) 43%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--foreground) 9%, transparent),
+    inset 0 -10px 20px color-mix(in srgb, var(--background) 18%, transparent);
+  transition-duration: 200ms;
+  transition-property: border-color, box-shadow;
+}
+
+.tracker-world-tile-shell__wash,
+.tracker-world-tile-shell__top-rule,
+.tracker-world-tile-shell__bottom-rule {
+  pointer-events: none;
+  position: absolute;
+}
+
+.tracker-world-tile-shell__wash {
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--foreground) 5%, transparent),
+    transparent 42%,
+    color-mix(in srgb, var(--primary) 10%, transparent)
+  );
+}
+
+.tracker-world-tile-shell__top-rule,
+.tracker-world-tile-shell__bottom-rule {
+  right: 0.25rem;
+  left: 0.25rem;
+  height: 1px;
+}
+
+.tracker-world-tile-shell__top-rule {
+  top: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--foreground) 18%, transparent),
+    transparent
+  );
+}
+
+.tracker-world-tile-shell__bottom-rule {
+  bottom: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--primary) 16%, transparent),
+    transparent
+  );
+  opacity: 0.7;
+}
+
+.tracker-world-edit-input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  border-radius: 0.125rem;
+  background: color-mix(in srgb, var(--background) 68%, transparent);
+  padding-right: 0.25rem;
+  padding-left: 0.25rem;
+  color: var(--foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.tracker-world-edit-input:focus {
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.tracker-world-edit-button {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  text-align: left;
+  transition-duration: 150ms;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+}
+
+.tracker-world-edit-button:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.tracker-world-edit-button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.tracker-world-edit-hint {
+  pointer-events: none;
+  position: absolute;
+  top: 0.125rem;
+  right: 0.125rem;
+  z-index: 12;
+  display: flex;
+  width: 0.75rem;
+  height: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--background) 58%, transparent);
+  color: var(--primary);
+  opacity: 0;
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--primary) 16%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(0.125rem);
+  transition-duration: 150ms;
+  transition-property: opacity, transform;
+}
+
+.tracker-world-edit-button:hover .tracker-world-edit-hint,
+.tracker-world-edit-button:focus-visible .tracker-world-edit-hint {
+  transform: translateY(0);
+}
+
+.tracker-world-edit-button:hover .tracker-world-edit-hint {
+  opacity: 0.7;
+}
+
+.tracker-world-edit-button:focus-visible .tracker-world-edit-hint {
+  opacity: 0.8;
+}
+
+@media (max-width: 767px) {
+  .tracker-world-edit-hint {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
+}

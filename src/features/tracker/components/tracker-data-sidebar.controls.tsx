@@ -8,9 +8,22 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronDown, Pencil, Plus } from "lucide-react";
+import { getFiniteNumberInputValue } from "../../../shared/lib/number-input";
 import { cn } from "../../../shared/lib/utils";
 import { TRACKER_TEXT_MICRO } from "./tracker-data-sidebar.constants";
-import { getNumberValueWidth } from "./tracker-data-sidebar.helpers";
+import { getNumberValueWidth } from "./tracker-display.helpers";
+import "./TrackerProfileChrome.css";
+
+export const TRACKER_PROFILE_CARD_FRAME_CLASS = "tracker-profile-card-frame";
+export const TRACKER_PROFILE_CARD_SURFACE_CLASS = "tracker-profile-card-surface";
+export const TRACKER_PROFILE_BODY_TONE_OVERLAY_CLASS = "tracker-profile-body-tone-overlay";
+export const TRACKER_PROFILE_BODY_BOTTOM_RULE_CLASS = "tracker-profile-body-bottom-rule";
+export const TRACKER_PROFILE_SURFACE_TEXTURE_CLASS = "tracker-profile-surface-texture";
+export const TRACKER_PROFILE_SURFACE_TOP_RULE_CLASS = "tracker-profile-surface-top-rule";
+export const TRACKER_PROFILE_FIELD_TILE_CLASS = "group/field tracker-profile-field-tile";
+export const TRACKER_PROFILE_MATERIAL_PANEL_CLASS = "tracker-profile-material-panel";
+export const TRACKER_PROFILE_STATUS_STRIP_CLASS = "tracker-profile-status-strip";
+export const TRACKER_PROFILE_EMPTY_SURFACE_CLASS = "tracker-profile-empty-surface";
 
 export function FittedText({
   children,
@@ -90,6 +103,7 @@ export function InlineEdit({
   onSave,
   placeholder = "Empty",
   className,
+  style,
   title,
   fullPreview = false,
   scrollOnHover = false,
@@ -97,6 +111,9 @@ export function InlineEdit({
   editHintMode = "inline",
   twoLinePreview = false,
   threeLinePreview = false,
+  previewLineCount,
+  previewClassName,
+  previewStyle,
   fitPreview = false,
   fitMinScale = 0.62,
   fitAlign = "left",
@@ -105,6 +122,7 @@ export function InlineEdit({
   onSave: (value: string) => void;
   placeholder?: string;
   className?: string;
+  style?: CSSProperties;
   title?: string;
   fullPreview?: boolean;
   scrollOnHover?: boolean;
@@ -112,13 +130,17 @@ export function InlineEdit({
   editHintMode?: "inline" | "overlay";
   twoLinePreview?: boolean;
   threeLinePreview?: boolean;
+  previewLineCount?: 2 | 3 | 4 | "full";
+  previewClassName?: string;
+  previewStyle?: CSSProperties;
   fitPreview?: boolean;
   fitMinScale?: number;
   fitAlign?: "left" | "center" | "right";
 }) {
   const currentValue = value === null || value === undefined ? "" : String(value);
   const previewText = currentValue || placeholder;
-  const useFittedPreview = fitPreview && !fullPreview && !twoLinePreview && !threeLinePreview;
+  const multilinePreviewLineCount = previewLineCount ?? (threeLinePreview ? 3 : twoLinePreview ? 2 : undefined);
+  const useFittedPreview = fitPreview && !fullPreview && !multilinePreviewLineCount;
   const useHoverScroll = scrollOnHover && !useFittedPreview;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(currentValue);
@@ -126,6 +148,7 @@ export function InlineEdit({
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollFieldRef = useRef<HTMLSpanElement>(null);
   const scrollMeasureRef = useRef<HTMLSpanElement>(null);
+  const committedRef = useRef(false);
 
   useEffect(() => {
     if (!editing) setDraft(currentValue);
@@ -133,6 +156,7 @@ export function InlineEdit({
 
   useEffect(() => {
     if (!editing) return;
+    committedRef.current = false;
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [editing]);
@@ -155,6 +179,8 @@ export function InlineEdit({
   };
 
   const commit = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
     const trimmed = draft.trim();
     if (trimmed !== currentValue) onSave(trimmed);
     setEditing(false);
@@ -178,6 +204,7 @@ export function InlineEdit({
           "min-w-0 rounded-sm border border-[var(--tracker-inline-rule,var(--border))] bg-[var(--background)]/50 px-1 py-0.5 text-xs text-[color:var(--tracker-inline-foreground,var(--foreground))] outline-none transition-colors focus:border-[var(--primary)]",
           className,
         )}
+        style={style}
         placeholder={placeholder}
       />
     );
@@ -195,9 +222,10 @@ export function InlineEdit({
       className={cn(
         "group group/inline relative flex min-w-0 rounded px-0.5 text-left transition-colors hover:bg-[var(--accent)]/55",
         editHintMode === "inline" && "gap-1",
-        twoLinePreview || threeLinePreview ? "items-start overflow-hidden" : "items-center",
+        multilinePreviewLineCount ? "items-start overflow-hidden" : "items-center",
         className,
       )}
+      style={style}
     >
       {useHoverScroll && currentValue ? (
         <span
@@ -228,17 +256,23 @@ export function InlineEdit({
             "min-w-0",
             useHoverScroll
               ? cn("block overflow-hidden whitespace-nowrap", scrollActive ? "roleplay-hud-scroll-field" : "truncate")
-              : threeLinePreview
-                ? "line-clamp-3 flex-1 whitespace-normal break-words leading-[1.15]"
-                : twoLinePreview
-                  ? "line-clamp-2 flex-1 whitespace-normal break-words leading-[1.15]"
-                  : fullPreview
-                    ? "whitespace-nowrap leading-tight"
-                    : "truncate",
+              : multilinePreviewLineCount === "full"
+                ? "flex-1 whitespace-normal break-words leading-[1.12]"
+                : multilinePreviewLineCount === 4
+                  ? "line-clamp-4 flex-1 whitespace-normal break-words leading-[1.12]"
+                  : multilinePreviewLineCount === 3
+                    ? "line-clamp-3 flex-1 whitespace-normal break-words leading-[1.14]"
+                    : multilinePreviewLineCount === 2
+                      ? "line-clamp-2 flex-1 whitespace-normal break-words leading-[1.15]"
+                      : fullPreview
+                        ? "whitespace-nowrap leading-tight"
+                        : "truncate",
             currentValue
               ? "text-[color:var(--tracker-inline-foreground,var(--foreground))]"
               : "italic text-[color:var(--tracker-inline-muted,var(--muted-foreground))]",
+            previewClassName,
           )}
+          style={previewStyle}
         >
           {useHoverScroll && currentValue && scrollActive ? (
             <span className="roleplay-hud-scroll-track">
@@ -285,9 +319,7 @@ export function InlineNumber({
       type="number"
       value={Number.isFinite(value) ? value : 0}
       onChange={(event) => {
-        const numeric = Number(event.target.value);
-        const next = Number.isFinite(numeric) ? numeric : 0;
-        onChange(min === undefined ? next : Math.max(min, next));
+        onChange(getFiniteNumberInputValue(event.currentTarget.valueAsNumber, 0, { min }));
       }}
       title={title}
       style={{ width }}
@@ -496,15 +528,15 @@ export function TrackerReadabilityVeil({ strength = "soft" }: { strength?: "soft
   return <div className="pointer-events-none absolute inset-0 z-0" style={{ background }} />;
 }
 
-export function TrackerProfileDisplayWash({ className }: { className?: string }) {
+export function TrackerProfileDisplayWash({ className, opacity }: { className?: string; opacity?: string }) {
+  const style = {
+    "--tracker-profile-display-wash-local-opacity": opacity ?? "var(--tracker-profile-body-wash-opacity)",
+  } as CSSProperties;
+
   return (
-    <div
-      className={cn("pointer-events-none absolute inset-0", className ?? "opacity-[0.12]")}
-      style={{
-        backgroundImage: "var(--tracker-profile-display-layer)",
-        opacity: "var(--tracker-profile-display-opacity)",
-      }}
-    />
+    <div className={cn("tracker-profile-display-wash", className)} style={style}>
+      <div className="tracker-profile-display-wash-layer" />
+    </div>
   );
 }
 
@@ -517,94 +549,41 @@ export function TrackerProfileEdgeHighlight({
   strength?: "soft" | "strong";
   showBottom?: boolean;
 }) {
+  const strengthClass =
+    strength === "strong" ? "tracker-profile-edge-highlight--strong" : "tracker-profile-edge-highlight--soft";
+
   return (
-    <div className={cn("pointer-events-none absolute inset-0 rounded-[inherit]", className)}>
-      <div
-        className={cn(
-          "absolute inset-0 rounded-[inherit] ring-1 ring-inset shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_8%,transparent),0_0_10px_var(--tracker-profile-dialogue-glow)]",
-          strength === "strong"
-            ? "ring-[var(--tracker-profile-rule)]"
-            : "ring-[color-mix(in_srgb,var(--tracker-profile-rule)_72%,transparent)]",
-        )}
-      />
-      <div
-        className={cn(
-          "absolute inset-x-0 top-0 h-px bg-[image:var(--tracker-profile-accent-layer)]",
-          strength === "strong" ? "opacity-80" : "opacity-55",
-        )}
-      />
-      {showBottom && (
-        <div className="absolute inset-x-0 bottom-0 h-px bg-[image:var(--tracker-profile-accent-layer)] opacity-35" />
-      )}
+    <div className={cn("tracker-profile-edge-highlight", strengthClass, className)}>
+      <div className="tracker-profile-edge-highlight-ring" />
+      <div className="tracker-profile-edge-highlight-glint" />
+      <div className="tracker-profile-edge-highlight-side tracker-profile-edge-highlight-side-left" />
+      <div className="tracker-profile-edge-highlight-side tracker-profile-edge-highlight-side-right" />
+      {showBottom && <div className="tracker-profile-edge-highlight-bottom" />}
     </div>
   );
 }
 
 export function TrackerPortraitStageBackdrop({ media, className }: { media?: string | null; className?: string }) {
-  const boxLayerStyle = {
-    backgroundImage: "var(--tracker-profile-box-layer)",
-    opacity: "var(--tracker-profile-tint-opacity, 0.12)",
-  } as CSSProperties;
-  const mediaEchoStyle = {
-    filter:
-      "blur(var(--tracker-profile-portrait-media-blur, 1.25rem)) saturate(var(--tracker-profile-portrait-media-saturate, 1.18))",
-    maskImage: "radial-gradient(ellipse at 50% 48%, black 0%, black 56%, transparent 82%)",
-    opacity: "var(--tracker-profile-portrait-media-opacity, 0.18)",
-    WebkitMaskImage: "radial-gradient(ellipse at 50% 48%, black 0%, black 56%, transparent 82%)",
-  } as CSSProperties;
-  const sideMaskStyle = {
-    maskImage: "linear-gradient(180deg, black 0%, black 62%, transparent 100%)",
-    opacity: "var(--tracker-profile-portrait-side-mask-opacity, 1)",
-    WebkitMaskImage: "linear-gradient(180deg, black 0%, black 62%, transparent 100%)",
-  } as CSSProperties;
-  const lightStyle = {
-    backgroundImage: "var(--tracker-profile-portrait-light)",
-    opacity: "var(--tracker-profile-portrait-light-opacity, 0.7)",
-  } as CSSProperties;
-  const rimStyle = {
-    backgroundImage: "var(--tracker-profile-portrait-rim)",
-    opacity: "var(--tracker-profile-portrait-rim-opacity, 0.52)",
-  } as CSSProperties;
-  const bottomGlowStyle = {
-    opacity: "var(--tracker-profile-portrait-bottom-glow-opacity, 0.75)",
-  } as CSSProperties;
-  const bottomRuleStyle = {
-    opacity: "var(--tracker-profile-portrait-bottom-rule-opacity, 0.75)",
-  } as CSSProperties;
-
   return (
-    <div className={cn("pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]", className)}>
-      <div className="absolute inset-0 bg-[image:var(--tracker-profile-portrait-base)]" />
-      <div className="absolute inset-0" style={boxLayerStyle} />
+    <div className={cn("tracker-portrait-backdrop", className)}>
+      <div className="tracker-portrait-backdrop-base" />
+      <div className="tracker-portrait-backdrop-box-layer" />
       {media ? (
         <img
           src={media}
           alt=""
           aria-hidden="true"
-          className="absolute inset-[-10%] h-[120%] w-[120%] object-cover object-center"
-          style={mediaEchoStyle}
+          className="tracker-portrait-backdrop-media"
           draggable={false}
         />
       ) : null}
-      <div className="absolute inset-0" style={lightStyle} />
-      <div className="absolute inset-0 bg-[image:var(--tracker-profile-portrait-veil)]" />
-      <div
-        className="absolute inset-y-0 left-0 w-1/3 bg-[linear-gradient(90deg,color-mix(in_srgb,var(--background)_60%,transparent),transparent)]"
-        style={sideMaskStyle}
-      />
-      <div
-        className="absolute inset-y-0 right-0 w-1/3 bg-[linear-gradient(270deg,color-mix(in_srgb,var(--background)_60%,transparent),transparent)]"
-        style={sideMaskStyle}
-      />
-      <div
-        className="absolute inset-x-2 bottom-0 h-1/2 bg-[linear-gradient(0deg,color-mix(in_srgb,var(--tracker-profile-dialogue)_16%,transparent),transparent_72%)]"
-        style={bottomGlowStyle}
-      />
-      <div className="absolute inset-0" style={rimStyle} />
-      <div
-        className="absolute inset-x-3 bottom-2 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--tracker-profile-dialogue)_48%,transparent),transparent)]"
-        style={bottomRuleStyle}
-      />
+      <div className="tracker-portrait-backdrop-light" />
+      <div className="tracker-portrait-backdrop-veil" />
+      <div className="tracker-portrait-backdrop-side-mask tracker-portrait-backdrop-side-mask-left" />
+      <div className="tracker-portrait-backdrop-side-mask tracker-portrait-backdrop-side-mask-right" />
+      <div className="tracker-portrait-backdrop-bottom-glow" />
+      <div className="tracker-portrait-backdrop-rim" />
+      <div className="tracker-portrait-backdrop-bottom-rule" />
     </div>
   );
 }

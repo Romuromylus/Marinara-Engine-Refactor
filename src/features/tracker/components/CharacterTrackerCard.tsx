@@ -1,95 +1,119 @@
 import type { ReactNode } from "react";
-import { Eye, HeartPulse, ImagePlus, Maximize2, MessageCircle, Shirt, X } from "lucide-react";
+import { Eye, HeartPulse, Maximize2, Shirt, X } from "lucide-react";
 import type { PresentCharacter } from "../../../engine/contracts/types/game-state";
-import type { TrackerPanelSide } from "../../../shared/stores/ui.store";
+import type {
+  TrackerPanelSide,
+  TrackerPanelSizeProfile,
+  TrackerThoughtBubbleDisplay,
+} from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
+import { visibleText } from "./tracker-display.helpers";
+import { getCharacterAmbienceStyle } from "./tracker-character-profile-style";
+import type { TrackerProfileColors } from "./tracker-profile-colors";
 import {
   addPresentCharacterStat,
   updatePresentCharacterCustomField,
 } from "../../world-state/lib/tracker-state-edits";
-import { getCharacterAmbienceStyle, visibleText, type TrackerProfileColors } from "./tracker-data-sidebar.helpers";
+import { FittedText, InlineEdit } from "./tracker-data-sidebar.controls";
 import {
-  FittedText,
-  InlineEdit,
   TrackerProfileDisplayWash,
   TrackerProfileEdgeHighlight,
   TrackerReadabilityVeil,
 } from "./tracker-data-sidebar.controls";
 import { StatList } from "./tracker-data-sidebar.stats";
 import { FeaturedCharacterTrackerCard } from "./FeaturedCharacterTrackerCard";
+import { CharacterTrackerAvatar } from "./CharacterTrackerAvatar";
+import {
+  COMPACT_CHARACTER_MOOD_EDIT_CLASS,
+  COMPACT_CHARACTER_MOOD_STATIC_CLASS,
+  CompactCharacterField,
+} from "./CharacterTrackerField";
+import {
+  TRACKER_PROFILE_THOUGHT_BUBBLE_EDIT_CLASS,
+  TRACKER_PROFILE_THOUGHT_BUBBLE_OVERLAY_CLASS,
+  TRACKER_PROFILE_THOUGHT_BUBBLE_SURFACE_CLASS,
+  TRACKER_PROFILE_THOUGHT_BUBBLE_TEXT_CLASS,
+} from "./CharacterThoughtBubble.styles";
 
-type CompactCharacterFieldTone = "appearance" | "outfit" | "thoughts";
+const CHARACTER_CARD_CLASS = "group/character tracker-compact-character-card";
+const CHARACTER_CARD_TONE_OVERLAY_CLASS = "tracker-compact-character-tone-overlay";
+const CHARACTER_CARD_TEXTURE_CLASS = "tracker-compact-character-texture";
+const CHARACTER_CARD_BODY_MATERIAL_CLASS = "tracker-compact-character-body-material";
+const CHARACTER_AVATAR_CORNER_SHADE_CLASS = "tracker-compact-character-avatar-corner-shade";
+const CHARACTER_REMOVE_BUTTON_CLASS = "tracker-compact-character-remove-button";
+const CHARACTER_HEADER_CLASS = "relative -mt-2.5 flex items-start gap-1 px-0.5";
+const CHARACTER_HEADER_COPY_CLASS = "relative z-[1] min-w-0 flex-1 pt-3";
+const CHARACTER_HEADER_VOID_TEXTURE_CLASS = "tracker-compact-character-header-void-texture";
+const CHARACTER_FEATURE_BUTTON_CLASS = "tracker-compact-character-feature-button";
+const CHARACTER_NAMEPLATE_CLASS = "tracker-compact-character-nameplate";
+const CHARACTER_NAMEPLATE_GLEAM_CLASS = "tracker-compact-character-nameplate-gleam";
+const CHARACTER_AVATAR_SOCKET_CLASS = "tracker-compact-character-avatar-socket";
+const CHARACTER_AVATAR_SOCKET_SIZE_CLASS = {
+  regular: "tracker-compact-character-avatar-socket--regular",
+  dense: "tracker-compact-character-avatar-socket--dense",
+} satisfies Record<"regular" | "dense", string>;
+const CHARACTER_HEADER_FILLER_CLASS = "tracker-compact-character-header-filler";
+const CHARACTER_NAME_EDIT_CLASS = "tracker-compact-character-name-edit";
+const CHARACTER_NAME_PREVIEW_CLASS = "tracker-compact-character-name-preview";
+const CHARACTER_DETAIL_ROWS_CLASS = "relative z-[1] mt-0.5 grid grid-cols-1 gap-px px-px pb-px";
+const CHARACTER_STAT_BLOCK_CLASS = "group/statbox tracker-compact-character-stat-block";
+const CHARACTER_CUSTOM_FIELD_LIST_CLASS = "tracker-compact-character-custom-field-list";
+const CHARACTER_CUSTOM_FIELD_ROW_CLASS = "tracker-compact-character-custom-field-row";
 
-const COMPACT_CHARACTER_FIELD_TONE_CLASSES: Record<CompactCharacterFieldTone, { icon: string }> = {
-  appearance: {
-    icon: "text-[color-mix(in_srgb,var(--y2k-blue)_78%,var(--foreground)_22%)] drop-shadow-[0_0_5px_color-mix(in_srgb,var(--y2k-blue)_24%,transparent)]",
-  },
-  outfit: {
-    icon: "text-[color-mix(in_srgb,var(--y2k-pink)_80%,var(--foreground)_20%)] drop-shadow-[0_0_5px_color-mix(in_srgb,var(--y2k-pink)_24%,transparent)]",
-  },
-  thoughts: {
-    icon: "text-[color-mix(in_srgb,var(--y2k-lavender)_76%,var(--foreground)_24%)] drop-shadow-[0_0_5px_color-mix(in_srgb,var(--y2k-lavender)_22%,transparent)]",
-  },
-};
+function CompactCharacterNameplate({ children }: { children: ReactNode }) {
+  return (
+    <div className={CHARACTER_NAMEPLATE_CLASS}>
+      <div className={CHARACTER_NAMEPLATE_GLEAM_CLASS} />
+      <div className="relative z-[1] min-w-0 flex-1 overflow-hidden">{children}</div>
+    </div>
+  );
+}
 
-const COMPACT_CHARACTER_MOOD_EDIT_CLASS =
-  "font-medium italic [--foreground:color-mix(in_srgb,var(--primary)_54%,var(--y2k-lavender)_46%)] [--muted-foreground:color-mix(in_srgb,var(--primary)_44%,var(--muted-foreground)_56%)]";
-const COMPACT_CHARACTER_MOOD_STATIC_CLASS =
-  "font-medium italic text-[color-mix(in_srgb,var(--primary)_54%,var(--y2k-lavender)_46%)]";
-
-function CompactCharacterField({
-  icon,
-  accessibleLabel,
+function CompactThoughtBubble({
   value,
-  placeholder,
   onSave,
-  tone,
-  className,
 }: {
-  icon: ReactNode;
-  accessibleLabel: string;
   value: string | null | undefined;
-  placeholder: string;
   onSave?: (value: string) => void;
-  tone: CompactCharacterFieldTone;
-  className?: string;
 }) {
-  if (!onSave && !value) return null;
-  const toneClasses = COMPACT_CHARACTER_FIELD_TONE_CLASSES[tone];
+  const thoughtText = visibleText(value, "Thoughts").replace(/\s+/g, " ");
 
   return (
-    <div
-      className={cn(
-        "grid min-h-3.5 min-w-0 grid-cols-[0.75rem_minmax(0,1fr)] items-center gap-0.5 rounded-[2px] px-0.5 py-px text-[0.5625rem] leading-[0.875rem] text-[color:var(--tracker-profile-muted-text)] hover:bg-[var(--accent)]/14 @min-[176px]:min-h-4 @min-[176px]:grid-cols-[0.875rem_minmax(0,1fr)] @min-[176px]:text-[0.625rem] @min-[176px]:leading-4",
-        className,
-      )}
-    >
-      <span
+    <div className="relative z-[1] mt-0.5 w-full max-w-full">
+      <div
         className={cn(
-          "flex h-3 w-3 shrink-0 items-center justify-center @min-[176px]:h-3.5 @min-[176px]:w-3.5",
-          toneClasses.icon,
+          "relative z-[2] max-h-[2.95rem] min-h-5 w-full min-w-0 overflow-hidden rounded-[1.05rem] px-2.5 pb-px pt-0.5",
+          TRACKER_PROFILE_THOUGHT_BUBBLE_SURFACE_CLASS,
         )}
-        aria-label={accessibleLabel}
-        title={accessibleLabel}
       >
-        {icon}
-      </span>
-      {onSave ? (
-        <InlineEdit
-          value={value ?? ""}
-          onSave={onSave}
-          placeholder={placeholder}
-          className={cn(
-            "h-3.5 w-full min-w-0 px-0 py-0 text-[0.5625rem] leading-[0.875rem] hover:bg-[var(--accent)]/20 @min-[176px]:h-4 @min-[176px]:text-[0.625rem] @min-[176px]:leading-4",
+        <div className={TRACKER_PROFILE_THOUGHT_BUBBLE_OVERLAY_CLASS} />
+        <div className="relative z-[1] flex w-full max-w-full items-center">
+          {onSave ? (
+            <InlineEdit
+              value={value ?? ""}
+              onSave={onSave}
+              placeholder="Thoughts"
+              className={cn(
+                "min-h-4 w-full min-w-0 px-0 py-0 text-[0.59375rem] font-medium italic leading-[1.05]",
+                TRACKER_PROFILE_THOUGHT_BUBBLE_EDIT_CLASS,
+              )}
+              showEditHint={false}
+              previewLineCount={3}
+              editHintMode="overlay"
+              previewClassName="tracking-[0]"
+            />
+          ) : (
+            <p
+              className={cn(
+                "line-clamp-3 break-words text-[0.59375rem] font-medium italic leading-[1.05] tracking-[0]",
+                TRACKER_PROFILE_THOUGHT_BUBBLE_TEXT_CLASS,
+              )}
+            >
+              {thoughtText}
+            </p>
           )}
-          scrollOnHover
-          showEditHint={false}
-        />
-      ) : (
-        <span className="min-w-0 truncate text-[color:var(--tracker-profile-text)]">
-          {visibleText(value, placeholder)}
-        </span>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -102,6 +126,9 @@ export function CharacterTrackerCard({
   characterPicture,
   profileColors,
   trackerPanelSide,
+  trackerPanelSizeProfile,
+  thoughtBubbleDisplay,
+  dockedThoughtsAlwaysVisible,
   action,
   onUpdate,
   onRemove,
@@ -118,6 +145,9 @@ export function CharacterTrackerCard({
   characterPicture?: string | null;
   profileColors?: TrackerProfileColors | null;
   trackerPanelSide: TrackerPanelSide;
+  trackerPanelSizeProfile: TrackerPanelSizeProfile;
+  thoughtBubbleDisplay: TrackerThoughtBubbleDisplay;
+  dockedThoughtsAlwaysVisible: boolean;
   action?: ReactNode;
   onUpdate?: (character: PresentCharacter) => void;
   onRemove?: () => void;
@@ -137,6 +167,9 @@ export function CharacterTrackerCard({
         characterPicture={characterPicture}
         profileColors={profileColors}
         trackerPanelSide={trackerPanelSide}
+        trackerPanelSizeProfile={trackerPanelSizeProfile}
+        thoughtBubbleDisplay={thoughtBubbleDisplay}
+        dockedThoughtsAlwaysVisible={dockedThoughtsAlwaysVisible}
         action={action}
         onUpdate={onUpdate}
         onRemove={onRemove}
@@ -152,12 +185,19 @@ export function CharacterTrackerCard({
   const characterStats = character.stats ?? [];
   const hasDeleteAction = !!onRemove && deleteMode;
   const avatarMedia = characterPicture ?? character.avatarPath ?? null;
+  const compactAvatarUpload = characterPicture ? undefined : onUploadAvatar;
   const showAppearance = !!(character.appearance || onUpdate);
   const showOutfit = !!(character.outfit || onUpdate);
+  const showMood = !!(character.mood || onUpdate);
   const showThoughts = !!(character.thoughts || onUpdate);
-  const hasDetailRows = showAppearance || showOutfit || showThoughts;
+  const hasDetailRows = showMood || showAppearance || showOutfit;
   const hasDenseContent = characterStats.length > 0 || customFields.length > 0;
-  const avatarSize = hasDenseContent ? "w-[clamp(2rem,24%,2.625rem)]" : "w-[clamp(2.25rem,30%,3rem)]";
+  const readableDetailRows = hasDenseContent;
+  const readableCustomFields = trackerPanelSizeProfile === "expanded";
+  const avatarSize = hasDenseContent
+    ? "z-[5] mt-0 w-[clamp(2.25rem,28%,3rem)] -translate-y-0.5"
+    : "z-[5] mt-0 w-[clamp(3rem,36%,3.75rem)] -translate-y-0.5";
+  const avatarSocketSize = hasDenseContent ? "dense" : "regular";
   const updateCustomField = (oldName: string, nextName: string, nextValue: string) => {
     if (!onUpdate) return;
     const nextCharacter = updatePresentCharacterCustomField(character, oldName, nextName, nextValue);
@@ -168,127 +208,92 @@ export function CharacterTrackerCard({
     onUpdate(addPresentCharacterStat(character));
   };
   return (
-    <article
-      className="group/character @container relative isolate min-w-0 overflow-hidden rounded-md border border-[var(--tracker-profile-rule)] bg-[image:var(--tracker-profile-frame)] p-0.5 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_5%,transparent)] transition-colors duration-200 hover:border-[var(--primary)]/28 [background-blend-mode:var(--tracker-profile-frame-blend)]"
-      style={getCharacterAmbienceStyle(character, profileColors)}
-    >
-      <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--foreground)_4%,transparent),transparent_46%,color-mix(in_srgb,var(--tracker-profile-accent)_6%,transparent))]" />
-      <TrackerProfileDisplayWash className="z-0" />
+    <article className={CHARACTER_CARD_CLASS} style={getCharacterAmbienceStyle(character, profileColors)}>
+      <div className={CHARACTER_CARD_TONE_OVERLAY_CLASS} />
       <TrackerReadabilityVeil strength={hasDenseContent || hasDetailRows ? "strong" : "soft"} />
-      <TrackerProfileEdgeHighlight className="z-[2]" />
+      <div className={CHARACTER_CARD_BODY_MATERIAL_CLASS} />
+      <div className={CHARACTER_AVATAR_CORNER_SHADE_CLASS} />
+      <div className={CHARACTER_CARD_TEXTURE_CLASS} />
+      <TrackerProfileDisplayWash className="z-[1]" />
+      <TrackerProfileEdgeHighlight className="z-[2] opacity-[0.3]" showBottom={false} />
+      <div className={cn(CHARACTER_AVATAR_SOCKET_CLASS, CHARACTER_AVATAR_SOCKET_SIZE_CLASS[avatarSocketSize])} />
       {hasDeleteAction && (
         <div className="absolute right-1 top-1 z-10">
           <button
             type="button"
             onClick={onRemove}
-            className="rounded p-1 text-[var(--destructive)] transition-all hover:bg-[var(--destructive)]/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)] active:scale-90"
+            className={CHARACTER_REMOVE_BUTTON_CLASS}
             title="Remove character"
+            aria-label={`Remove ${visibleText(character.name, "character")}`}
           >
             <X size="0.6875rem" />
           </button>
         </div>
       )}
 
-      <div className={cn("relative z-[1] flex items-start gap-1 @min-[176px]:gap-1.5", hasDeleteAction && "pr-7")}>
-        <div className={cn("relative shrink-0", avatarSize)}>
-          <button
-            type="button"
-            onClick={onUploadAvatar}
-            disabled={!onUploadAvatar}
-            title={avatarMedia ? "Change avatar" : "Upload avatar"}
-            aria-label={
-              avatarMedia
-                ? `Change ${visibleText(character.name, "character")} avatar`
-                : `Upload ${visibleText(character.name, "character")} avatar`
-            }
-            className={cn(
-              "group/avatar relative flex aspect-square w-full shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--muted)] text-xs text-[var(--foreground)] shadow-[0_0_8px_var(--tracker-profile-dialogue-glow)] ring-1 ring-[var(--tracker-profile-dialogue-border)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]",
-              onUploadAvatar && "cursor-pointer hover:ring-[var(--primary)]/36 active:scale-95",
-              !onUploadAvatar && "cursor-default",
-            )}
-          >
-            {avatarMedia ? (
-              <img src={avatarMedia} alt="" className="h-full w-full object-cover" draggable={false} />
-            ) : (
-              <span className="text-xs leading-none">{character.emoji || "?"}</span>
-            )}
-            {onUploadAvatar && (
-              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--background)]/48 text-[var(--tracker-profile-icon)] opacity-0 backdrop-blur-[1px] transition-opacity group-hover/avatar:opacity-100 group-focus-visible/avatar:opacity-100">
-                <ImagePlus size="0.6875rem" />
-              </span>
-            )}
-          </button>
-          {onToggleFeatured && (
-            <button
-              type="button"
-              onClick={onToggleFeatured}
-              title="Feature character card"
-              aria-label="Feature character card"
-              aria-pressed={false}
-              className="absolute -left-0.5 -top-0.5 z-[2] flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-[color-mix(in_srgb,var(--tracker-profile-rule)_70%,transparent)] bg-[color-mix(in_srgb,var(--background)_42%,transparent)] text-[var(--muted-foreground)]/45 opacity-60 shadow-[0_1px_3px_rgba(0,0,0,0.14)] backdrop-blur-sm transition-all hover:border-[var(--primary)]/24 hover:bg-[var(--primary)]/7 hover:text-[var(--tracker-profile-display-solid)]/72 hover:opacity-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]/55 focus-visible:opacity-100 active:scale-95"
-            >
-              <Maximize2 size="0.5625rem" />
-            </button>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          {onUpdate ? (
-            <InlineEdit
-              value={character.name}
-              onSave={(name) => onUpdate({ ...character, name: name || "Character" })}
-              placeholder="Character"
-              className="h-4 w-full min-w-0 overflow-hidden px-0.5 py-0 text-[0.6875rem] font-semibold leading-4 text-[color:var(--tracker-profile-text)] @min-[176px]:h-5 @min-[176px]:text-xs @min-[176px]:leading-5"
-              showEditHint={false}
-              fitPreview
-              fitMinScale={0.58}
+      <CompactCharacterNameplate>
+        {onUpdate ? (
+          <InlineEdit
+            value={character.name}
+            onSave={(name) => onUpdate({ ...character, name: name || "Character" })}
+            placeholder="Character"
+            className={CHARACTER_NAME_EDIT_CLASS}
+            showEditHint={false}
+            fitPreview
+            fitMinScale={0.58}
+          />
+        ) : (
+          <FittedText className={CHARACTER_NAME_PREVIEW_CLASS} title={visibleText(character.name, "Character")} minScale={0.58}>
+            {visibleText(character.name, "Character")}
+          </FittedText>
+        )}
+      </CompactCharacterNameplate>
+      {onToggleFeatured && (
+        <button
+          type="button"
+          onClick={onToggleFeatured}
+          title="Feature character card"
+          aria-label="Feature character card"
+          aria-pressed={false}
+          className={CHARACTER_FEATURE_BUTTON_CLASS}
+        >
+          <Maximize2 size="0.5625rem" />
+        </button>
+      )}
+
+      <div className={cn(CHARACTER_HEADER_CLASS, hasDeleteAction && "pr-7")}>
+        <div className={CHARACTER_HEADER_VOID_TEXTURE_CLASS} />
+        <CharacterTrackerAvatar
+          character={character}
+          avatarMedia={avatarMedia}
+          avatarSize={avatarSize}
+          onUploadAvatar={compactAvatarUpload}
+        />
+        <div className={CHARACTER_HEADER_COPY_CLASS}>
+          {showThoughts && (
+            <CompactThoughtBubble
+              value={character.thoughts}
+              onSave={onUpdate ? (thoughts) => onUpdate({ ...character, thoughts: thoughts || null }) : undefined}
             />
-          ) : (
-            <FittedText
-              className="w-full text-[0.6875rem] font-semibold leading-4 text-[color:var(--tracker-profile-text)] @min-[176px]:text-xs @min-[176px]:leading-5"
-              title={visibleText(character.name, "Character")}
-              minScale={0.58}
-            >
-              {visibleText(character.name, "Character")}
-            </FittedText>
           )}
-          {(character.mood || onUpdate) && (
-            <div className="mt-0.5 grid min-w-0 grid-cols-[0.75rem_minmax(0,1fr)] items-center gap-0.5 @min-[176px]:grid-cols-[0.875rem_minmax(0,1fr)]">
-              <span
-                className="flex h-3 w-3 shrink-0 items-center justify-center text-[var(--primary)]/76 @min-[176px]:h-3.5 @min-[176px]:w-3.5"
-                aria-label="Mood"
-                title="Mood"
-              >
-                <HeartPulse size="0.625rem" />
-              </span>
-              {onUpdate ? (
-                <InlineEdit
-                  value={character.mood}
-                  onSave={(mood) => onUpdate({ ...character, mood })}
-                  placeholder="Mood"
-                  className={cn(
-                    "h-3.5 w-full min-w-0 overflow-hidden px-0.5 py-0 text-[0.5625rem] leading-[0.875rem] @min-[176px]:h-4 @min-[176px]:text-[0.625rem] @min-[176px]:leading-4",
-                    COMPACT_CHARACTER_MOOD_EDIT_CLASS,
-                  )}
-                  showEditHint={false}
-                  scrollOnHover
-                />
-              ) : (
-                <div
-                  className={cn(
-                    "truncate text-[0.5625rem] leading-[0.875rem] @min-[176px]:text-[0.625rem] @min-[176px]:leading-4",
-                    COMPACT_CHARACTER_MOOD_STATIC_CLASS,
-                  )}
-                >
-                  {character.mood}
-                </div>
-              )}
-            </div>
-          )}
+          {!showThoughts && <div className={CHARACTER_HEADER_FILLER_CLASS} />}
         </div>
       </div>
 
       {hasDetailRows && (
-        <div className="relative z-[1] mt-0.5 grid grid-cols-1 gap-px border-t border-[var(--tracker-profile-rule)] pt-0.5">
+        <div className={CHARACTER_DETAIL_ROWS_CLASS}>
+          {showMood && (
+            <CompactCharacterField
+              icon={<HeartPulse size="0.6875rem" />}
+              accessibleLabel="Mood"
+              value={character.mood}
+              placeholder="Mood"
+              onSave={onUpdate ? (mood) => onUpdate({ ...character, mood }) : undefined}
+              tone="mood"
+              readable={readableDetailRows}
+              valueClassName={onUpdate ? COMPACT_CHARACTER_MOOD_EDIT_CLASS : COMPACT_CHARACTER_MOOD_STATIC_CLASS}
+            />
+          )}
           {showAppearance && (
             <CompactCharacterField
               icon={<Eye size="0.6875rem" />}
@@ -297,6 +302,7 @@ export function CharacterTrackerCard({
               placeholder="Appearance"
               onSave={onUpdate ? (appearance) => onUpdate({ ...character, appearance: appearance || null }) : undefined}
               tone="appearance"
+              readable={readableDetailRows}
             />
           )}
           {showOutfit && (
@@ -307,24 +313,14 @@ export function CharacterTrackerCard({
               placeholder="Outfit"
               onSave={onUpdate ? (outfit) => onUpdate({ ...character, outfit: outfit || null }) : undefined}
               tone="outfit"
-            />
-          )}
-          {showThoughts && (
-            <CompactCharacterField
-              icon={<MessageCircle size="0.6875rem" />}
-              accessibleLabel="Thinks"
-              value={character.thoughts}
-              placeholder="Thoughts"
-              onSave={onUpdate ? (thoughts) => onUpdate({ ...character, thoughts: thoughts || null }) : undefined}
-              tone="thoughts"
-              className="italic"
+              readable={readableDetailRows}
             />
           )}
         </div>
       )}
 
       {(characterStats.length > 0 || (onUpdate && addMode)) && (
-        <div className="group/statbox relative z-[1] mt-0.5 border-t border-[var(--tracker-profile-rule)] pt-0.5">
+        <div className={CHARACTER_STAT_BLOCK_CLASS}>
           <StatList
             stats={characterStats}
             onUpdate={onUpdate ? (stats) => onUpdate({ ...character, stats }) : undefined}
@@ -337,12 +333,9 @@ export function CharacterTrackerCard({
       )}
 
       {customFields.length > 0 && (
-        <div className="relative z-[1] mt-0.5 grid gap-px border-t border-[var(--tracker-profile-rule)] pt-0.5 text-[0.5625rem] @min-[176px]:text-[0.625rem]">
+        <div className={CHARACTER_CUSTOM_FIELD_LIST_CLASS}>
           {customFields.map(([name, value]) => (
-            <div
-              key={name}
-              className="grid min-w-0 grid-cols-[minmax(2.05rem,0.42fr)_minmax(0,1fr)] items-center gap-0.5 @min-[176px]:grid-cols-[minmax(2.35rem,0.42fr)_minmax(0,1fr)] @min-[176px]:gap-1"
-            >
+            <div key={name} className={CHARACTER_CUSTOM_FIELD_ROW_CLASS}>
               {onUpdate ? (
                 <InlineEdit
                   value={name}
@@ -360,10 +353,19 @@ export function CharacterTrackerCard({
                   onSave={(nextValue) => updateCustomField(name, name, nextValue)}
                   placeholder="Value"
                   className="min-w-0 px-0.5 py-0"
-                  scrollOnHover
+                  scrollOnHover={!readableCustomFields}
+                  twoLinePreview={readableCustomFields}
+                  editHintMode={readableCustomFields ? "overlay" : "inline"}
                 />
               ) : (
-                <span className="min-w-0 truncate text-[color:var(--tracker-profile-text)]">{value}</span>
+                <span
+                  className={cn(
+                    "min-w-0 text-[color:var(--tracker-profile-text)]",
+                    readableCustomFields ? "line-clamp-2 whitespace-normal break-words" : "truncate",
+                  )}
+                >
+                  {value}
+                </span>
               )}
             </div>
           ))}

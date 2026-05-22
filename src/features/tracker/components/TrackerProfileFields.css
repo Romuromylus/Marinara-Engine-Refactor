@@ -1,0 +1,282 @@
+.tracker-compact-field-tone--mood {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 70%, var(--tracker-profile-text) 30%);
+  opacity: 0.8;
+}
+
+.tracker-compact-field-tone--appearance {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 58%, var(--tracker-profile-text) 42%);
+  opacity: 0.8;
+}
+
+.tracker-compact-field-tone--outfit {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 50%, var(--tracker-profile-text) 50%);
+  opacity: 0.8;
+}
+
+.tracker-compact-field-tone--thoughts {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 62%, var(--tracker-profile-text) 38%);
+  opacity: 0.8;
+}
+
+.tracker-compact-field-mood-edit {
+  --foreground: color-mix(in srgb, var(--tracker-profile-text) 82%, var(--tracker-profile-accent-solid) 18%);
+  --muted-foreground: color-mix(in srgb, var(--tracker-profile-muted-text) 78%, var(--tracker-profile-accent-solid) 22%);
+
+  color: color-mix(in srgb, var(--tracker-profile-text) 82%, var(--tracker-profile-accent-solid) 18%);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.tracker-compact-field-mood-static {
+  color: color-mix(in srgb, var(--tracker-profile-text) 82%, var(--tracker-profile-accent-solid) 18%);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.tracker-compact-character-field {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-width: 0;
+  min-height: 1rem;
+  grid-template-columns: 0.9375rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tracker-profile-dialogue-border) 24%, transparent);
+  border-radius: 4px;
+  background-image: var(--tracker-profile-field-material);
+  background-blend-mode: var(--tracker-profile-field-material-blend);
+  padding: 1px 0.25rem;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 1.5%, transparent);
+  color: var(--tracker-profile-muted-text);
+  font-size: 0.5625rem;
+  line-height: 0.875rem;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+}
+
+.tracker-compact-character-field:hover {
+  border-color: color-mix(in srgb, var(--tracker-profile-dialogue-border) 36%, transparent);
+}
+
+.tracker-compact-character-field::before {
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--tracker-profile-rule) 10%, transparent) 0 1px,
+      transparent 1px 7px
+    );
+  mix-blend-mode: soft-light;
+  opacity: 0.24;
+}
+
+.tracker-compact-character-field::after {
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  z-index: 1;
+  width: 60%;
+  height: 0.75rem;
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--tracker-profile-dialogue-border) 62%, transparent) 30%,
+      color-mix(in srgb, var(--tracker-profile-accent-solid) 24%, transparent) 82%,
+      transparent 100%
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, var(--tracker-profile-dialogue-border) 54%, transparent) 42%,
+      color-mix(in srgb, var(--tracker-profile-accent-solid) 22%, transparent) 86%,
+      transparent 100%
+    );
+  background-repeat: no-repeat;
+  background-position: right bottom, right bottom;
+  background-size:
+    100% 1px,
+    1px 78%;
+  mask-image: linear-gradient(90deg, transparent 0%, black 22%, black 100%);
+  opacity: var(--tracker-profile-accent-highlight-opacity, 0.42);
+  transform: skewX(-6deg);
+  transform-origin: bottom right;
+}
+
+.tracker-compact-character-field__icon,
+.tracker-featured-field-icon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tracker-profile-dialogue-border) 24%, transparent);
+}
+
+.tracker-compact-character-field__icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.tracker-compact-character-field__icon::before,
+.tracker-featured-field-icon::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--tracker-profile-accent-solid) 5%, transparent);
+}
+
+.tracker-compact-character-field:hover .tracker-compact-character-field__icon,
+.tracker-profile-field-tile:hover .tracker-featured-field-icon {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tracker-profile-dialogue-border) 36%, transparent);
+}
+
+.tracker-compact-character-field:hover .tracker-compact-character-field__icon::before {
+  background: color-mix(in srgb, var(--tracker-profile-accent-solid) 8%, transparent);
+}
+
+.tracker-compact-character-field__icon > svg,
+.tracker-featured-field-icon > svg {
+  position: relative;
+  z-index: 1;
+}
+
+.tracker-compact-character-field__icon > svg {
+  stroke-width: 1.9;
+}
+
+.tracker-compact-character-field__edit {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: var(--tracker-profile-text);
+  font-size: 0.5625rem;
+  line-height: 0.875rem;
+}
+
+.tracker-compact-character-field__edit:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+@container (min-width: 176px) {
+  .tracker-compact-character-field {
+    min-height: 1.125rem;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    font-size: 0.625rem;
+    line-height: 1rem;
+  }
+
+  .tracker-compact-character-field__icon {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .tracker-compact-character-field__edit {
+    font-size: 0.625rem;
+  }
+}
+
+.tracker-featured-field-icon {
+  width: 1rem;
+  height: 1rem;
+  color: color-mix(in srgb, var(--tracker-profile-icon) 58%, var(--tracker-profile-text) 42%);
+  opacity: 0.82;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+}
+
+.tracker-featured-field-icon::before {
+  background: color-mix(in srgb, var(--tracker-profile-accent-solid) 3%, transparent);
+}
+
+.tracker-featured-field-icon > svg {
+  stroke-width: 1.85;
+}
+
+.tracker-profile-field-tile:hover .tracker-featured-field-icon {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 78%, var(--tracker-profile-text) 22%);
+}
+
+.tracker-profile-field-tile:hover .tracker-featured-field-icon::before {
+  background: color-mix(in srgb, var(--tracker-profile-accent-solid) 6%, transparent);
+}
+
+.tracker-featured-field-icon--mood {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 70%, var(--tracker-profile-text) 30%);
+}
+
+.tracker-featured-field-icon--mood::before {
+  background: color-mix(in srgb, var(--tracker-profile-accent-solid) 4%, transparent);
+}
+
+.tracker-profile-field-tile:hover .tracker-featured-field-icon--mood {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 84%, var(--tracker-profile-text) 16%);
+}
+
+.tracker-featured-field-icon--appearance {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 58%, var(--tracker-profile-text) 42%);
+}
+
+.tracker-profile-field-tile:hover .tracker-featured-field-icon--appearance {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 76%, var(--tracker-profile-text) 24%);
+}
+
+.tracker-featured-field-icon--outfit {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 50%, var(--tracker-profile-text) 50%);
+}
+
+.tracker-profile-field-tile:hover .tracker-featured-field-icon--outfit {
+  color: color-mix(in srgb, var(--tracker-profile-icon) 68%, var(--tracker-profile-text) 32%);
+}
+
+.tracker-featured-stat-shelf {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 0;
+  max-height: 7.75rem;
+  flex-direction: column;
+  overflow-x: hidden;
+  border-top: 1px solid color-mix(in srgb, var(--tracker-profile-dialogue-border) 38%, transparent);
+  background-image: var(--tracker-profile-material);
+  background-blend-mode: var(--tracker-profile-material-blend);
+  padding: 0.375rem 0.25rem;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--foreground) 4%, transparent),
+    inset 0 8px 14px color-mix(in srgb, var(--background) 22%, transparent);
+}
+
+.tracker-featured-stat-shelf::before {
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0.75rem;
+  left: 0.75rem;
+  z-index: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--tracker-profile-dialogue-border) 34%, transparent),
+    transparent
+  );
+  opacity: 0.55;
+}
+
+@container (min-width: 380px) {
+  .tracker-featured-stat-shelf {
+    max-height: 9.25rem;
+  }
+}

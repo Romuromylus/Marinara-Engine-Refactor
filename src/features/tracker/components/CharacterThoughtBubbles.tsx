@@ -1,9 +1,157 @@
-import { useLayoutEffect, useState, type RefObject } from "react";
+import { useLayoutEffect, useState, type CSSProperties, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { motion, useReducedMotion, type MotionProps, type Transition } from "framer-motion";
 import type { TrackerPanelSide } from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import { InlineEdit } from "./tracker-data-sidebar.controls";
+import {
+  TRACKER_FLOATING_THOUGHT_DOT_CLASS,
+  TRACKER_FLOATING_THOUGHT_EDIT_CLASS,
+  TRACKER_FLOATING_THOUGHT_OVERLAY_CLASS,
+  TRACKER_FLOATING_THOUGHT_SURFACE_CLASS,
+  TRACKER_FLOATING_THOUGHT_TAIL_CORE_CLASS,
+  TRACKER_FLOATING_THOUGHT_TAIL_NODE_CLASS,
+  TRACKER_FLOATING_THOUGHT_TEXT_CLASS,
+  TRACKER_FLOATING_THOUGHT_TOP_RULE_CLASS,
+  TRACKER_INLINE_THOUGHT_EDIT_CLASS,
+  TRACKER_INLINE_THOUGHT_OVERLAY_CLASS,
+  TRACKER_INLINE_THOUGHT_SURFACE_CLASS,
+  TRACKER_INLINE_THOUGHT_TAIL_DOT_CLASS,
+  TRACKER_INLINE_THOUGHT_TAIL_NODE_CLASS,
+  TRACKER_INLINE_THOUGHT_TEXT_CLASS,
+  TRACKER_PROFILE_THOUGHT_BUBBLE_EDIT_CLASS,
+  TRACKER_PROFILE_THOUGHT_BUBBLE_OVERLAY_CLASS,
+  TRACKER_PROFILE_THOUGHT_BUBBLE_SURFACE_CLASS,
+  TRACKER_PROFILE_THOUGHT_BUBBLE_TEXT_CLASS,
+} from "./CharacterThoughtBubble.styles";
+
+type ThoughtBubbleSize = "short" | "medium" | "long";
+
+type ThoughtTextFit = {
+  fontSize: string;
+  lineHeight: number;
+  previewLineCount: 2 | 3 | 4 | "full";
+  editMinHeightClassName: string;
+  previewClassName?: string;
+  whiteSpace?: CSSProperties["whiteSpace"];
+};
+type ThoughtBubbleMotionProps = Pick<MotionProps, "initial" | "animate" | "transition">;
+
+const THOUGHT_BUBBLE_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+const INLINE_THOUGHT_BUBBLE_TRANSITION: Transition = { duration: 0.2, ease: THOUGHT_BUBBLE_EASE };
+const FLOATING_THOUGHT_BUBBLE_TRANSITION: Transition = { duration: 0.24, ease: THOUGHT_BUBBLE_EASE };
+
+function getInlineThoughtBubbleMotion({
+  tailOnLeft,
+  featured,
+  reducedMotion,
+}: {
+  tailOnLeft: boolean;
+  featured: boolean;
+  reducedMotion: boolean | null;
+}): ThoughtBubbleMotionProps {
+  if (reducedMotion) {
+    return {
+      initial: false,
+      animate: { opacity: 1 },
+      transition: { duration: 0 },
+    };
+  }
+
+  return {
+    initial: {
+      opacity: 0,
+      x: featured ? 0 : tailOnLeft ? -8 : 8,
+      y: featured ? -5 : 3,
+      scale: featured ? 0.985 : 0.97,
+      filter: "blur(2px)",
+    },
+    animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
+    transition: INLINE_THOUGHT_BUBBLE_TRANSITION,
+  };
+}
+
+function getFloatingThoughtBubbleMotion({
+  outsideSide,
+  reducedMotion,
+}: {
+  outsideSide: "left" | "right";
+  reducedMotion: boolean | null;
+}): ThoughtBubbleMotionProps {
+  if (reducedMotion) {
+    return {
+      initial: false,
+      animate: { opacity: 1 },
+      transition: { duration: 0 },
+    };
+  }
+
+  return {
+    initial: {
+      opacity: 0,
+      x: outsideSide === "left" ? 10 : -10,
+      y: -4,
+      scale: 0.96,
+      filter: "blur(2px)",
+    },
+    animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
+    transition: FLOATING_THOUGHT_BUBBLE_TRANSITION,
+  };
+}
+
+function getThoughtPreviewClampClass(previewLineCount: ThoughtTextFit["previewLineCount"]) {
+  if (previewLineCount === 4) return "line-clamp-4";
+  if (previewLineCount === 3) return "line-clamp-3";
+  if (previewLineCount === 2) return "line-clamp-2";
+  return undefined;
+}
+
+function getThoughtBubbleSize(text: string): ThoughtBubbleSize {
+  if (text.length <= 24) return "short";
+  if (text.length <= 132) return "medium";
+  return "long";
+}
+
+function getThoughtTextFit(text: string, bubbleSize: ThoughtBubbleSize): ThoughtTextFit {
+  const length = text.length;
+
+  if (bubbleSize === "short") {
+    return {
+      fontSize: "0.8125rem",
+      lineHeight: 1.16,
+      previewLineCount: "full",
+      editMinHeightClassName: "min-h-[1.35rem]",
+      previewClassName: "text-center",
+      whiteSpace: "nowrap",
+    };
+  }
+
+  if (bubbleSize === "medium") {
+    return {
+      fontSize: length <= 92 ? "0.8125rem" : "0.78125rem",
+      lineHeight: 1.22,
+      previewLineCount: "full",
+      editMinHeightClassName: length <= 92 ? "min-h-[2.35rem]" : "min-h-[2.75rem]",
+    };
+  }
+
+  if (length <= 240) {
+    return {
+      fontSize: "0.765625rem",
+      lineHeight: 1.24,
+      previewLineCount: "full",
+      editMinHeightClassName: "min-h-[3.25rem]",
+    };
+  }
+
+  return {
+    fontSize: "0.71875rem",
+    lineHeight: 1.22,
+    previewLineCount: "full",
+    editMinHeightClassName: "min-h-[3.75rem]",
+  };
+}
 
 function ThoughtBubble({
   value,
@@ -16,8 +164,16 @@ function ThoughtBubble({
 }) {
   const tailOnLeft = tailSide === "left";
   const thoughtText = visibleText(value, "Thoughts").replace(/\s+/g, " ");
-  const thoughtBubbleSize = thoughtText.length <= 38 ? "short" : thoughtText.length <= 116 ? "medium" : "long";
-  const compactThoughtBubble = thoughtBubbleSize !== "long";
+  const thoughtBubbleSize = getThoughtBubbleSize(thoughtText);
+  const thoughtTextFit = getThoughtTextFit(thoughtText, thoughtBubbleSize);
+  const thoughtTextStyle: CSSProperties = {
+    fontSize: thoughtTextFit.fontSize,
+    lineHeight: thoughtTextFit.lineHeight,
+    whiteSpace: thoughtTextFit.whiteSpace,
+  };
+  const thoughtBubbleStyle: CSSProperties | undefined =
+    thoughtBubbleSize === "long" ? { maxHeight: "min(22rem, calc(100vh - 1rem))" } : undefined;
+  const shortThoughtBubble = thoughtBubbleSize === "short";
   const thoughtDots = tailOnLeft
     ? ["h-1.5 w-1.5 opacity-55", "h-2 w-2 opacity-70", "h-2.5 w-2.5 opacity-85"]
     : ["h-2.5 w-2.5 opacity-85", "h-2 w-2 opacity-70", "h-1.5 w-1.5 opacity-55"];
@@ -34,7 +190,8 @@ function ThoughtBubble({
           <span
             key={sizeClass}
             className={cn(
-              "animate-pulse rounded-full bg-[color-mix(in_srgb,var(--background)_74%,transparent)] ring-1 ring-[var(--primary)]/24 shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_18%,transparent)] backdrop-blur-md",
+              "animate-pulse rounded-full",
+              TRACKER_FLOATING_THOUGHT_DOT_CLASS,
               sizeClass,
             )}
             style={{ animationDelay: `${index * 140}ms` }}
@@ -43,32 +200,43 @@ function ThoughtBubble({
       </div>
       <span
         className={cn(
-          "pointer-events-none absolute top-[0.8125rem] z-[1] h-4 w-4 rounded-full bg-[color-mix(in_srgb,var(--background)_74%,transparent)] ring-1 ring-[var(--primary)]/24 shadow-[0_0_10px_color-mix(in_srgb,var(--primary)_18%,transparent)] backdrop-blur-xl",
+          "pointer-events-none absolute top-[0.8125rem] z-[1] h-4 w-4 rounded-full",
+          TRACKER_FLOATING_THOUGHT_TAIL_NODE_CLASS,
           tailOnLeft ? "left-[0.4375rem]" : "right-[0.4375rem]",
         )}
       />
       <span
         className={cn(
-          "pointer-events-none absolute top-[0.875rem] z-[1] h-3.5 w-3.5 rounded-full bg-[color-mix(in_srgb,var(--background)_74%,transparent)] backdrop-blur-xl",
+          "pointer-events-none absolute top-[0.875rem] z-[1] h-3.5 w-3.5 rounded-full",
+          TRACKER_FLOATING_THOUGHT_TAIL_CORE_CLASS,
           tailOnLeft ? "left-2" : "right-2",
         )}
       />
       <div
         className={cn(
-          "relative z-[2] overflow-hidden border border-[var(--primary)]/22 bg-[color-mix(in_srgb,var(--background)_74%,transparent)] text-[var(--foreground)] shadow-[0_0_18px_color-mix(in_srgb,var(--primary)_16%,transparent)] backdrop-blur-xl",
+          "relative z-[2] overflow-hidden border",
+          TRACKER_FLOATING_THOUGHT_SURFACE_CLASS,
           thoughtBubbleSize === "short" &&
-            "inline-flex min-h-10 w-fit min-w-[4.5rem] max-w-[9.5rem] rounded-full px-4 py-2",
+            "inline-flex min-h-9 w-fit min-w-[6.5rem] max-w-[13rem] rounded-full px-4 py-2",
           thoughtBubbleSize === "medium" &&
-            "inline-flex min-h-11 w-fit min-w-[8.5rem] max-w-[13.5rem] rounded-full px-4 py-2",
-          thoughtBubbleSize === "long" && "max-h-[4.75rem] min-h-12 w-full rounded-[1.25rem] px-3 py-2",
+            "flex min-h-0 w-full max-w-full rounded-[1.35rem] px-4 py-3",
+          thoughtBubbleSize === "long" && "min-h-0 w-full overflow-y-auto rounded-[1.35rem] px-4 py-3",
         )}
+        style={thoughtBubbleStyle}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--primary)_12%,transparent),transparent_46%,color-mix(in_srgb,var(--accent)_12%,transparent))]" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[var(--foreground)]/12" />
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 rounded-[inherit]",
+            TRACKER_FLOATING_THOUGHT_OVERLAY_CLASS,
+          )}
+        />
+        <div
+          className={cn("pointer-events-none absolute inset-x-3 top-0 h-px", TRACKER_FLOATING_THOUGHT_TOP_RULE_CLASS)}
+        />
         <div
           className={cn(
             "relative z-[1]",
-            compactThoughtBubble && "flex min-h-6 w-fit max-w-full items-center justify-center",
+            shortThoughtBubble ? "flex min-h-6 w-fit max-w-full items-center justify-center" : "w-full",
           )}
         >
           {onSave ? (
@@ -77,22 +245,29 @@ function ThoughtBubble({
               onSave={onSave}
               placeholder="Thoughts"
               className={cn(
-                "px-0 py-0 text-[0.625rem] font-medium italic leading-[1.15] [--foreground:color-mix(in_srgb,var(--foreground)_94%,var(--primary)_6%)] [--muted-foreground:color-mix(in_srgb,var(--muted-foreground)_82%,var(--foreground)_18%)] hover:bg-[var(--primary)]/12",
-                compactThoughtBubble && "w-fit max-w-full",
-                thoughtBubbleSize === "short" && "min-h-6 min-w-0 text-center",
-                thoughtBubbleSize === "medium" && "min-h-7 min-w-0",
-                thoughtBubbleSize === "long" && "min-h-[3.25rem]",
+                "px-0 py-0 font-medium italic",
+                TRACKER_FLOATING_THOUGHT_EDIT_CLASS,
+                shortThoughtBubble ? "w-fit max-w-full" : "w-full",
+                thoughtBubbleSize === "short" && "min-h-[1.35rem] min-w-0 text-center",
+                thoughtBubbleSize === "medium" && "min-w-0",
+                thoughtBubbleSize === "long" && "min-w-0",
+                thoughtTextFit.editMinHeightClassName,
               )}
+              style={thoughtTextStyle}
               showEditHint={false}
-              threeLinePreview
+              previewLineCount={thoughtTextFit.previewLineCount}
+              previewClassName={thoughtTextFit.previewClassName}
+              previewStyle={thoughtTextStyle}
             />
           ) : (
             <p
               className={cn(
-                "text-[0.625rem] font-medium italic leading-[1.15] text-[color-mix(in_srgb,var(--foreground)_94%,var(--primary)_6%)]",
-                compactThoughtBubble && "w-fit max-w-full",
-                thoughtBubbleSize === "short" ? "line-clamp-2 text-center" : "line-clamp-3",
+                "break-words font-medium italic",
+                TRACKER_FLOATING_THOUGHT_TEXT_CLASS,
+                shortThoughtBubble ? "w-fit max-w-full" : "w-full",
+                thoughtTextFit.previewClassName,
               )}
+              style={thoughtTextStyle}
             >
               {thoughtText}
             </p>
@@ -106,30 +281,124 @@ function ThoughtBubble({
 export function InlineThoughtBubble({
   value,
   onSave,
+  bubbleRef,
+  className,
+  surfaceClassName,
+  tailSide = "right",
+  variant = "default",
 }: {
   value: string | null | undefined;
   onSave?: (value: string) => void;
+  bubbleRef?: RefObject<HTMLDivElement | null>;
+  className?: string;
+  surfaceClassName?: string;
+  tailSide?: "left" | "right";
+  variant?: "default" | "featured";
 }) {
+  const tailOnLeft = tailSide === "left";
+  const thoughtText = visibleText(value, "Thoughts").replace(/\s+/g, " ");
+  const thoughtTextFit = getThoughtTextFit(thoughtText, getThoughtBubbleSize(thoughtText));
+  const isFeaturedVariant = variant === "featured";
+  const reducedMotion = useReducedMotion();
+  const previewLineCount = isFeaturedVariant ? (thoughtText.length <= 70 ? 2 : 3) : thoughtTextFit.previewLineCount;
+  const thoughtTextStyle: CSSProperties = {
+    fontSize: isFeaturedVariant
+      ? "clamp(0.65625rem, calc(0.56rem + 0.85cqw), 0.75rem)"
+      : thoughtTextFit.fontSize,
+    lineHeight: isFeaturedVariant ? 1.12 : thoughtTextFit.lineHeight,
+  };
+  const editMinHeightClassName = isFeaturedVariant
+    ? previewLineCount === 2
+      ? "min-h-[1.9rem]"
+      : "min-h-[2.5rem]"
+    : thoughtTextFit.editMinHeightClassName;
+
   return (
-    <div className="relative mx-1 mt-1 min-w-0 overflow-hidden rounded-sm border border-[var(--primary)]/20 bg-[color-mix(in_srgb,var(--background)_58%,transparent)] px-1 py-1 text-[var(--foreground)] shadow-[0_0_14px_color-mix(in_srgb,var(--primary)_12%,transparent)] backdrop-blur-xl">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_48%,color-mix(in_srgb,var(--accent)_10%,transparent))]" />
-      <div className="relative z-[1] min-w-0">
-        {onSave ? (
-          <InlineEdit
-            value={value ?? ""}
-            onSave={onSave}
-            placeholder="Thoughts"
-            className="min-h-[2rem] w-full px-0 py-0 text-[0.625rem] font-medium italic leading-[1.15] [--foreground:color-mix(in_srgb,var(--foreground)_94%,var(--primary)_6%)] [--muted-foreground:color-mix(in_srgb,var(--muted-foreground)_82%,var(--foreground)_18%)] hover:bg-[var(--primary)]/12"
-            showEditHint={false}
-            threeLinePreview
+    <motion.div
+      ref={bubbleRef}
+      data-component="InlineThoughtBubble"
+      {...getInlineThoughtBubbleMotion({ tailOnLeft, featured: isFeaturedVariant, reducedMotion })}
+      className={cn(
+        "relative mx-1 mt-1 min-w-0 text-[var(--foreground)] will-change-transform [container-type:inline-size]",
+        isFeaturedVariant
+          ? "px-0"
+          : tailOnLeft
+            ? "pl-3.5 pr-0.5"
+            : "pl-0.5 pr-3.5",
+        className,
+      )}
+    >
+      {!isFeaturedVariant && (
+        <>
+          <span
+            className={cn(
+              "pointer-events-none absolute z-0 rounded-full border",
+              TRACKER_INLINE_THOUGHT_TAIL_NODE_CLASS,
+              "top-3.5 h-2.5 w-2.5",
+              tailOnLeft ? "left-1.5" : "right-1.5",
+            )}
           />
-        ) : (
-          <p className="line-clamp-3 text-[0.625rem] font-medium italic leading-[1.15] text-[color-mix(in_srgb,var(--foreground)_94%,var(--primary)_6%)]">
-            {visibleText(value, "Thoughts")}
-          </p>
+          <span
+            className={cn(
+              "pointer-events-none absolute top-[1.8rem] z-0 h-1.5 w-1.5 rounded-full border",
+              TRACKER_INLINE_THOUGHT_TAIL_DOT_CLASS,
+              tailOnLeft ? "left-0.5" : "right-0.5",
+            )}
+          />
+        </>
+      )}
+      <div
+        className={cn(
+          "relative z-[1] min-w-0 overflow-hidden border",
+          isFeaturedVariant
+            ? cn("max-h-[3.25rem] rounded-[1.05rem] px-2.5 py-1", TRACKER_PROFILE_THOUGHT_BUBBLE_SURFACE_CLASS)
+            : cn("rounded-[1.2rem] px-2.5 py-1.5", TRACKER_INLINE_THOUGHT_SURFACE_CLASS),
+          surfaceClassName,
         )}
+      >
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 rounded-[inherit]",
+            isFeaturedVariant
+              ? TRACKER_PROFILE_THOUGHT_BUBBLE_OVERLAY_CLASS
+              : TRACKER_INLINE_THOUGHT_OVERLAY_CLASS,
+          )}
+        />
+        <div className="relative z-[1] min-w-0">
+          {onSave ? (
+            <InlineEdit
+              value={value ?? ""}
+              onSave={onSave}
+              placeholder="Thoughts"
+              className={cn(
+                "w-full px-0 py-0 font-medium italic",
+                !isFeaturedVariant && TRACKER_INLINE_THOUGHT_EDIT_CLASS,
+                isFeaturedVariant && TRACKER_PROFILE_THOUGHT_BUBBLE_EDIT_CLASS,
+                editMinHeightClassName,
+              )}
+              style={thoughtTextStyle}
+              showEditHint={false}
+              previewLineCount={previewLineCount}
+              previewClassName={thoughtTextFit.previewClassName}
+              previewStyle={thoughtTextStyle}
+            />
+          ) : (
+            <p
+              className={cn(
+                "break-words font-medium italic",
+                !isFeaturedVariant && TRACKER_INLINE_THOUGHT_TEXT_CLASS,
+                isFeaturedVariant && TRACKER_PROFILE_THOUGHT_BUBBLE_TEXT_CLASS,
+                getThoughtPreviewClampClass(previewLineCount),
+                thoughtTextFit.previewClassName,
+              )}
+              style={thoughtTextStyle}
+            >
+              {thoughtText}
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -138,12 +407,15 @@ export function ExternalThoughtBubble({
   value,
   onSave,
   panelSide,
+  bubbleRef,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   value: string | null | undefined;
   onSave?: (value: string) => void;
   panelSide: TrackerPanelSide;
+  bubbleRef?: RefObject<HTMLDivElement | null>;
 }) {
+  const reducedMotion = useReducedMotion();
   const [position, setPosition] = useState<{
     left: number;
     top: number;
@@ -159,7 +431,10 @@ export function ExternalThoughtBubble({
 
     const updatePosition = () => {
       const anchor = anchorRef.current;
-      if (!anchor) return;
+      if (!anchor) {
+        setPosition((current) => (current === null ? current : null));
+        return;
+      }
       const rect = anchor.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) {
         setPosition((current) => (current === null ? current : null));
@@ -171,7 +446,17 @@ export function ExternalThoughtBubble({
       const outsideSide = panelSide === "left" ? "right" : "left";
       const overlap = 4;
       const viewportMargin = 6;
-      const preferredWidth = Math.min(240, Math.max(184, rect.width * 0.72));
+      const thoughtText = visibleText(value, "Thoughts").replace(/\s+/g, " ");
+      const preferredWidth =
+        thoughtText.length <= 12
+          ? Math.min(160, Math.max(116, rect.width * 0.62))
+          : thoughtText.length <= 24
+            ? Math.min(220, Math.max(152, rect.width * 0.72))
+            : thoughtText.length <= 132
+              ? 360
+              : thoughtText.length <= 240
+                ? 420
+                : 460;
       const outsideLaneWidth =
         outsideSide === "left"
           ? rect.left + overlap - viewportMargin
@@ -180,7 +465,7 @@ export function ExternalThoughtBubble({
         Math.min(
           preferredWidth,
           viewportWidth - viewportMargin * 2,
-          outsideLaneWidth >= 148 ? outsideLaneWidth : preferredWidth,
+          outsideLaneWidth >= 172 ? outsideLaneWidth : preferredWidth,
         ),
       );
       const desiredLeft = outsideSide === "left" ? rect.left - width + overlap : rect.right - overlap;
@@ -198,7 +483,8 @@ export function ExternalThoughtBubble({
 
     updatePosition();
     const anchor = anchorRef.current;
-    const resizeObserver = anchor ? new ResizeObserver(updatePosition) : null;
+    const resizeObserver =
+      anchor && typeof ResizeObserver !== "undefined" ? new ResizeObserver(updatePosition) : null;
     if (anchor) resizeObserver?.observe(anchor);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
@@ -212,12 +498,20 @@ export function ExternalThoughtBubble({
   if (!position || typeof document === "undefined") return null;
 
   return createPortal(
-    <div
-      className="pointer-events-auto fixed z-[60] drop-shadow-[0_8px_14px_rgba(0,0,0,0.24)]"
-      style={{ left: position.left, top: position.top, width: position.width }}
+    <motion.div
+      ref={bubbleRef}
+      data-component="ExternalThoughtBubble"
+      {...getFloatingThoughtBubbleMotion({ outsideSide: position.outsideSide, reducedMotion })}
+      className="pointer-events-auto fixed z-[60] drop-shadow-[0_8px_14px_rgba(0,0,0,0.24)] will-change-transform"
+      style={{
+        left: position.left,
+        top: position.top,
+        width: position.width,
+        transformOrigin: position.outsideSide === "left" ? "right 1.5rem" : "left 1.5rem",
+      }}
     >
       <ThoughtBubble value={value} onSave={onSave} tailSide={position.outsideSide === "left" ? "right" : "left"} />
-    </div>,
+    </motion.div>,
     document.body,
   );
 }

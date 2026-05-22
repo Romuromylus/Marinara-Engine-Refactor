@@ -8,7 +8,7 @@ import {
   removeTrackerListItem,
   replaceTrackerListItem,
 } from "../../world-state/lib/tracker-state-edits";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import { visibleText } from "./tracker-display.helpers";
 import {
   AddRowButton,
   EmptySection,
@@ -95,6 +95,7 @@ function CustomFieldList({
                   onClick={() => removeField(index)}
                   className="absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--background)]/85 text-[var(--destructive)] shadow-sm ring-1 ring-[var(--border)]/70 backdrop-blur-sm transition-all hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-[var(--primary)] active:scale-90"
                   title="Remove field"
+                  aria-label={`Remove ${field.name || "field"}`}
                 >
                   <X size="0.5625rem" />
                 </button>
