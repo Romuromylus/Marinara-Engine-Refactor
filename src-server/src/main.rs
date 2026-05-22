@@ -63,8 +63,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let static_service = ServeDir::new(&frontend_dir)
         .not_found_service(ServeFile::new(frontend_dir.join("index.html")));
 
+    // User-asset routes. The Tauri build uses custom URL schemes
+    // (marinara-background:, marinara-game-asset:) that the desktop binary
+    // intercepts via tauri's protocol-asset handler. The browser has no such
+    // hook, so we expose the same files under /assets/<bucket>/<file>. The
+    // frontend's local-file-api.ts rewrites the `marinara-*:` URLs onto these
+    // when `platform.isWeb` is true. ServeDir handles Range, ETag, and the
+    // right Content-Type via mime_guess automatically — no custom code path
+    // required.
+    let backgrounds_router =
+        ServeDir::new(state.backgrounds.root()).append_index_html_on_directories(false);
+    let game_assets_router =
+        ServeDir::new(state.game_assets.root()).append_index_html_on_directories(false);
+
     let app = Router::new()
         .nest("/api", api_router)
+        .nest_service("/assets/backgrounds", backgrounds_router)
+        .nest_service("/assets/game-assets", game_assets_router)
         .fallback_service(static_service)
         .with_state(state);
 

@@ -1,9 +1,22 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { invokeTauri } from "./tauri-client";
+import { invokeTauri, platform } from "./tauri-client";
 
 export const USER_BACKGROUND_URL_PREFIX = "marinara-background:";
 export const GAME_ASSET_URL_PREFIX = "marinara-game-asset:";
 export const LOREBOOK_IMAGE_URL_PREFIX = "marinara-lorebook-image:";
+
+// On the server target the Rust binary serves managed asset files under
+// /assets/<bucket>/<filename>. The desktop Tauri build still uses custom
+// URL schemes that the tauri protocol-asset handler intercepts. Records
+// stored before this change may still contain `marinara-*:` URLs, so the
+// frontend always serializes through the per-platform `*Url(filename)`
+// helpers below — and `rewriteForWeb` patches up any stored legacy URLs
+// at read time.
+const WEB_BUCKET_FOR_PREFIX: Record<string, string> = {
+  [USER_BACKGROUND_URL_PREFIX]: "/assets/backgrounds/",
+  [GAME_ASSET_URL_PREFIX]: "/assets/game-assets/",
+  [LOREBOOK_IMAGE_URL_PREFIX]: "/assets/lorebook-images/",
+};
 
 type PathResponse = { path?: string | null };
 
@@ -20,6 +33,33 @@ function canConvertFileSrc(): boolean {
     .__TAURI_INTERNALS__?.convertFileSrc;
 }
 
+function webAssetUrl(prefix: string, filename: string): string {
+  const bucket = WEB_BUCKET_FOR_PREFIX[prefix];
+  // Filenames inside the bucket may contain spaces / unicode. The server's
+  // ServeDir percent-decodes path segments before reading disk, so encode
+  // each segment individually rather than the whole filename.
+  const safe = filename
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${bucket}${safe}`;
+}
+
+/**
+ * Rewrite any persisted `marinara-*:` URL into a `/assets/<bucket>/...`
+ * path when running in the browser. On Tauri this is a no-op — the protocol
+ * handler still intercepts the custom scheme.
+ */
+function rewriteForWeb(url: string): string {
+  if (!platform.isWeb) return url;
+  for (const prefix of Object.keys(WEB_BUCKET_FOR_PREFIX)) {
+    if (url.startsWith(prefix)) {
+      return webAssetUrl(prefix, decodeURIComponent(url.slice(prefix.length)));
+    }
+  }
+  return url;
+}
+
 export function encodeLocalAssetPath(path: string): string {
   return encodeURIComponent(path.replace(/\\/g, "/"));
 }
@@ -33,14 +73,17 @@ export function decodeLocalAssetPath(path: string): string {
 }
 
 export function userBackgroundUrl(filename: string): string {
+  if (platform.isWeb) return webAssetUrl(USER_BACKGROUND_URL_PREFIX, filename);
   return `${USER_BACKGROUND_URL_PREFIX}${encodeLocalAssetPath(filename)}`;
 }
 
 export function gameAssetUrl(path: string): string {
+  if (platform.isWeb) return webAssetUrl(GAME_ASSET_URL_PREFIX, path);
   return `${GAME_ASSET_URL_PREFIX}${encodeLocalAssetPath(path)}`;
 }
 
 export function lorebookImageUrl(filename: string): string {
+  if (platform.isWeb) return webAssetUrl(LOREBOOK_IMAGE_URL_PREFIX, filename);
   return `${LOREBOOK_IMAGE_URL_PREFIX}${encodeLocalAssetPath(filename)}`;
 }
 
@@ -56,7 +99,16 @@ export function isManagedLocalAssetUrl(url: string | null | undefined): boolean 
 export function filePathToAssetUrl(path: string | null | undefined): string {
   if (!path) return "";
   if (path.startsWith("asset:") || path.startsWith("http://asset.localhost")) return path;
-  if (hasScheme(path) && !isAbsoluteFilesystemPath(path)) return path;
+  if (hasScheme(path) && !isAbsoluteFilesystemPath(path)) return rewriteForWeb(path);
+  // On the web target an absolute filesystem path (e.g. /data/backgrounds/x.png)
+  // came back from the server's *_file_path handler. The browser cannot fetch
+  // it directly; the only mapping we have is via the `marinara-*:` rewrite,
+  // which requires knowing which bucket the file lives in. The caller almost
+  // always already builds the URL via `userBackgroundUrl(filename)` /
+  // `gameAssetUrl(path)` instead of using the absolute path; this branch only
+  // protects against legacy callers — return empty so the FE renders a
+  // missing-asset placeholder rather than a broken navigation.
+  if (platform.isWeb) return "";
   if (!canConvertFileSrc()) return path;
   try {
     return convertFileSrc(path);
@@ -90,6 +142,17 @@ export async function resolveLorebookImageFileUrl(filename: string): Promise<str
 
 export async function resolveManagedLocalAssetUrl(url: string | null | undefined): Promise<string | null> {
   if (!url) return null;
+  // Web target short-circuits the resolver entirely: the bucket URL is
+  // serveable as-is by the server's /assets/* ServeDir mount; we don't
+  // need to round-trip through the *_file_path handler at all.
+  if (platform.isWeb) {
+    for (const prefix of Object.keys(WEB_BUCKET_FOR_PREFIX)) {
+      if (url.startsWith(prefix)) {
+        return webAssetUrl(prefix, decodeLocalAssetPath(url.slice(prefix.length)));
+      }
+    }
+    return url;
+  }
   if (url.startsWith(USER_BACKGROUND_URL_PREFIX)) {
     return resolveBackgroundFileUrl(decodeLocalAssetPath(url.slice(USER_BACKGROUND_URL_PREFIX.length)));
   }
