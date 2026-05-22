@@ -483,15 +483,17 @@ function TrackerPanelAppearanceDrawer({
         </button>
       </div>
 
-      {drawerOpen && (
-        <fieldset
-          id={drawerId}
-          disabled={!trackerPanelEnabled}
-          className={cn(
-            "border-t border-[var(--border)] px-3 pb-3 pt-2 transition-opacity",
-            trackerPanelEnabled ? "" : "opacity-45",
-          )}
-        >
+      <fieldset
+        id={drawerId}
+        disabled={!trackerPanelEnabled}
+        hidden={!drawerOpen}
+        aria-hidden={!drawerOpen}
+        className={cn(
+          "border-t border-[var(--border)] px-3 pb-3 pt-2 transition-opacity",
+          trackerPanelEnabled ? "" : "opacity-45",
+          !drawerOpen && "hidden",
+        )}
+      >
           <ToggleSetting
             label="Replace tracker HUD icons"
             checked={trackerPanelHideHudWidgets}
@@ -623,8 +625,7 @@ function TrackerPanelAppearanceDrawer({
           </div>
           <TrackerPanelCardOrderSetting />
           <TrackerCardColorSettings />
-        </fieldset>
-      )}
+      </fieldset>
     </section>
   );
 }

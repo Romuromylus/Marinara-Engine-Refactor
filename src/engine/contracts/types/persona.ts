@@ -74,7 +74,7 @@ export interface TrackerCardColorConfig {
   portraitStageBackground?: TrackerCardPortraitStageBackground;
   /** Tracker portrait horizontal focus, 0 = left, 100 = right. */
   portraitFocusX?: number;
-  /** Tracker portrait vertical focus, 0 = top, 100 = bottom. */
+  /** Tracker portrait vertical focus, 0 = top, 140 = extended lower framing. */
   portraitFocusY?: number;
   /** Tracker portrait zoom multiplier. */
   portraitZoom?: number;

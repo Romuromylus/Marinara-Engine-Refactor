@@ -461,7 +461,7 @@ export function TrackerCardColorControls({
                           </span>
                           <ChannelToggle
                             checked={channelEnabled}
-                            disabled={disabled}
+                            disabled={disabled || !hasSourcePaint}
                             label={option.label}
                             onChange={(checked) => updatePaintEnabled(option.enabledKey, checked)}
                           />
@@ -524,7 +524,7 @@ export function TrackerCardColorControls({
                           headerAction={
                             <ChannelToggle
                               checked={channelEnabled}
-                              disabled={disabled}
+                              disabled={disabled || !hasCustomPaint}
                               label={option.label}
                               onChange={(checked) => updatePaintEnabled(option.enabledKey, checked)}
                             />
@@ -761,7 +761,7 @@ export function TrackerCardColorControls({
                           <span className="min-w-0 truncate">{option.label}</span>
                           <ChannelToggle
                             checked={channelEnabled}
-                            disabled={disabled}
+                            disabled={disabled || !hasSourcePaint}
                             label={option.label}
                             onChange={(checked) => updatePaintEnabled(option.enabledKey, checked)}
                           />
@@ -826,7 +826,7 @@ export function TrackerCardColorControls({
                         headerAction={
                           <ChannelToggle
                             checked={channelEnabled}
-                            disabled={disabled}
+                            disabled={disabled || !hasCustomPaint}
                             label={option.label}
                             onChange={(checked) => updatePaintEnabled(option.enabledKey, checked)}
                           />
