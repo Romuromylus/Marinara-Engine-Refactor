@@ -26,8 +26,17 @@ COPY src-server src-server
 COPY src-tauri/Cargo.toml src-tauri/Cargo.toml
 COPY src-tauri/crates src-tauri/crates
 RUN mkdir -p src-tauri/src && echo "fn main() {}" > src-tauri/src/main.rs && echo "" > src-tauri/src/lib.rs
+# EasyPanel passes --build-arg GIT_SHA=<commit> on every deploy. Declaring it
+# here makes the cargo-build RUN layer's cache key depend on the commit, so
+# docker buildx can't reuse a stale binary across commits — even when the
+# COPY layers' content-hash happens to match a prior build's. The cargo cache
+# mount below still lets cargo do an incremental compile (only changed crates
+# recompile, the registry stays warm), so this costs only the time the binary
+# actually needs to relink — typically tens of seconds, not a full rebuild.
+ARG GIT_SHA=unknown
 RUN --mount=type=cache,id=marinara-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=marinara-cargo-target,target=/workspace/target \
+    echo "Building marinara-server at commit ${GIT_SHA}" && \
     cargo build --release --bin marinara-server && \
     cp target/release/marinara-server /usr/local/bin/marinara-server
 
