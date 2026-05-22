@@ -1,68 +1,27 @@
-use super::images::percent_encode_component;
-use super::shared::decode_path;
-use super::*;
-use marinara_handlers::media_uploads::{
-    persist_image_upload, remove_managed_record_file, safe_filename,
-};
+// Thin Tauri adapter over `marinara_handlers::lorebook_images`. The lift
+// (Phase 3e2) replaced `&AppState` with the explicit (`storage`, `data_dir`)
+// pair so the Axum server can share the same logic.
 
-const LOREBOOK_IMAGE_PREFIX: &str = "marinara-lorebook-image:";
+use crate::state::AppState;
+use marinara_core::AppResult;
+use marinara_handlers::lorebook_images as handlers;
+use serde_json::Value;
 
 pub(crate) fn update_lorebook_image(
     state: &AppState,
     lorebook_id: &str,
     body: Value,
 ) -> AppResult<Value> {
-    let previous = get_required_lorebook(state, lorebook_id)?;
-    let stored = persist_image_upload(
-        &state.data_dir,
-        "lorebooks/images",
-        lorebook_id,
-        &body,
-        "image",
-    )?;
-    let updated = state.storage.patch(
-        "lorebooks",
-        lorebook_id,
-        json!({
-            "imagePath": format!("{LOREBOOK_IMAGE_PREFIX}{}", percent_encode_component(&stored.filename)),
-            "imageFilePath": stored.absolute_path,
-            "imageFilename": stored.filename,
-            "imageUpdatedAt": now_iso()
-        }),
-    )?;
-    remove_lorebook_image_file(state, &previous);
-    Ok(updated)
+    handlers::update_lorebook_image(&state.storage, &state.data_dir, lorebook_id, body)
 }
 
 pub(crate) fn remove_lorebook_image_file(state: &AppState, record: &Value) {
-    remove_managed_record_file(
-        &state.data_dir,
-        "lorebooks/images",
-        record,
-        "imageFilePath",
-        "imageFilename",
-    )
+    handlers::remove_lorebook_image_file(&state.data_dir, record)
 }
 
 pub(crate) fn lorebook_image_file_path(
     state: &AppState,
     encoded_filename: &str,
 ) -> AppResult<Value> {
-    let filename = safe_filename(&decode_path(encoded_filename));
-    let path = state
-        .data_dir
-        .join("lorebooks")
-        .join("images")
-        .join(filename);
-    if !path.exists() || !path.is_file() {
-        return Err(AppError::not_found("Lorebook image was not found"));
-    }
-    Ok(json!({ "path": path.to_string_lossy() }))
-}
-
-fn get_required_lorebook(state: &AppState, lorebook_id: &str) -> AppResult<Value> {
-    state
-        .storage
-        .get("lorebooks", lorebook_id)?
-        .ok_or_else(|| AppError::not_found(format!("lorebooks/{lorebook_id} was not found")))
+    handlers::lorebook_image_file_path(&state.data_dir, encoded_filename)
 }

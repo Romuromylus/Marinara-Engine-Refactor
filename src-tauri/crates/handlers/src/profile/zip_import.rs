@@ -3,8 +3,8 @@ use super::{
     import_profile_collections_with_restored_assets,
     legacy::import_legacy_profile_tables_with_restored_assets,
 };
-use crate::state::AppState;
 use marinara_core::{AppError, AppResult};
+use marinara_storage::FileStorage;
 use serde_json::Value;
 use std::fs::File;
 use std::io::Read;
@@ -13,7 +13,7 @@ use std::path::Path;
 const PROFILE_JSON_ENTRY: &str = "marinara-profile.json";
 const MAX_PROFILE_JSON_BYTES: usize = 128 * 1024 * 1024;
 
-pub(super) fn import_profile_zip(state: &AppState, path: &Path) -> AppResult<Value> {
+pub fn import_profile_zip(storage: &FileStorage, data_dir: &Path, path: &Path) -> AppResult<Value> {
     let file = File::open(path)?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|error| AppError::invalid_input(format!("Could not read profile ZIP: {error}")))?;
@@ -31,8 +31,13 @@ pub(super) fn import_profile_zip(state: &AppState, path: &Path) -> AppResult<Val
         .or_else(|| data.get("assets"));
     if let Some(collections) = data.get("collections").and_then(Value::as_object) {
         let restored_assets =
-            restore_profile_zip_assets(state, &mut archive, &names, &profile_prefix, files)?;
-        import_profile_collections_with_restored_assets(state, collections, restored_assets)
+            restore_profile_zip_assets(data_dir, &mut archive, &names, &profile_prefix, files)?;
+        import_profile_collections_with_restored_assets(
+            storage,
+            data_dir,
+            collections,
+            restored_assets,
+        )
     } else {
         let tables = data
             .get("fileStorage")
@@ -44,8 +49,13 @@ pub(super) fn import_profile_zip(state: &AppState, path: &Path) -> AppResult<Val
                 )
             })?;
         let restored_assets =
-            restore_profile_zip_assets(state, &mut archive, &names, &profile_prefix, files)?;
-        import_legacy_profile_tables_with_restored_assets(state, tables, restored_assets)
+            restore_profile_zip_assets(data_dir, &mut archive, &names, &profile_prefix, files)?;
+        import_legacy_profile_tables_with_restored_assets(
+            storage,
+            data_dir,
+            tables,
+            restored_assets,
+        )
     }
 }
 

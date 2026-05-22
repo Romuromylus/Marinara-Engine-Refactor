@@ -133,23 +133,7 @@ pub(crate) fn image_generation_options(body: &Value) -> ImageGenerationOptions {
     }
 }
 
-pub(crate) fn percent_encode_component(value: &str) -> String {
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                encoded.push(byte as char)
-            }
-            _ => {
-                encoded.push('%');
-                encoded.push(HEX[(byte >> 4) as usize] as char);
-                encoded.push(HEX[(byte & 0x0f) as usize] as char);
-            }
-        }
-    }
-    encoded
-}
+pub(crate) use marinara_handlers::shared::percent_encode_component;
 
 pub(crate) async fn avatar_generation(state: &AppState, body: Value) -> AppResult<Value> {
     let connection_id = required_string(&body, "connectionId")?;
