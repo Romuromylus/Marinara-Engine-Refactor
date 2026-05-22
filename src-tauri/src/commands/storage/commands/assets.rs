@@ -1,4 +1,4 @@
-use super::{backgrounds, fonts, game_assets, http, lorebook_images, shared};
+use super::{backgrounds, fonts, http, lorebook_images, shared};
 use crate::state::AppState;
 use marinara_core::AppError;
 use serde_json::{json, Value};
@@ -82,25 +82,22 @@ pub fn game_assets_list(
     state: State<'_, AppState>,
     path: Option<String>,
 ) -> Result<Value, AppError> {
-    Ok(json!({
-        "items": state.game_assets.list(path.as_deref())?,
-        "root": state.game_assets.root().to_string_lossy()
-    }))
+    marinara_handlers::game_assets::list(&state.game_assets, path.as_deref())
 }
 
 #[tauri::command]
 pub fn game_assets_manifest(state: State<'_, AppState>) -> Result<Value, AppError> {
-    game_assets::game_assets_manifest(&state)
+    marinara_handlers::game_assets::manifest(&state.game_assets)
 }
 
 #[tauri::command]
 pub fn game_assets_tree(state: State<'_, AppState>) -> Result<Value, AppError> {
-    game_assets::game_assets_tree(&state)
+    marinara_handlers::game_assets::tree(&state.game_assets)
 }
 
 #[tauri::command]
 pub fn game_assets_rescan(state: State<'_, AppState>) -> Result<Value, AppError> {
-    game_assets::game_assets_rescan(&state)
+    marinara_handlers::game_assets::rescan(&state.game_assets)
 }
 
 #[tauri::command]
@@ -108,8 +105,7 @@ pub fn game_assets_create_folder(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<Value, AppError> {
-    state.game_assets.create_folder(&path)?;
-    Ok(json!({ "path": path }))
+    marinara_handlers::game_assets::create_folder(&state.game_assets, &path)
 }
 
 #[tauri::command]
@@ -118,10 +114,11 @@ pub fn game_assets_delete_folder(
     path: String,
     recursive: Option<bool>,
 ) -> Result<Value, AppError> {
-    state
-        .game_assets
-        .remove(&path, recursive.unwrap_or(false))?;
-    Ok(json!({ "deleted": true }))
+    marinara_handlers::game_assets::delete_folder(
+        &state.game_assets,
+        &path,
+        recursive.unwrap_or(false),
+    )
 }
 
 #[tauri::command]
@@ -129,18 +126,17 @@ pub fn game_assets_delete_file(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<Value, AppError> {
-    state.game_assets.remove(&path, false)?;
-    Ok(json!({ "deleted": true }))
+    marinara_handlers::game_assets::delete_file(&state.game_assets, &path)
 }
 
 #[tauri::command]
 pub fn game_assets_file_path(state: State<'_, AppState>, path: String) -> Result<Value, AppError> {
-    Ok(json!({ "path": state.game_assets.absolute_path_string(&path)? }))
+    marinara_handlers::game_assets::file_path(&state.game_assets, &path)
 }
 
 #[tauri::command]
 pub fn game_assets_read_text(state: State<'_, AppState>, path: String) -> Result<Value, AppError> {
-    Ok(json!({ "content": state.game_assets.read_text(&path)? }))
+    marinara_handlers::game_assets::read_text(&state.game_assets, &path)
 }
 
 #[tauri::command]
@@ -149,8 +145,7 @@ pub fn game_assets_write_text(
     path: String,
     content: String,
 ) -> Result<Value, AppError> {
-    state.game_assets.write_text(&path, &content)?;
-    Ok(json!({ "saved": true }))
+    marinara_handlers::game_assets::write_text(&state.game_assets, &path, &content)
 }
 
 #[tauri::command]
@@ -159,7 +154,7 @@ pub fn game_assets_rename(
     path: String,
     new_name: String,
 ) -> Result<Value, AppError> {
-    state.game_assets.rename(&path, &new_name)
+    marinara_handlers::game_assets::rename(&state.game_assets, &path, &new_name)
 }
 
 #[tauri::command]
@@ -168,9 +163,11 @@ pub fn game_assets_move(
     path: String,
     target_folder: Option<String>,
 ) -> Result<Value, AppError> {
-    state
-        .game_assets
-        .move_to_folder(&path, target_folder.as_deref().unwrap_or(""))
+    marinara_handlers::game_assets::move_one(
+        &state.game_assets,
+        &path,
+        target_folder.as_deref().unwrap_or(""),
+    )
 }
 
 #[tauri::command]
@@ -179,9 +176,11 @@ pub fn game_assets_copy(
     path: String,
     target_folder: Option<String>,
 ) -> Result<Value, AppError> {
-    state
-        .game_assets
-        .copy_to_folder(&path, target_folder.as_deref().unwrap_or(""))
+    marinara_handlers::game_assets::copy_one(
+        &state.game_assets,
+        &path,
+        target_folder.as_deref().unwrap_or(""),
+    )
 }
 
 #[tauri::command]
@@ -190,9 +189,11 @@ pub fn game_assets_move_bulk(
     paths: Vec<String>,
     target_folder: Option<String>,
 ) -> Result<Value, AppError> {
-    Ok(state
-        .game_assets
-        .move_many(&paths, target_folder.as_deref().unwrap_or("")))
+    marinara_handlers::game_assets::move_bulk(
+        &state.game_assets,
+        &paths,
+        target_folder.as_deref().unwrap_or(""),
+    )
 }
 
 #[tauri::command]
@@ -201,9 +202,11 @@ pub fn game_assets_copy_bulk(
     paths: Vec<String>,
     target_folder: Option<String>,
 ) -> Result<Value, AppError> {
-    Ok(state
-        .game_assets
-        .copy_many(&paths, target_folder.as_deref().unwrap_or("")))
+    marinara_handlers::game_assets::copy_bulk(
+        &state.game_assets,
+        &paths,
+        target_folder.as_deref().unwrap_or(""),
+    )
 }
 
 #[tauri::command]
@@ -211,12 +214,12 @@ pub fn game_assets_delete_bulk(
     state: State<'_, AppState>,
     paths: Vec<String>,
 ) -> Result<Value, AppError> {
-    Ok(state.game_assets.delete_many(&paths))
+    marinara_handlers::game_assets::delete_bulk(&state.game_assets, &paths)
 }
 
 #[tauri::command]
 pub fn game_assets_file_info(state: State<'_, AppState>, path: String) -> Result<Value, AppError> {
-    state.game_assets.file_info(&path)
+    marinara_handlers::game_assets::file_info(&state.game_assets, &path)
 }
 
 #[tauri::command]
@@ -225,23 +228,32 @@ pub fn game_assets_folder_description(
     path: String,
     description: String,
 ) -> Result<Value, AppError> {
-    game_assets::game_assets_folder_description(
-        &state,
-        json!({ "path": path, "description": description }),
-    )
+    marinara_handlers::game_assets::folder_description(&state.game_assets, &path, &description)
 }
 
 #[tauri::command]
 pub fn game_assets_upload(state: State<'_, AppState>, body: Value) -> Result<Value, AppError> {
-    game_assets::game_assets_upload(&state, body)
+    marinara_handlers::game_assets::upload(&state.game_assets, body)
 }
 
+/// Tauri-only post-processing: the shared handler resolves the path and
+/// creates the folder; this shim layers `tauri_plugin_opener::open_path` on
+/// top so the desktop binary actually opens the system file manager.
 #[tauri::command]
 pub fn game_assets_open_folder(
     state: State<'_, AppState>,
     subfolder: Option<String>,
 ) -> Result<Value, AppError> {
-    game_assets::game_assets_open_folder(&state, json!({ "subfolder": subfolder }))
+    let mut response =
+        marinara_handlers::game_assets::open_folder(&state.game_assets, subfolder.as_deref())?;
+    if let Some(path) = response.get("path").and_then(Value::as_str) {
+        tauri_plugin_opener::open_path(path, None::<&str>)
+            .map_err(|error| AppError::new("open_folder_failed", error.to_string()))?;
+    }
+    if let Some(map) = response.as_object_mut() {
+        map.insert("opened".into(), json!(true));
+    }
+    Ok(response)
 }
 
 #[tauri::command]

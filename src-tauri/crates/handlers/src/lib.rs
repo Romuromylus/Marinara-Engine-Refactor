@@ -3,6 +3,7 @@ pub mod agents;
 pub mod backgrounds;
 pub mod chats;
 pub mod entities;
+pub mod game_assets;
 pub mod shared;
 pub mod tracker;
 
