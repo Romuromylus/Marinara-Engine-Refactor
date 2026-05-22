@@ -1,9 +1,9 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{
         sse::{Event, KeepAlive, Sse},
-        Json,
+        Json, Redirect,
     },
     routing::{get, post},
     Router,
@@ -14,6 +14,7 @@ use marinara_core::AppError;
 use marinara_handlers::llm::LlmStreamRegistry;
 use marinara_storage::FileStorage;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,6 +33,13 @@ struct AppState {
     /// the exact same `Arc<LlmStreamRegistry>` on its AppState — Phase 4b
     /// lifted the type into `marinara-handlers` so both transports share it.
     llm_streams: Arc<LlmStreamRegistry>,
+    /// Public URL Spotify redirects the browser to after authorization.
+    /// Read from `MARINARA_SPOTIFY_REDIRECT_URI`; users must register this
+    /// exact value in their Spotify Developer dashboard. Empty means
+    /// "fall back to the loopback default" which only the Tauri binary can
+    /// service — the server's `/api/spotify/callback` route will reject
+    /// callbacks with an explanatory error if not configured.
+    spotify_redirect_uri: Option<String>,
 }
 
 type ApiError = (StatusCode, Json<Value>);
@@ -67,6 +75,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| PathBuf::from("/app/dist"));
     info!("frontend dir: {}", frontend_dir.display());
 
+    let spotify_redirect_uri = std::env::var("MARINARA_SPOTIFY_REDIRECT_URI")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if let Some(uri) = spotify_redirect_uri.as_deref() {
+        info!("spotify redirect uri: {uri}");
+    } else {
+        info!(
+            "spotify redirect uri not set (MARINARA_SPOTIFY_REDIRECT_URI); browser OAuth disabled"
+        );
+    }
+
     let state = AppState {
         storage,
         backgrounds,
@@ -74,12 +94,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         lorebook_images,
         data_dir: data_dir.clone(),
         llm_streams: Arc::new(LlmStreamRegistry::new()),
+        spotify_redirect_uri,
     };
 
     let api_router = Router::new()
         .route("/health", get(health))
         .route("/invoke/:command", post(invoke_command))
-        .route("/stream/llm", post(llm_stream_sse));
+        .route("/stream/llm", post(llm_stream_sse))
+        .route("/spotify/callback", get(spotify_browser_callback));
 
     let static_service = ServeDir::new(&frontend_dir)
         .not_found_service(ServeFile::new(frontend_dir.join("index.html")));
@@ -816,7 +838,18 @@ async fn invoke_command(
         // other endpoints.
         "spotify_status" => spotify_invoke(&state, "POST", &["status"], "/spotify", args).await,
         "spotify_authorize" => {
-            spotify_invoke(&state, "POST", &["authorize"], "/spotify", args).await
+            // Phase 4f: inject the server's HTTPS redirect URI so the lifted
+            // `authorize` writes the right `redirect_uri` into both the auth
+            // URL and the pending-session row. Without this the browser
+            // path would still send users at the loopback default (which
+            // only the desktop binary can answer).
+            let mut body = args.clone();
+            if let Some(uri) = state.spotify_redirect_uri.as_deref() {
+                if let Some(object) = body.as_object_mut() {
+                    object.insert("redirectUri".to_string(), Value::String(uri.to_string()));
+                }
+            }
+            spotify_invoke(&state, "POST", &["authorize"], "/spotify", body).await
         }
         "spotify_exchange" => {
             let body = args
@@ -1102,6 +1135,61 @@ async fn llm_stream_sse(
     });
 
     Ok(Sse::new(UnboundedReceiverStream::new(rx)).keep_alive(KeepAlive::default()))
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4f: browser-side Spotify OAuth callback
+//
+// Spotify redirects the user's browser to this route after the user clicks
+// "Authorize". We hand the code + state off to the shared `exchange`
+// handler (same code path the Tauri loopback listener uses), then 302
+// the user back to the SPA root with a status query the frontend can pick
+// up on load (`?spotify=connected` or `?spotify=error&message=...`).
+//
+// This route only works if `MARINARA_SPOTIFY_REDIRECT_URI` is set to its
+// exact public URL — Spotify's PKCE flow requires the redirect_uri at the
+// /authorize and /token legs to match byte-for-byte. The Tauri target
+// keeps using the loopback default and ignores this route entirely.
+// ---------------------------------------------------------------------------
+async fn spotify_browser_callback(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Redirect {
+    if let Some(error) = params.get("error") {
+        return redirect_to_spa("error", Some(error));
+    }
+    let Some(code) = params.get("code").cloned() else {
+        return redirect_to_spa("error", Some("missing_code"));
+    };
+    let Some(auth_state) = params.get("state").cloned() else {
+        return redirect_to_spa("error", Some("missing_state"));
+    };
+    match marinara_handlers::integrations::spotify::exchange(
+        &state.storage,
+        json!({ "code": code, "state": auth_state }),
+    )
+    .await
+    {
+        Ok(_) => redirect_to_spa("connected", None),
+        Err(error) => {
+            warn!("spotify callback exchange failed: {}", error.message);
+            redirect_to_spa("error", Some(&error.message))
+        }
+    }
+}
+
+fn redirect_to_spa(status: &str, message: Option<&str>) -> Redirect {
+    let mut query = format!("spotify={}", urlencode(status));
+    if let Some(message) = message {
+        query.push_str(&format!("&message={}", urlencode(message)));
+    }
+    Redirect::to(&format!("/?{query}"))
+}
+
+fn urlencode(value: &str) -> String {
+    // Same RFC 3986 unreserved-set encoding the handlers crate uses for
+    // path components. Adequate for the small status/message strings here.
+    marinara_handlers::shared::percent_encode_component(value)
 }
 
 // ---------------------------------------------------------------------------

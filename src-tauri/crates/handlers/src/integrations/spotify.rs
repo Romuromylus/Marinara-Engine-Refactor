@@ -309,6 +309,15 @@ fn authorize(storage: &FileStorage, route: &ParsedPath, body: &Value) -> AppResu
         .ok_or_else(|| AppError::invalid_input("clientId is required"))?;
     let agent_id = string_param(route, body, "agentId")
         .ok_or_else(|| AppError::invalid_input("agentId is required"))?;
+    // Phase 4f: callers can override the redirect URI per-request. The Tauri
+    // shim sticks with the loopback default so the local TCP listener can
+    // catch the response; the server-side invoke handler injects its own
+    // HTTPS callback URL (`MARINARA_SPOTIFY_REDIRECT_URI`). The same value
+    // gets stashed in the pending row and threaded back into the eventual
+    // `/oauth/token` call (Spotify enforces a redirect_uri match across the
+    // auth + exchange leg).
+    let redirect_uri = string_param(route, body, "redirectUri")
+        .unwrap_or_else(|| SPOTIFY_REDIRECT_URI.to_string());
     let code_verifier = random_token(64);
     let code_challenge = code_challenge(&code_verifier);
     let auth_state = random_token(32);
@@ -320,7 +329,7 @@ fn authorize(storage: &FileStorage, route: &ParsedPath, body: &Value) -> AppResu
                 "codeVerifier": code_verifier,
                 "clientId": client_id,
                 "agentId": agent_id,
-                "redirectUri": SPOTIFY_REDIRECT_URI,
+                "redirectUri": redirect_uri,
                 "createdAt": now_millis()
             }
         }),
@@ -331,7 +340,7 @@ fn authorize(storage: &FileStorage, route: &ParsedPath, body: &Value) -> AppResu
         ("scope", SPOTIFY_SCOPES),
         ("code_challenge_method", "S256"),
         ("code_challenge", &code_challenge),
-        ("redirect_uri", SPOTIFY_REDIRECT_URI),
+        ("redirect_uri", &redirect_uri),
         ("state", &auth_state),
     ]);
     // Loopback TCP listener startup is desktop-only; the Tauri wrapper
@@ -339,7 +348,7 @@ fn authorize(storage: &FileStorage, route: &ParsedPath, body: &Value) -> AppResu
     // target users go through the Phase 4f HTTPS callback route instead.
     Ok(json!({
         "authUrl": format!("https://accounts.spotify.com/authorize?{params}"),
-        "redirectUri": SPOTIFY_REDIRECT_URI,
+        "redirectUri": redirect_uri,
         "callbackListenerStarted": false
     }))
 }
@@ -2121,6 +2130,81 @@ mod tests {
             .get("codeVerifier")
             .and_then(Value::as_str)
             .is_some_and(|v| !v.is_empty()));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn authorize_accepts_body_supplied_redirect_uri() {
+        // Phase 4f: the server-side invoke handler injects its own HTTPS
+        // callback URL so the same code path can serve both desktop
+        // (loopback) and browser (SPA-rooted) OAuth flows.
+        let (_dir, storage) = fresh();
+        let route = ParsedPath::new("");
+        let response = spotify_call(
+            &storage,
+            "POST",
+            &["authorize"],
+            &route,
+            json!({
+                "clientId": "cid-456",
+                "agentId": "mari",
+                "redirectUri": "https://example.com/api/spotify/callback"
+            }),
+        )
+        .await
+        .expect("authorize");
+        let auth_url = response
+            .get("authUrl")
+            .and_then(Value::as_str)
+            .expect("authUrl");
+        // The override has to land in both the auth-leg URL AND the
+        // redirectUri response field so the frontend can show it (the
+        // pending-session row also carries it for the exchange leg).
+        assert!(
+            auth_url.contains("redirect_uri=https%3A%2F%2Fexample.com%2Fapi%2Fspotify%2Fcallback"),
+            "auth URL must encode the override: {auth_url}"
+        );
+        assert_eq!(
+            response.get("redirectUri").and_then(Value::as_str),
+            Some("https://example.com/api/spotify/callback")
+        );
+        // And the pending row must remember it so `exchange` can replay
+        // the same value to Spotify's /api/token endpoint (the docs
+        // require the redirect_uri to match between auth + token legs).
+        let rows = storage.list("app-settings").expect("list");
+        let pending = rows
+            .iter()
+            .find(|row| {
+                row.get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id.starts_with("spotify-pending-"))
+            })
+            .expect("pending row");
+        assert_eq!(
+            pending
+                .get("value")
+                .and_then(|value| value.get("redirectUri"))
+                .and_then(Value::as_str),
+            Some("https://example.com/api/spotify/callback")
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn authorize_uses_loopback_default_when_redirect_uri_omitted() {
+        let (_dir, storage) = fresh();
+        let route = ParsedPath::new("");
+        let response = spotify_call(
+            &storage,
+            "POST",
+            &["authorize"],
+            &route,
+            json!({ "clientId": "cid-789", "agentId": "mari" }),
+        )
+        .await
+        .expect("authorize");
+        assert_eq!(
+            response.get("redirectUri").and_then(Value::as_str),
+            Some("http://127.0.0.1:8754/spotify/callback")
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
