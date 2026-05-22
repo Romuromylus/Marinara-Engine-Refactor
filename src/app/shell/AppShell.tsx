@@ -848,7 +848,7 @@ export function AppShell() {
           sidebarOpen && "border-r border-[var(--sidebar-border)]/30",
           // Mobile: fixed overlay
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl max-md:pt-[env(safe-area-inset-top)]",
-          !sidebarOpen && "max-md:!w-0",
+          !sidebarOpen && "max-md:w-0!",
         )}
         style={{ width: sidebarOpen ? (isMobile ? "100vw" : liveSidebarWidth) : 0 }}
       >
@@ -939,7 +939,7 @@ export function AppShell() {
               role="dialog"
               tabIndex={-1}
               className={cn(
-                "mari-tracker-panel !fixed inset-y-0 z-50 w-[calc(100vw-0.5rem)] max-w-[24rem] overflow-hidden bg-[var(--background)]/65 pt-[env(safe-area-inset-top)] shadow-2xl backdrop-blur-xl",
+                "mari-tracker-panel fixed! inset-y-0 z-50 w-[calc(100vw-0.5rem)] max-w-[24rem] overflow-hidden bg-[var(--background)]/65 pt-[env(safe-area-inset-top)] shadow-2xl backdrop-blur-xl",
                 trackerPanelSide === "left" ? "left-0" : "right-0",
               )}
             >
@@ -972,7 +972,7 @@ export function AppShell() {
               aria-modal="true"
               role="dialog"
               tabIndex={-1}
-              className="mari-right-panel !fixed inset-y-0 right-0 z-50 !w-full shadow-2xl overflow-hidden bg-[var(--background)]/80 backdrop-blur-xl pt-[env(safe-area-inset-top)]"
+              className="mari-right-panel fixed! inset-y-0 right-0 z-50 w-full! shadow-2xl overflow-hidden bg-[var(--background)]/80 backdrop-blur-xl pt-[env(safe-area-inset-top)]"
             >
               <Suspense fallback={<SidePanelFallback />}>
                 <RightPanel />

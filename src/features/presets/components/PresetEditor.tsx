@@ -333,7 +333,7 @@ export function PresetEditor() {
           <ArrowLeft size="1.125rem" />
         </button>
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-400 to-violet-500 text-white shadow-sm max-md:h-8 max-md:w-8">
-          <FileText size="1.125rem" className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]" />
+          <FileText size="1.125rem" className="max-md:h-[0.875rem]! max-md:w-[0.875rem]!" />
         </div>
         <input
           value={localName}

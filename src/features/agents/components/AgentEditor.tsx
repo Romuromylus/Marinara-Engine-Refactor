@@ -580,7 +580,7 @@ export function AgentEditor() {
           <ArrowLeft size="1.125rem" />
         </button>
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm max-md:h-8 max-md:w-8">
-          <Sparkles size="1.125rem" className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]" />
+          <Sparkles size="1.125rem" className="max-md:h-[0.875rem]! max-md:w-[0.875rem]!" />
         </div>
         <input
           value={localName}
