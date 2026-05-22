@@ -5,6 +5,10 @@ import { fileURLToPath, URL } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// Build a server-target image when the Dockerfile sets VITE_TARGET=web. The
+// Tauri build leaves this unset and gets the desktop bundle.
+const isWebTarget = process.env.VITE_TARGET === "web";
+
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
@@ -12,9 +16,22 @@ export default defineConfig(async () => ({
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
+    // Dedupe React so a stray transitive copy can't produce two dispatchers
+    // (the classic source of "Invalid hook call" / React error #321).
+    dedupe: ["react", "react-dom"],
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+  // Production source maps for the server-target image so the browser shows
+  // real stack traces instead of chunk-N:offset noise. The desktop Tauri
+  // bundle skips them — they'd bloat the installer ~30% for users who can't
+  // open them anyway.
+  build: {
+    sourcemap: isWebTarget,
+  },
+
+  // The dev server section below is Tauri-specific (port 1420 + HMR host
+  // negotiation matches `tauri dev`). The build/resolve options above apply
+  // to both targets.
   //
   // 1. prevent vite from obscuring rust errors
   clearScreen: false,
