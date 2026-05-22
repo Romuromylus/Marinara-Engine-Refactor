@@ -245,7 +245,7 @@ pub(crate) async fn professor_mari_prompt(state: &AppState, body: Value) -> AppR
     let input: MariPromptRequest = serde_json::from_value(body.clone())
         .map_err(|error| AppError::invalid_input(error.to_string()))?;
     let connection_value = resolve_llm_connection_for_request(
-        state,
+        &state.storage,
         &json!({
             "connectionId": input.connection_id,
         }),

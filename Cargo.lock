@@ -2923,9 +2923,13 @@ dependencies = [
  "chrono",
  "marinara-assets",
  "marinara-core",
+ "marinara-llm",
+ "marinara-security",
  "marinara-storage",
+ "reqwest 0.12.28",
  "serde_json",
  "tempfile",
+ "tokio",
  "zip",
 ]
 

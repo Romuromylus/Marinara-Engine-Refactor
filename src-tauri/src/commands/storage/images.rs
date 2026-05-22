@@ -4,10 +4,15 @@ use super::*;
 #[path = "images/providers.rs"]
 mod providers;
 
+// The `image_source` and `connection_base_url` image helpers used to be
+// re-exported here for `commands/storage/llm.rs::check_image_generation_connection`.
+// That branch lifted into `marinara_handlers::llm` (with its own pure-JSON
+// twins) during Phase 4a, so the aliases dropped out of the working set on
+// the Tauri side. Phase 4c will lift the image-generation surface itself and
+// the canonical helpers will move with it.
 pub(crate) use providers::{
-    connection_base_url as image_connection_base_url, generate_image_with_connection,
-    generate_image_with_options, image_source as image_generation_source,
-    is_openai_gpt_image_model, ImageGenerationOptions,
+    generate_image_with_connection, generate_image_with_options, is_openai_gpt_image_model,
+    ImageGenerationOptions,
 };
 
 pub(crate) fn avatar_generation_prompt_id(name: &str) -> String {
