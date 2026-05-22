@@ -4,6 +4,7 @@ import { invokeTauri, platform } from "./tauri-client";
 export const USER_BACKGROUND_URL_PREFIX = "marinara-background:";
 export const GAME_ASSET_URL_PREFIX = "marinara-game-asset:";
 export const LOREBOOK_IMAGE_URL_PREFIX = "marinara-lorebook-image:";
+export const LOCAL_FONT_URL_PREFIX = "marinara-font:";
 
 // On the server target the Rust binary serves managed asset files under
 // /assets/<bucket>/<filename>. The desktop Tauri build still uses custom
@@ -16,6 +17,7 @@ const WEB_BUCKET_FOR_PREFIX: Record<string, string> = {
   [USER_BACKGROUND_URL_PREFIX]: "/assets/backgrounds/",
   [GAME_ASSET_URL_PREFIX]: "/assets/game-assets/",
   [LOREBOOK_IMAGE_URL_PREFIX]: "/assets/lorebook-images/",
+  [LOCAL_FONT_URL_PREFIX]: "/assets/fonts/",
 };
 
 type PathResponse = { path?: string | null };
@@ -87,12 +89,18 @@ export function lorebookImageUrl(filename: string): string {
   return `${LOREBOOK_IMAGE_URL_PREFIX}${encodeLocalAssetPath(filename)}`;
 }
 
+export function fontUrl(filename: string): string {
+  if (platform.isWeb) return webAssetUrl(LOCAL_FONT_URL_PREFIX, filename);
+  return `${LOCAL_FONT_URL_PREFIX}${encodeLocalAssetPath(filename)}`;
+}
+
 export function isManagedLocalAssetUrl(url: string | null | undefined): boolean {
   return (
     !!url &&
     (url.startsWith(USER_BACKGROUND_URL_PREFIX) ||
       url.startsWith(GAME_ASSET_URL_PREFIX) ||
-      url.startsWith(LOREBOOK_IMAGE_URL_PREFIX))
+      url.startsWith(LOREBOOK_IMAGE_URL_PREFIX) ||
+      url.startsWith(LOCAL_FONT_URL_PREFIX))
   );
 }
 
@@ -123,6 +131,17 @@ export function gameAssetFileUrlFromPath(path: string, absolutePath?: string | n
 
 export function backgroundFileUrlFromPath(filename: string, absolutePath?: string | null): string {
   return absolutePath ? filePathToAssetUrl(absolutePath) : userBackgroundUrl(filename);
+}
+
+/**
+ * `absolutePath` points at a real font file on the host filesystem and only
+ * resolves to an asset URL on the Tauri desktop binary (via `convertFileSrc`).
+ * On the web target we ignore it and build the `/assets/fonts/<filename>`
+ * URL directly — the path lives on the server container, not the browser.
+ */
+export function fontFileUrlFromPath(filename: string, absolutePath?: string | null): string {
+  if (platform.isWeb) return fontUrl(filename);
+  return absolutePath ? filePathToAssetUrl(absolutePath) : fontUrl(filename);
 }
 
 export async function resolveGameAssetFileUrl(path: string): Promise<string> {

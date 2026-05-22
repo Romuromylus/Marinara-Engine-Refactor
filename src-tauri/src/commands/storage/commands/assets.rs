@@ -72,9 +72,21 @@ pub async fn fonts_google_download(
     .await
 }
 
+/// Tauri-only post-processing: the shared handler resolves the fonts directory
+/// path; this shim layers `tauri_plugin_opener::open_path` on top so the
+/// desktop binary actually opens the system file manager. The server-side
+/// equivalent is a no-op (the response still has `opened: false`).
 #[tauri::command]
 pub async fn fonts_open_folder(state: State<'_, AppState>) -> Result<Value, AppError> {
-    fonts::fonts_call(&state, "POST", &["open-folder"], Value::Null).await
+    let mut response = marinara_handlers::fonts::open_folder(&state.fonts)?;
+    if let Some(path) = response.get("path").and_then(Value::as_str) {
+        tauri_plugin_opener::open_path(path, None::<&str>)
+            .map_err(|error| AppError::new("open_folder_failed", error.to_string()))?;
+    }
+    if let Some(map) = response.as_object_mut() {
+        map.insert("opened".into(), json!(true));
+    }
+    Ok(response)
 }
 
 #[tauri::command]
