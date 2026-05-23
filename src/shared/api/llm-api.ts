@@ -1,6 +1,7 @@
 import type { LlmChunk, LlmGateway, LlmRequest } from "../../engine/capabilities/llm";
 import { Channel } from "@tauri-apps/api/core";
 import { invokeTauri, platform } from "./tauri-client";
+import { useAuthStore } from "../stores/auth.store";
 
 function createStreamId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -36,17 +37,30 @@ async function* streamViaSse(
   if (signal?.aborted) forwardAbort();
   signal?.addEventListener("abort", forwardAbort, { once: true });
 
+  // The SSE path doesn't go through invokeViaFetch, so we have to do its
+  // CSRF echo + 401 interception by hand. Without these, enabling auth in
+  // Phase 6c would silently 401 every streaming reply with no UI feedback.
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const csrf = useAuthStore.getState().csrfToken;
+  if (csrf) {
+    headers["X-CSRF-Token"] = csrf;
+  }
+
   let response: Response;
   try {
     response = await fetch("/api/stream/llm", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       credentials: "same-origin",
       body: JSON.stringify({ streamId, request }),
       signal: controller.signal,
     });
   } finally {
     signal?.removeEventListener("abort", forwardAbort);
+  }
+
+  if (response.status === 401) {
+    useAuthStore.getState().setAnonymous();
   }
 
   if (!response.ok || !response.body) {
