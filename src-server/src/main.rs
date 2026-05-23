@@ -1,9 +1,10 @@
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{Path, Query, Request, State},
+    http::{HeaderValue, Method, StatusCode},
+    middleware::{self, Next},
     response::{
         sse::{Event, KeepAlive, Sse},
-        Json, Redirect,
+        IntoResponse, Json, Redirect, Response,
     },
     routing::{get, post},
     Router,
@@ -11,6 +12,7 @@ use axum::{
 use futures_util::stream::Stream;
 use marinara_assets::AssetService;
 use marinara_core::AppError;
+use marinara_handlers::auth::{CSRF_HEADER_NAME, SESSION_COOKIE_NAME};
 use marinara_handlers::llm::LlmStreamRegistry;
 use marinara_storage::FileStorage;
 use serde_json::{json, Value};
@@ -41,13 +43,41 @@ struct AppState {
     /// service — the server's `/api/spotify/callback` route will reject
     /// callbacks with an explanatory error if not configured.
     spotify_redirect_uri: Option<String>,
+    /// When true, the `auth_middleware` enforces cookie + CSRF on every
+    /// /api/* route except the explicit exempt list (login, health,
+    /// spotify-callback). When false, all requests pass through unchecked.
+    /// Phase 6a ships with this default-false so the deploy keeps behaving
+    /// like it does today; Phase 6c flips it once the bootstrap admin is
+    /// configured.
+    auth_enabled: bool,
 }
 
 type ApiError = (StatusCode, Json<Value>);
 type ApiResult = Result<Json<Value>, ApiError>;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Pre-runtime CLI subcommand: `marinara-server hash-password <plaintext>`
+    // prints a PHC argon2id hash and exits without starting the HTTP server.
+    // The operator pipes this into the `MARINARA_ADMIN_PASSWORD_HASH` env var
+    // so plaintext passwords never travel through EasyPanel's env editor.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 2 && args[1] == "hash-password" {
+        if args.len() < 3 {
+            eprintln!("usage: marinara-server hash-password <plaintext>");
+            std::process::exit(2);
+        }
+        let hash = marinara_handlers::auth::hash_password(&args[2])
+            .map_err(|error| Box::<dyn std::error::Error>::from(error.to_string()))?;
+        println!("{hash}");
+        return Ok(());
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(async_main())
+}
+
+async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -91,6 +121,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    let auth_enabled = std::env::var("MARINARA_AUTH_ENABLED")
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes"
+            )
+        })
+        .unwrap_or(false);
+    info!("auth enabled: {auth_enabled} (set MARINARA_AUTH_ENABLED=true to enforce login)");
+
+    // Bootstrap the admin row from env vars whenever both are set. Idempotent
+    // on repeat boots; rotates the hash if the env var changes (which is the
+    // forgotten-password recovery path).
+    if let (Ok(username), Ok(hash)) = (
+        std::env::var("MARINARA_ADMIN_USERNAME"),
+        std::env::var("MARINARA_ADMIN_PASSWORD_HASH"),
+    ) {
+        let username = username.trim();
+        let hash = hash.trim();
+        if !username.is_empty() && !hash.is_empty() {
+            match marinara_handlers::auth::bootstrap_admin(&storage, username, hash) {
+                Ok(_) => info!("admin user '{username}' bootstrapped from env vars"),
+                Err(error) => warn!("admin bootstrap failed: {}", error),
+            }
+        }
+    } else if auth_enabled {
+        warn!(
+            "MARINARA_AUTH_ENABLED=true but MARINARA_ADMIN_USERNAME / \
+             MARINARA_ADMIN_PASSWORD_HASH are not set — login will reject all attempts"
+        );
+    }
+
     let state = AppState {
         storage,
         backgrounds,
@@ -100,13 +163,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data_dir: data_dir.clone(),
         llm_streams: Arc::new(LlmStreamRegistry::new()),
         spotify_redirect_uri,
+        auth_enabled,
     };
 
     let api_router = Router::new()
         .route("/health", get(health))
+        .route("/auth/login", post(auth_login))
+        .route("/auth/logout", post(auth_logout))
+        .route("/auth/me", get(auth_me))
         .route("/invoke/:command", post(invoke_command))
         .route("/stream/llm", post(llm_stream_sse))
-        .route("/spotify/callback", get(spotify_browser_callback));
+        .route("/spotify/callback", get(spotify_browser_callback))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
 
     let static_service = ServeDir::new(&frontend_dir)
         .not_found_service(ServeFile::new(frontend_dir.join("index.html")));
@@ -1268,6 +1339,7 @@ fn error_response(error: AppError) -> ApiError {
     let status = match error.code.as_str() {
         "not_found" => StatusCode::NOT_FOUND,
         "invalid_input" => StatusCode::BAD_REQUEST,
+        "invalid_credentials" | "unauthorized" => StatusCode::UNAUTHORIZED,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
     let body = json!({
@@ -1276,4 +1348,181 @@ fn error_response(error: AppError) -> ApiError {
         "details": error.details,
     });
     (status, Json(body))
+}
+
+// --- Phase 6a: cookie-based auth -------------------------------------------
+
+/// Lifetime of the session cookie when the user logs in. Matches Spotify's
+/// typical refresh-token lifetime so the SPA's cached state stays warm for a
+/// month at a time. The session row also has a `lastSeen` field that gets
+/// touched on every authenticated request — a future Phase 6.x can cull
+/// idle sessions without needing the cookie itself to expire.
+const SESSION_COOKIE_MAX_AGE_SECONDS: u64 = 60 * 60 * 24 * 30;
+
+/// Lift the named cookie value out of a `Cookie` header. Returns `None` if
+/// the header is missing, malformed, or doesn't contain the requested name.
+fn extract_cookie(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {
+    let raw = headers.get("cookie")?.to_str().ok()?;
+    let prefix = format!("{name}=");
+    for part in raw.split(';') {
+        let trimmed = part.trim();
+        if let Some(value) = trimmed.strip_prefix(&prefix) {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+fn session_cookie_value(session_id: &str) -> String {
+    format!(
+        "{SESSION_COOKIE_NAME}={session_id}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={SESSION_COOKIE_MAX_AGE_SECONDS}",
+    )
+}
+
+fn clear_session_cookie() -> String {
+    format!("{SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0")
+}
+
+fn unauthorized(code: &str, message: &str) -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({ "code": code, "message": message, "details": null })),
+    )
+        .into_response()
+}
+
+/// Paths that bypass the auth middleware entirely. The middleware is only
+/// mounted on `/api/*` routes, so `/login`, `/`, and the asset ServeDir
+/// mounts already bypass it by virtue of not being layered. This is the
+/// "things inside /api/* that should still be reachable without a session"
+/// list.
+fn is_auth_exempt_path(path: &str) -> bool {
+    matches!(
+        path,
+        "/api/auth/login" | "/api/health" | "/api/spotify/callback"
+    )
+}
+
+/// Gate every protected `/api/*` request on a valid session cookie. On
+/// mutating methods (POST/PUT/PATCH/DELETE) the request must also carry the
+/// matching `X-CSRF-Token` header. The middleware passes through when
+/// `MARINARA_AUTH_ENABLED` is unset/false so the Phase 6a deploy keeps
+/// behaving like Phase 5 until the operator opts in.
+async fn auth_middleware(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    if !state.auth_enabled {
+        return next.run(request).await;
+    }
+    let path = request.uri().path().to_string();
+    if is_auth_exempt_path(&path) {
+        return next.run(request).await;
+    }
+    let Some(session_id) = extract_cookie(request.headers(), SESSION_COOKIE_NAME) else {
+        return unauthorized("unauthorized", "Session cookie missing");
+    };
+    let resolved = match marinara_handlers::auth::resolve_session(&state.storage, &session_id) {
+        Ok(Some(value)) => value,
+        Ok(None) => return unauthorized("unauthorized", "Session not found or expired"),
+        Err(error) => {
+            warn!("session resolve failed: {error}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "code": error.code, "message": error.message })),
+            )
+                .into_response();
+        }
+    };
+    let method = request.method().clone();
+    if method != Method::GET && method != Method::HEAD && method != Method::OPTIONS {
+        let provided = request
+            .headers()
+            .get(CSRF_HEADER_NAME)
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("");
+        let expected = resolved
+            .get("csrfToken")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if provided.is_empty() || provided != expected {
+            return unauthorized("unauthorized", "CSRF token missing or mismatched");
+        }
+    }
+    next.run(request).await
+}
+
+async fn auth_login(State(state): State<AppState>, Json(body): Json<Value>) -> Response {
+    let username = body.get("username").and_then(Value::as_str).unwrap_or("");
+    let password = body.get("password").and_then(Value::as_str).unwrap_or("");
+    let result = match marinara_handlers::auth::login(&state.storage, username, password) {
+        Ok(value) => value,
+        Err(error) => {
+            let (status, body) = error_response(error);
+            return (status, body).into_response();
+        }
+    };
+    let session_id = result
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let response_body = json!({
+        "user": result.get("user").cloned().unwrap_or(Value::Null),
+        "csrfToken": result.get("csrfToken").cloned().unwrap_or(Value::Null),
+    });
+    let mut response = (StatusCode::OK, Json(response_body)).into_response();
+    if let Ok(value) = HeaderValue::from_str(&session_cookie_value(&session_id)) {
+        response.headers_mut().append("set-cookie", value);
+    }
+    response
+}
+
+async fn auth_logout(State(state): State<AppState>, request: Request) -> Response {
+    let session_id = extract_cookie(request.headers(), SESSION_COOKIE_NAME).unwrap_or_default();
+    let _ = marinara_handlers::auth::logout(&state.storage, &session_id);
+    let mut response = (StatusCode::OK, Json(json!({ "ok": true }))).into_response();
+    if let Ok(value) = HeaderValue::from_str(&clear_session_cookie()) {
+        response.headers_mut().append("set-cookie", value);
+    }
+    response
+}
+
+async fn auth_me(State(state): State<AppState>, request: Request) -> Response {
+    // When auth is disabled the SPA still calls /auth/me on boot to decide
+    // whether to show the login form. Return a sentinel "auth not enforced"
+    // payload so the frontend can short-circuit to the chat UI without
+    // surfacing a fake user identity.
+    if !state.auth_enabled {
+        return (
+            StatusCode::OK,
+            Json(json!({ "enforced": false, "user": null, "csrfToken": null })),
+        )
+            .into_response();
+    }
+    let Some(session_id) = extract_cookie(request.headers(), SESSION_COOKIE_NAME) else {
+        return unauthorized("unauthorized", "Session cookie missing");
+    };
+    match marinara_handlers::auth::resolve_session(&state.storage, &session_id) {
+        Ok(Some(resolved)) => {
+            let mut payload = json!({ "enforced": true });
+            if let Some(map) = payload.as_object_mut() {
+                map.insert(
+                    "user".to_string(),
+                    resolved.get("user").cloned().unwrap_or(Value::Null),
+                );
+                map.insert(
+                    "csrfToken".to_string(),
+                    resolved.get("csrfToken").cloned().unwrap_or(Value::Null),
+                );
+            }
+            (StatusCode::OK, Json(payload)).into_response()
+        }
+        Ok(None) => unauthorized("unauthorized", "Session not found or expired"),
+        Err(error) => {
+            warn!("auth_me resolve failed: {error}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "code": error.code, "message": error.message })),
+            )
+                .into_response()
+        }
+    }
 }
