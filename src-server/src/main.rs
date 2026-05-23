@@ -1396,10 +1396,18 @@ fn unauthorized(code: &str, message: &str) -> Response {
 /// mounts already bypass it by virtue of not being layered. This is the
 /// "things inside /api/* that should still be reachable without a session"
 /// list.
+///
+/// The strings here are matched against `request.uri().path()` from inside
+/// the `api_router`, which Axum's `Router::nest("/api", ...)` strips of the
+/// `/api` prefix before it reaches the handler / middleware. So the literal
+/// values are `/auth/login`, `/health`, `/spotify/callback` — not the full
+/// outward-facing paths. Phase 6c verification caught this with every
+/// request 401ing because the never-matching exempt list left
+/// `/auth/login` itself gated.
 fn is_auth_exempt_path(path: &str) -> bool {
     matches!(
         path,
-        "/api/auth/login" | "/api/health" | "/api/spotify/callback"
+        "/auth/login" | "/health" | "/spotify/callback"
     )
 }
 
