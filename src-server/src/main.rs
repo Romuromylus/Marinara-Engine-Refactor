@@ -1397,17 +1397,22 @@ fn unauthorized(code: &str, message: &str) -> Response {
 /// "things inside /api/* that should still be reachable without a session"
 /// list.
 ///
-/// The strings here are matched against `request.uri().path()` from inside
-/// the `api_router`, which Axum's `Router::nest("/api", ...)` strips of the
-/// `/api` prefix before it reaches the handler / middleware. So the literal
-/// values are `/auth/login`, `/health`, `/spotify/callback` — not the full
-/// outward-facing paths. Phase 6c verification caught this with every
-/// request 401ing because the never-matching exempt list left
-/// `/auth/login` itself gated.
+/// We accept both the post-nest-strip form (`/auth/login`) and the full
+/// outward path (`/api/auth/login`) because Axum 0.7's nested-router URI
+/// observability is inconsistent in practice — Phase 6c verification saw
+/// `/health` get stripped (worked with `/health`) while `/auth/login` was
+/// still seen as `/api/auth/login` (failed with just `/auth/login`).
+/// Covering both forms is harmless: nothing else legitimately lives at
+/// these exact paths anywhere in the router.
 fn is_auth_exempt_path(path: &str) -> bool {
     matches!(
         path,
-        "/auth/login" | "/health" | "/spotify/callback"
+        "/auth/login"
+            | "/health"
+            | "/spotify/callback"
+            | "/api/auth/login"
+            | "/api/health"
+            | "/api/spotify/callback"
     )
 }
 
@@ -1421,6 +1426,15 @@ async fn auth_middleware(State(state): State<AppState>, request: Request, next: 
         return next.run(request).await;
     }
     let path = request.uri().path().to_string();
+    // Temporary debug to confirm exactly what the middleware sees in prod
+    // for the Phase 6c verification; remove once the auth flow is verified
+    // end-to-end on the live deploy.
+    tracing::warn!(
+        target = "marinara_server::auth",
+        method = %request.method(),
+        path = %path,
+        "auth_middleware request seen"
+    );
     if is_auth_exempt_path(&path) {
         return next.run(request).await;
     }
