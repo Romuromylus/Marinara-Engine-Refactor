@@ -7,6 +7,9 @@ import { AppDialogRenderer } from "../shared/components/ui/AppDialogRenderer";
 import { fontsApi } from "../shared/api/settings-assets-api";
 import { fontFileUrlFromPath } from "../shared/api/local-file-api";
 import { useUIStore } from "../shared/stores/ui.store";
+import { useAuthStore } from "../shared/stores/auth.store";
+import { bootstrapAuth } from "../shared/api/auth-api";
+import { LoginPage } from "../features/auth/components/LoginPage";
 import { installRangeSliderSync } from "./startup/range-slider-sync";
 
 function stripFontFamilyQuotes(family: string): string {
@@ -42,6 +45,11 @@ export function App() {
   const language = useUIStore((s) => s.language);
   const visualTheme = useUIStore((s) => s.visualTheme);
   const fontFamily = useUIStore((s) => s.fontFamily);
+  const authStatus = useAuthStore((s) => s.status);
+
+  useEffect(() => {
+    void bootstrapAuth();
+  }, []);
 
   useEffect(() => installRangeSliderSync(), []);
 
@@ -110,6 +118,27 @@ export function App() {
       window.removeEventListener("marinara-fonts-updated", loadFonts);
     };
   }, []);
+
+  if (authStatus === "unknown" || authStatus === "loading") {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ background: "var(--background)", color: "var(--muted-foreground)" }}
+      >
+        <span className="text-sm">Loading…</span>
+      </div>
+    );
+  }
+
+  if (authStatus === "anonymous") {
+    return (
+      <>
+        <CustomThemeInjector />
+        <LoginPage />
+        <Toaster position="bottom-right" theme={theme} closeButton />
+      </>
+    );
+  }
 
   return (
     <>

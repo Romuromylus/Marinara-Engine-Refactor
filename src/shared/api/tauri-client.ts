@@ -1,4 +1,5 @@
 import { ApiError } from "./api-errors";
+import { useAuthStore } from "../stores/auth.store";
 
 type InvokeArgs = Record<string, unknown> | undefined;
 
@@ -28,11 +29,20 @@ async function invokeViaTauri<T>(command: string, args: InvokeArgs): Promise<T> 
 }
 
 async function invokeViaFetch<T>(command: string, args: InvokeArgs): Promise<T> {
+  // Echo the in-memory CSRF token on every invoke. When auth is disabled
+  // server-side the token is null and the middleware never inspects the
+  // header anyway, so adding it unconditionally is harmless. When auth IS
+  // enabled, the middleware compares it against the session row.
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const csrf = useAuthStore.getState().csrfToken;
+  if (csrf) {
+    headers["X-CSRF-Token"] = csrf;
+  }
   let response: Response;
   try {
     response = await fetch(`/api/invoke/${encodeURIComponent(command)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       credentials: "same-origin",
       body: JSON.stringify(args ?? {}),
     });
@@ -42,6 +52,13 @@ async function invokeViaFetch<T>(command: string, args: InvokeArgs): Promise<T> 
       0,
       error,
     );
+  }
+
+  if (response.status === 401) {
+    // The session expired or was never set. Flip the store so App.tsx
+    // re-renders into the login page; the caller still gets the throw so
+    // it can decide whether to swallow or surface the error.
+    useAuthStore.getState().setAnonymous();
   }
 
   if (response.status === 204) {
