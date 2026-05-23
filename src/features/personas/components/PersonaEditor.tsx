@@ -45,7 +45,11 @@ import { ColorPicker } from "../../../shared/components/ui/ColorPicker";
 import { TrackerCardColorControls } from "../../../shared/components/ui/TrackerCardColorControls";
 import { ExpandedTextarea } from "../../../shared/components/ui/ExpandedTextarea";
 import { exportApi } from "../../../shared/api/export-api";
-import { parseTrackerCardColorConfig, serializeTrackerCardColorConfig } from "../../../shared/lib/tracker-card-colors";
+import {
+  parseTrackerCardColorConfig,
+  serializeTrackerCardColorConfig,
+  TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD,
+} from "../../../shared/lib/tracker-card-colors";
 import {
   useCharacterSprites,
   useUploadSprite,
@@ -61,7 +65,7 @@ import { SpriteGenerationModal } from "../../../shared/components/ui/SpriteGener
 import { AvatarGenerationModal } from "../../../shared/components/ui/AvatarGenerationModal";
 import { AvatarCropWidget } from "../../../shared/components/ui/AvatarCropWidget";
 import { SpriteFrameEditor } from "../../../shared/components/ui/SpriteFrameEditor";
-import { SpriteWandCleanupEditor } from "../../../shared/components/ui/SpriteWandCleanupEditor";
+import { SpriteWandCleanupEditor } from "../../../shared/components/ui/sprite-wand-cleanup/SpriteWandCleanupEditor";
 import { ExportFormatDialog, type ExportFormatChoice } from "../../../shared/components/ui/ExportFormatDialog";
 import { Modal } from "../../../shared/components/ui/Modal";
 import type { TrackerCardColorConfig } from "../../../engine/contracts/types/persona";
@@ -124,6 +128,7 @@ interface PersonaRow {
   dialogueColor?: string;
   boxColor?: string;
   trackerCardColors?: string;
+  [TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD]?: string;
   personaStats?: string;
   altDescriptions?: string;
   tags?: string;
@@ -213,6 +218,11 @@ export function PersonaEditor() {
       /* ignore — empty / malformed crop just stays null */
     }
 
+    const savedTrackerCardColors =
+      typeof rawPersona[TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD] === "string"
+        ? rawPersona[TRACKER_CARD_COLOR_PREVIEW_BASE_FIELD]
+        : rawPersona.trackerCardColors;
+
     setFormData({
       name: rawPersona.name,
       comment: rawPersona.comment ?? "",
@@ -224,7 +234,7 @@ export function PersonaEditor() {
       nameColor: rawPersona.nameColor ?? "",
       dialogueColor: rawPersona.dialogueColor ?? "",
       boxColor: rawPersona.boxColor ?? "",
-      trackerCardColors: parseTrackerCardColorConfig(rawPersona.trackerCardColors),
+      trackerCardColors: parseTrackerCardColorConfig(savedTrackerCardColors),
       personaStats: rawPersona.personaStats ?? "",
       altDescriptions: parsedAltDescs,
       tags: (() => {
@@ -1509,7 +1519,6 @@ function PersonaColorsTab({
           boxColor: formData.boxColor,
         }}
         entityLabel="Persona"
-        previewName={formData.name || "You"}
       />
     </div>
   );

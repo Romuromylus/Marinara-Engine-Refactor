@@ -3,6 +3,10 @@ import type { StorageGateway } from "../../../capabilities/storage";
 import { parseJsonArray, parseJsonObject } from "../../../core/json";
 import { parseGameJsonish } from "../../../shared/parsing-jsonish";
 import type { SceneAnalysis, SceneCreateRequest, SceneCreateResponse, SceneForkRequest, SceneForkResponse, SceneFullPlan, ScenePlanRequest, ScenePlanResponse } from "../../../contracts/types/scene";
+import {
+  copyTrackerSnapshotsForRebasedMessages,
+  type TrackerSnapshotMessageRebase,
+} from "../../../generation/tracker-snapshots";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -251,7 +255,9 @@ export async function forkRoleplayScene(
   }
 
   let skippedGuide = false;
+  const trackerMessageRebases: TrackerSnapshotMessageRebase[] = [];
   for (const message of await messagesForChat(storage, input.sceneChatId)) {
+    const sourceMessageId = stringValue(message.id).trim();
     const stopAfterThis = input.upToMessageId && message.id === input.upToMessageId;
     if (input.includeParticipationGuide === false && !skippedGuide && message.role === "narrator") {
       skippedGuide = true;
@@ -261,8 +267,27 @@ export async function forkRoleplayScene(
     const copy = { ...message };
     delete copy.id;
     copy.chatId = forkChatId;
-    await storage.create("messages", copy);
+    const created = await storage.create<JsonRecord>("messages", copy);
+    const targetMessageId = stringValue(created.id).trim();
+    if (sourceMessageId && targetMessageId) {
+      trackerMessageRebases.push({
+        sourceMessageId,
+        targetMessageId,
+        role: created.role ?? copy.role,
+        activeSwipeIndex: created.activeSwipeIndex ?? copy.activeSwipeIndex,
+        swipeCount: created.swipeCount ?? copy.swipeCount,
+      });
+    }
     if (stopAfterThis) break;
+  }
+  const visibleTrackerSnapshot = await copyTrackerSnapshotsForRebasedMessages(
+    storage,
+    input.sceneChatId,
+    forkChatId,
+    trackerMessageRebases,
+  );
+  if (visibleTrackerSnapshot) {
+    await storage.update("chats", forkChatId, { gameState: visibleTrackerSnapshot as unknown as JsonRecord });
   }
 
   if (input.mode === "convert") {

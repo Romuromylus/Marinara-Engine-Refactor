@@ -109,6 +109,26 @@ pub(crate) fn materialize_message_swipe_fields(message: &mut Value) {
     }
 }
 
+pub(crate) fn non_negative_i64_value(value: Option<&Value>) -> Option<i64> {
+    match value {
+        Some(Value::Number(number)) => number
+            .as_i64()
+            .or_else(|| number.as_u64().map(|value| value as i64))
+            .map(|value| value.max(0)),
+        Some(Value::String(raw)) => raw.trim().parse::<i64>().ok().map(|value| value.max(0)),
+        _ => None,
+    }
+}
+
+pub(crate) fn swipe_index_value(message: &Value) -> i64 {
+    let fallback = message
+        .get("swipeCount")
+        .and_then(Value::as_u64)
+        .map(|count| count.saturating_sub(1) as i64)
+        .unwrap_or(0);
+    non_negative_i64_value(message.get("activeSwipeIndex")).unwrap_or(fallback)
+}
+
 pub(crate) fn normalize_character_data_for_storage(data: &Value) -> AppResult<Value> {
     match data {
         Value::String(raw) => Ok(Value::String(raw.clone())),

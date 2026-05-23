@@ -3,6 +3,7 @@ import { generationParametersSchema } from "../contracts/schemas/prompt.schema";
 import type { GameState } from "../contracts/types/game-state";
 import type { GenerationParameters } from "../contracts/types/prompt";
 import { wrapContent } from "../generation-core/prompt/format-engine.js";
+import { readNonNegativeInteger } from "./runtime-records";
 
 export type SimpleMessage = { role: "system" | "user" | "assistant"; content: string };
 export type StoredGenerationParameters = Partial<GenerationParameters>;
@@ -117,19 +118,25 @@ export function resolveRegenerationGameStateAnchor(
 }
 
 export function resolveRegenerationGameStateFallbackMessageIds(
-  messages: Array<{ role?: unknown; id?: unknown }>,
+  messages: Array<{ role?: unknown; id?: unknown; activeSwipeIndex?: unknown; swipeIndex?: unknown }>,
   regenerateMessageId: string | null | undefined,
-): string[] | null {
+): Array<{ messageId: string; swipeIndex: number }> | null {
   if (!regenerateMessageId) return null;
   const targetIndex = messages.findIndex((message) => message.id === regenerateMessageId);
   const boundedMessages = targetIndex >= 0 ? messages.slice(0, targetIndex) : messages;
-  const ids = new Set<string>([""]);
+  const targets = new Map<string, { messageId: string; swipeIndex: number }>();
+  const addTarget = (target: { messageId: string; swipeIndex: number }) =>
+    targets.set(`${target.messageId}\u0000${target.swipeIndex}`, target);
+  addTarget({ messageId: "", swipeIndex: 0 });
   for (const message of boundedMessages) {
-    if (message.role === "assistant" && typeof message.id === "string") {
-      ids.add(message.id);
+    if (message.role === "assistant" && typeof message.id === "string" && message.id.trim()) {
+      addTarget({
+        messageId: message.id.trim(),
+        swipeIndex: readNonNegativeInteger(message.activeSwipeIndex ?? message.swipeIndex, 0),
+      });
     }
   }
-  return Array.from(ids);
+  return Array.from(targets.values());
 }
 
 export function getAttachmentFilename(attachment: PromptAttachment): string {
@@ -399,6 +406,7 @@ export function preserveTrackerCharacterUiFields(
     const previous = key ? previousByKey.get(key) : null;
     const previousPortraitFocusX = previous?.portraitFocusX;
     const previousPortraitFocusY = previous?.portraitFocusY;
+    const previousPortraitZoom = previous?.portraitZoom;
     if (
       typeof character.portraitFocusX !== "number" &&
       typeof previousPortraitFocusX === "number" &&
@@ -412,6 +420,13 @@ export function preserveTrackerCharacterUiFields(
       Number.isFinite(previousPortraitFocusY)
     ) {
       character.portraitFocusY = previousPortraitFocusY;
+    }
+    if (
+      (typeof character.portraitZoom !== "number" || !Number.isFinite(character.portraitZoom)) &&
+      typeof previousPortraitZoom === "number" &&
+      Number.isFinite(previousPortraitZoom)
+    ) {
+      character.portraitZoom = previousPortraitZoom;
     }
   }
 }

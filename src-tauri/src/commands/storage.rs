@@ -28,6 +28,8 @@ mod exports;
 mod fonts;
 #[path = "storage/game_assets.rs"]
 mod game_assets;
+#[path = "storage/game_state_snapshots.rs"]
+mod game_state_snapshots;
 #[path = "storage/generation.rs"]
 mod generation;
 #[path = "storage/http.rs"]
@@ -69,6 +71,8 @@ pub mod bot_browser_commands;
 pub mod chat_commands;
 #[path = "storage/commands/entities.rs"]
 pub mod entity_commands;
+#[path = "storage/commands/game_state_snapshots.rs"]
+pub mod game_state_snapshot_commands;
 #[path = "storage/commands/imports.rs"]
 pub mod import_commands;
 #[path = "storage/commands/integrations.rs"]

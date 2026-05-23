@@ -1,15 +1,20 @@
 import type { ReactNode } from "react";
 import { Users } from "lucide-react";
 import type { PresentCharacter } from "../../../engine/contracts/types/game-state";
-import type { TrackerPanelSide } from "../../../shared/stores/ui.store";
+import type {
+  TrackerPanelSizeProfile,
+  TrackerPanelSide,
+  TrackerThoughtBubbleDisplay,
+} from "../../../shared/stores/ui.store";
 import { cn } from "../../../shared/lib/utils";
-import {
-  getCharacterFeatureKey,
-  getSpriteExpressionForCharacter,
-  type TrackerProfileColors,
-} from "./tracker-data-sidebar.helpers";
+import { getCharacterFeatureKey } from "./tracker-character.helpers";
+import { getSpriteExpressionForCharacter } from "./tracker-sprite.helpers";
+import type { TrackerProfileColors } from "./tracker-profile-colors";
 import { AddRowButton, EmptySection, SectionHeader } from "./tracker-data-sidebar.controls";
 import { CharacterTrackerCard } from "./CharacterTrackerCard";
+
+const EXPANDED_COMPACT_CARD_GHOST_CLASS =
+  "pointer-events-none hidden self-stretch rounded-md border border-dashed border-[var(--border)]/35 bg-[color-mix(in_srgb,var(--card)_10%,transparent)] opacity-55 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_4%,transparent)] @min-[220px]:block";
 
 export function CharacterTrackerPanel({
   activeChatId,
@@ -21,6 +26,9 @@ export function CharacterTrackerPanel({
   characterProfileColors,
   resolveSpriteCharacterId,
   trackerPanelSide,
+  trackerPanelSizeProfile,
+  thoughtBubbleDisplay,
+  dockedThoughtsAlwaysVisible,
   onUpdateCharacter,
   onRemoveCharacter,
   onAddCharacter,
@@ -41,6 +49,9 @@ export function CharacterTrackerPanel({
   characterProfileColors: Record<string, TrackerProfileColors>;
   resolveSpriteCharacterId: (character: PresentCharacter) => string | null;
   trackerPanelSide: TrackerPanelSide;
+  trackerPanelSizeProfile: TrackerPanelSizeProfile;
+  thoughtBubbleDisplay: TrackerThoughtBubbleDisplay;
+  dockedThoughtsAlwaysVisible: boolean;
   onUpdateCharacter: (index: number, character: PresentCharacter) => void;
   onRemoveCharacter: (index: number) => void;
   onAddCharacter: () => void;
@@ -79,6 +90,8 @@ export function CharacterTrackerPanel({
     });
     const featuredEntries = characterEntries.filter((entry) => entry.featured);
     const compactEntries = characterEntries.filter((entry) => !entry.featured);
+    const allowCompactCardColumns = trackerPanelSizeProfile !== "compact";
+    const showExpandedGhostCard = trackerPanelSizeProfile === "expanded" && compactEntries.length === 1;
     const renderCharacterCard = ({
       character,
       cardKey,
@@ -98,6 +111,9 @@ export function CharacterTrackerPanel({
         characterPicture={characterPicture}
         profileColors={profileColors}
         trackerPanelSide={trackerPanelSide}
+        trackerPanelSizeProfile={trackerPanelSizeProfile}
+        thoughtBubbleDisplay={thoughtBubbleDisplay}
+        dockedThoughtsAlwaysVisible={dockedThoughtsAlwaysVisible}
         onUpdate={(updated) => onUpdateCharacter(index, updated)}
         onRemove={() => onRemoveCharacter(index)}
         deleteMode={deleteMode}
@@ -114,13 +130,14 @@ export function CharacterTrackerPanel({
         {compactEntries.length > 0 && (
           <div
             className={cn(
-              "grid grid-cols-1 items-start gap-1 px-1",
-              compactEntries.length > 1 && "@min-[220px]:grid-cols-2",
-              compactEntries.length > 2 && "@min-[420px]:grid-cols-3",
+              "grid grid-cols-1 items-start gap-1 px-1 pb-1",
+              allowCompactCardColumns && (compactEntries.length > 1 || showExpandedGhostCard) && "@min-[220px]:grid-cols-2",
+              allowCompactCardColumns && compactEntries.length > 2 && "@min-[420px]:grid-cols-3",
               featuredEntries.length === 0 && "pt-1",
             )}
           >
             {compactEntries.map(renderCharacterCard)}
+            {showExpandedGhostCard && <div aria-hidden="true" className={EXPANDED_COMPACT_CARD_GHOST_CLASS} />}
           </div>
         )}
       </div>

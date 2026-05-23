@@ -1,4 +1,4 @@
-use super::{avatars, lorebook_images, shared};
+use super::{avatars, game_state_snapshots, lorebook_images, shared};
 use crate::builtins::is_protected_record;
 use crate::state::AppState;
 use marinara_core::AppError;
@@ -119,19 +119,36 @@ pub fn storage_delete(
             "Built-in Professor Mari cannot be deleted",
         ));
     }
-    let existing = media_owned_record(&state, &entity, &id)?;
+    let existing = owned_record_for_delete(&state, &entity, &id)?;
+    let message_chat_id = if entity == "messages" {
+        existing
+            .as_ref()
+            .and_then(|record| record.get("chatId"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    } else {
+        None
+    };
     let deleted = state.storage.delete(&entity, &id)?;
     if deleted {
         if let Some(record) = existing.as_ref() {
             remove_owned_media(&state, &entity, record);
         }
+        if let Some(chat_id) = message_chat_id {
+            game_state_snapshots::delete_tracker_snapshots_for_message(&state, &chat_id, &id)?;
+            game_state_snapshots::sync_chat_game_state_to_visible_tracker(&state, &chat_id)?;
+        }
     }
     Ok(json!({ "deleted": deleted }))
 }
 
-fn media_owned_record(state: &AppState, entity: &str, id: &str) -> Result<Option<Value>, AppError> {
+fn owned_record_for_delete(
+    state: &AppState,
+    entity: &str,
+    id: &str,
+) -> Result<Option<Value>, AppError> {
     match entity {
-        "characters" | "personas" | "lorebooks" => state.storage.get(entity, id),
+        "characters" | "personas" | "lorebooks" | "messages" => state.storage.get(entity, id),
         _ => Ok(None),
     }
 }

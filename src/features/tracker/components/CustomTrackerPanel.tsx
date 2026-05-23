@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 import { SlidersHorizontal, X } from "lucide-react";
 import type { CustomTrackerField } from "../../../engine/contracts/types/game-state";
 import { cn } from "../../../shared/lib/utils";
-import { visibleText } from "./tracker-data-sidebar.helpers";
+import {
+  appendTrackerListItem,
+  createManualCustomTrackerField,
+  removeTrackerListItem,
+  replaceTrackerListItem,
+} from "../../world-state/lib/tracker-state-edits";
+import { visibleText } from "./tracker-display.helpers";
 import {
   AddRowButton,
   EmptySection,
@@ -23,13 +29,11 @@ function CustomFieldList({
   if (fields.length === 0 && !onUpdate) return <EmptySection>No custom fields tracked.</EmptySection>;
   const updateField = (index: number, updated: CustomTrackerField) => {
     if (!onUpdate) return;
-    const next = [...fields];
-    next[index] = updated;
-    onUpdate(next);
+    onUpdate(replaceTrackerListItem(fields, index, updated));
   };
   const removeField = (index: number) => {
     if (!onUpdate) return;
-    onUpdate(fields.filter((_, fieldIndex) => fieldIndex !== index));
+    onUpdate(removeTrackerListItem(fields, index));
   };
   return (
     <div className="group/statbox relative">
@@ -91,6 +95,7 @@ function CustomFieldList({
                   onClick={() => removeField(index)}
                   className="absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--background)]/85 text-[var(--destructive)] shadow-sm ring-1 ring-[var(--border)]/70 backdrop-blur-sm transition-all hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-[var(--primary)] active:scale-90"
                   title="Remove field"
+                  aria-label={`Remove ${field.name || "field"}`}
                 >
                   <X size="0.5625rem" />
                 </button>
@@ -132,7 +137,7 @@ export function CustomTrackerPanel({
             addMode ? (
               <AddRowButton
                 title="Add custom stat"
-                onClick={() => onUpdateFields([...fields, { name: "New Field", value: "" }])}
+                onClick={() => onUpdateFields(appendTrackerListItem(fields, createManualCustomTrackerField()))}
                 className="h-4 w-4 rounded-sm"
               />
             ) : undefined

@@ -1,3 +1,4 @@
+use super::game_state_snapshots;
 use super::shared::*;
 use super::*;
 use crate::builtins::is_protected_record;
@@ -65,6 +66,10 @@ fn is_hidden_from_ai(message: &Value) -> bool {
         .and_then(|object| object.get("hiddenFromAi"))
         .and_then(Value::as_bool)
         .unwrap_or(false)
+}
+
+fn active_swipe_index(message: &Value) -> i64 {
+    swipe_index_value(message)
 }
 
 fn merge_chat_metadata(
@@ -169,7 +174,7 @@ pub(crate) fn set_active_swipe(
 
 pub(crate) fn delete_swipe(
     state: &AppState,
-    _chat_id: &str,
+    chat_id: &str,
     message_id: &str,
     index: &str,
 ) -> AppResult<Value> {
@@ -177,6 +182,7 @@ pub(crate) fn delete_swipe(
         .parse::<usize>()
         .map_err(|_| AppError::invalid_input("Invalid swipe index"))?;
     let mut message = get_required(state, "messages", message_id)?;
+    let mut removed_swipe = false;
     {
         let object = message
             .as_object_mut()
@@ -184,11 +190,22 @@ pub(crate) fn delete_swipe(
         if let Some(swipes) = object.get_mut("swipes").and_then(Value::as_array_mut) {
             if index < swipes.len() {
                 swipes.remove(index);
+                removed_swipe = true;
             }
         }
     }
     materialize_message_swipe_fields(&mut message);
-    state.storage.patch("messages", message_id, message)
+    let updated = state.storage.patch("messages", message_id, message)?;
+    if removed_swipe {
+        game_state_snapshots::delete_tracker_snapshot_swipe(
+            state,
+            chat_id,
+            message_id,
+            index as i64,
+        )?;
+        game_state_snapshots::sync_chat_game_state_to_visible_tracker(state, chat_id)?;
+    }
+    Ok(updated)
 }
 
 pub(crate) fn bulk_delete_messages(
@@ -204,8 +221,12 @@ pub(crate) fn bulk_delete_messages(
     let mut deleted = 0;
     for id in ids.iter().filter_map(Value::as_str) {
         if state.storage.delete("messages", id)? {
+            game_state_snapshots::delete_tracker_snapshots_for_message(state, chat_id, id)?;
             deleted += 1;
         }
+    }
+    if deleted > 0 {
+        game_state_snapshots::sync_chat_game_state_to_visible_tracker(state, chat_id)?;
     }
     touch_chat(state, chat_id)?;
     Ok(json!({ "deleted": deleted }))
@@ -471,17 +492,89 @@ pub(crate) fn branch_chat(state: &AppState, chat_id: &str, body: Value) -> AppRe
         Value::String(format!("{base_name} Branch")),
     );
     object.insert("groupId".to_string(), Value::String(group_id));
-    let new_chat = state.storage.create("chats", chat)?;
+    let source_has_tracker_snapshots =
+        game_state_snapshots::latest_tracker_snapshot(state, chat_id)?.is_some();
+    let mut new_chat = state.storage.create("chats", chat)?;
     let up_to = body.get("upToMessageId").and_then(Value::as_str);
+    let mut visible_tracker_target: Option<(String, i64)> = None;
     for mut message in messages_for_chat(state, chat_id)? {
+        let source_message_id = message
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(ToOwned::to_owned);
+        let source_role = message
+            .get("role")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
         let stop = up_to.is_some_and(|id| message.get("id").and_then(Value::as_str) == Some(id));
         if let Some(obj) = message.as_object_mut() {
             obj.remove("id");
             obj.insert("chatId".to_string(), Value::String(new_chat_id.clone()));
         }
-        state.storage.create("messages", message)?;
+        let created = state.storage.create("messages", message)?;
+        let target_message_id = created
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(ToOwned::to_owned);
+        if let (Some(source_message_id), Some(target_message_id)) =
+            (source_message_id, target_message_id)
+        {
+            game_state_snapshots::copy_tracker_snapshots_for_message(
+                state,
+                chat_id,
+                &new_chat_id,
+                &source_message_id,
+                &target_message_id,
+            )?;
+            if source_role.as_deref() == Some("assistant") {
+                let swipe_index = active_swipe_index(&created);
+                if game_state_snapshots::tracker_snapshot_for_target(
+                    state,
+                    &new_chat_id,
+                    &target_message_id,
+                    swipe_index,
+                )?
+                .is_some()
+                {
+                    visible_tracker_target = Some((target_message_id, swipe_index));
+                }
+            }
+        }
         if stop {
             break;
+        }
+    }
+    if source_has_tracker_snapshots {
+        if let Some((message_id, swipe_index)) = visible_tracker_target {
+            let visible_game_state = game_state_snapshots::tracker_snapshot_for_target(
+                state,
+                &new_chat_id,
+                &message_id,
+                swipe_index,
+            )?
+            .unwrap_or(Value::Null);
+            new_chat = state.storage.patch(
+                "chats",
+                &new_chat_id,
+                json!({ "gameState": visible_game_state }),
+            )?;
+        } else if !chat_game_state_is_bootstrap(&new_chat) {
+            new_chat =
+                state
+                    .storage
+                    .patch("chats", &new_chat_id, json!({ "gameState": Value::Null }))?;
+        } else if let Some(bootstrap_game_state) =
+            game_state_snapshots::copy_bootstrap_tracker_snapshot(state, chat_id, &new_chat_id)?
+        {
+            new_chat = state.storage.patch(
+                "chats",
+                &new_chat_id,
+                json!({ "gameState": bootstrap_game_state }),
+            )?;
         }
     }
     Ok(new_chat)
@@ -493,6 +586,7 @@ pub(crate) fn delete_chat_with_messages(state: &AppState, chat_id: &str) -> AppR
             "Built-in Professor Mari cannot be deleted",
         ));
     }
+    game_state_snapshots::delete_tracker_snapshots_for_chat(state, chat_id)?;
     for message in messages_for_chat(state, chat_id)? {
         if let Some(id) = message.get("id").and_then(Value::as_str) {
             state.storage.delete("messages", id)?;
@@ -500,4 +594,14 @@ pub(crate) fn delete_chat_with_messages(state: &AppState, chat_id: &str) -> AppR
     }
     state.storage.delete("chats", chat_id)?;
     Ok(())
+}
+
+fn chat_game_state_is_bootstrap(chat: &Value) -> bool {
+    chat.get("gameState")
+        .and_then(Value::as_object)
+        .and_then(|game_state| game_state.get("messageId"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .is_empty()
 }

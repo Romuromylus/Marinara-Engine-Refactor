@@ -54,7 +54,7 @@ import { Modal } from "../../../shared/components/ui/Modal";
 import { useEncounter } from "../../encounter/hooks/use-encounter";
 import { useScene } from "../../roleplay/hooks/use-scene";
 import { useEncounterStore } from "../../../shared/stores/encounter.store";
-import { worldStateApi } from "../../world-state/api/world-state-api";
+import { worldStateApi, type WorldStateTarget } from "../../world-state/api/world-state-api";
 import { useTranslationStore } from "../../../shared/stores/translation.store";
 import { ttsService } from "../../../shared/lib/tts-service";
 import { useTTSConfig } from "../../../shared/hooks/use-tts";
@@ -659,10 +659,10 @@ export function ModeSurface() {
   const expressionAgentEnabled = enabledAgentTypes.has("expression");
   const shouldRefreshGameStateOnSwipe = isGameChat || Boolean(chatMeta.enableAgents);
 
-  const refreshVisibleGameState = useCallback(async () => {
+  const refreshVisibleGameState = useCallback(async (target?: WorldStateTarget | null) => {
     if (!shouldRefreshGameStateOnSwipe || !activeChatId) return;
     try {
-      const gs = await worldStateApi.get(activeChatId);
+      const gs = target ? await worldStateApi.get(activeChatId, target) : await worldStateApi.get(activeChatId);
       if (useChatStore.getState().activeChatId !== activeChatId) return;
       useGameStateStore.getState().setGameState(gs ?? null);
     } catch {
@@ -682,12 +682,59 @@ export function ModeSurface() {
   const deleteDialogActiveSwipeIndex = deleteDialogMessage?.activeSwipeIndex ?? 0;
   const deleteDialogSwipeCount = deleteDialogMessage?.swipeCount ?? 0;
 
-  const handleDeleteConfirm = useCallback(() => {
-    if (deleteDialogMessageId) {
-      deleteMessage.mutate(deleteDialogMessageId);
+  const flushTrackerPatchesForTimelineAction = useCallback(async (actionId: number, errorMessage: string) => {
+    const flushPatch = useGameStateStore.getState().flushPatch;
+    if (!flushPatch) return true;
+    try {
+      await flushPatch();
+      return true;
+    } catch {
+      if (swipeActionSeq.current === actionId) {
+        toast.error(errorMessage);
+      }
+      return false;
     }
+  }, []);
+
+  const handleDeleteConfirm = useCallback(() => {
+    const messageId = deleteDialogMessageId;
     setDeleteDialogMessageId(null);
-  }, [deleteDialogMessageId, deleteMessage]);
+    if (!messageId) return;
+    const actionId = ++swipeActionSeq.current;
+    const refreshChatId = activeChatId;
+    void (async () => {
+      const gameStateStore = useGameStateStore.getState();
+      if (shouldRefreshGameStateOnSwipe && refreshChatId) gameStateStore.setRefreshingChat(refreshChatId);
+      try {
+        if (
+          !(await flushTrackerPatchesForTimelineAction(
+            actionId,
+            "Could not save tracker changes before deleting the message.",
+          ))
+        ) {
+          return;
+        }
+        if (swipeActionSeq.current !== actionId) return;
+        await deleteMessage.mutateAsync(messageId);
+        if (swipeActionSeq.current !== actionId) return;
+        await refreshVisibleGameState();
+      } catch {
+        if (swipeActionSeq.current !== actionId) return;
+        toast.error("Could not delete the message.");
+      } finally {
+        if (swipeActionSeq.current === actionId) {
+          useGameStateStore.getState().clearRefreshingChat(refreshChatId);
+        }
+      }
+    })();
+  }, [
+    activeChatId,
+    deleteDialogMessageId,
+    deleteMessage,
+    flushTrackerPatchesForTimelineAction,
+    refreshVisibleGameState,
+    shouldRefreshGameStateOnSwipe,
+  ]);
 
   const handleDeleteSwipe = useCallback(() => {
     const messageId = deleteDialogMessageId;
@@ -700,16 +747,13 @@ export function ModeSurface() {
       const gameStateStore = useGameStateStore.getState();
       if (shouldRefreshGameStateOnSwipe && refreshChatId) gameStateStore.setRefreshingChat(refreshChatId);
       try {
-        const flushPatch = useGameStateStore.getState().flushPatch;
-        if (flushPatch) {
-          try {
-            await flushPatch();
-          } catch {
-            if (swipeActionSeq.current === actionId) {
-              toast.error("Could not save tracker changes before deleting the swipe.");
-            }
-            return;
-          }
+        if (
+          !(await flushTrackerPatchesForTimelineAction(
+            actionId,
+            "Could not save tracker changes before deleting the swipe.",
+          ))
+        ) {
+          return;
         }
         if (swipeActionSeq.current !== actionId) return;
         await deleteSwipe.mutateAsync({ messageId, index });
@@ -730,6 +774,7 @@ export function ModeSurface() {
     deleteDialogCanDeleteSwipe,
     deleteDialogMessageId,
     deleteSwipe,
+    flushTrackerPatchesForTimelineAction,
     refreshVisibleGameState,
     shouldRefreshGameStateOnSwipe,
   ]);
@@ -777,13 +822,47 @@ export function ModeSurface() {
   );
 
   const handleBulkDelete = useCallback(() => {
-    if (selectedMessageIds.size > 0) {
-      deleteMessages.mutate([...selectedMessageIds]);
-    }
-    setMultiSelectMode(false);
-    setSelectedMessageIds(new Set());
-    setSelectionAnchorIndex(null);
-  }, [selectedMessageIds, deleteMessages]);
+    const messageIds = [...selectedMessageIds];
+    if (messageIds.length === 0) return;
+    const actionId = ++swipeActionSeq.current;
+    const refreshChatId = activeChatId;
+    void (async () => {
+      const gameStateStore = useGameStateStore.getState();
+      if (shouldRefreshGameStateOnSwipe && refreshChatId) gameStateStore.setRefreshingChat(refreshChatId);
+      try {
+        if (
+          !(await flushTrackerPatchesForTimelineAction(
+            actionId,
+            "Could not save tracker changes before deleting messages.",
+          ))
+        ) {
+          return;
+        }
+        if (swipeActionSeq.current !== actionId) return;
+        await deleteMessages.mutateAsync(messageIds);
+        if (swipeActionSeq.current !== actionId) return;
+        await refreshVisibleGameState();
+        if (swipeActionSeq.current !== actionId) return;
+        setMultiSelectMode(false);
+        setSelectedMessageIds(new Set());
+        setSelectionAnchorIndex(null);
+      } catch {
+        if (swipeActionSeq.current !== actionId) return;
+        toast.error("Could not delete messages.");
+      } finally {
+        if (swipeActionSeq.current === actionId) {
+          useGameStateStore.getState().clearRefreshingChat(refreshChatId);
+        }
+      }
+    })();
+  }, [
+    activeChatId,
+    selectedMessageIds,
+    deleteMessages,
+    flushTrackerPatchesForTimelineAction,
+    refreshVisibleGameState,
+    shouldRefreshGameStateOnSwipe,
+  ]);
 
   const handleCancelMultiSelect = useCallback(() => {
     setMultiSelectMode(false);
@@ -905,16 +984,13 @@ export function ModeSurface() {
         const gameStateStore = useGameStateStore.getState();
         if (shouldRefreshGameStateOnSwipe && refreshChatId) gameStateStore.setRefreshingChat(refreshChatId);
         try {
-          const flushPatch = useGameStateStore.getState().flushPatch;
-          if (flushPatch) {
-            try {
-              await flushPatch();
-            } catch {
-              if (swipeActionSeq.current === actionId) {
-                toast.error("Could not save tracker changes before switching swipes.");
-              }
-              return;
-            }
+          if (
+            !(await flushTrackerPatchesForTimelineAction(
+              actionId,
+              "Could not save tracker changes before switching swipes.",
+            ))
+          ) {
+            return;
           }
           if (swipeActionSeq.current !== actionId) return;
           const previousMutation = pendingSwipeMutationsRef.current.get(messageId);
@@ -940,7 +1016,7 @@ export function ModeSurface() {
             }
           }
           if (swipeActionSeq.current !== actionId) return;
-          await refreshVisibleGameState();
+          await refreshVisibleGameState({ messageId, swipeIndex: index });
         } catch {
           if (swipeActionSeq.current !== actionId) return;
           toast.error("Could not switch swipes.");
@@ -951,7 +1027,13 @@ export function ModeSurface() {
         }
       })();
     },
-    [activeChatId, setActiveSwipe, refreshVisibleGameState, shouldRefreshGameStateOnSwipe],
+    [
+      activeChatId,
+      setActiveSwipe,
+      flushTrackerPatchesForTimelineAction,
+      refreshVisibleGameState,
+      shouldRefreshGameStateOnSwipe,
+    ],
   );
 
   const handleEdit = useCallback(
