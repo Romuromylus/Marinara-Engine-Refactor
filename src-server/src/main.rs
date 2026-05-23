@@ -1426,15 +1426,6 @@ async fn auth_middleware(State(state): State<AppState>, request: Request, next: 
         return next.run(request).await;
     }
     let path = request.uri().path().to_string();
-    // Temporary debug to confirm exactly what the middleware sees in prod
-    // for the Phase 6c verification; remove once the auth flow is verified
-    // end-to-end on the live deploy.
-    tracing::warn!(
-        target = "marinara_server::auth",
-        method = %request.method(),
-        path = %path,
-        "auth_middleware request seen"
-    );
     if is_auth_exempt_path(&path) {
         return next.run(request).await;
     }
