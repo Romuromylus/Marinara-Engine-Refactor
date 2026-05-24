@@ -1,18 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { galleryApi } from "../../../shared/api/image-generation-api";
 import { storageApi } from "../../../shared/api/storage-api";
-
-export interface ChatImage {
-  id: string;
-  chatId: string;
-  url: string;
-  prompt?: string | null;
-  model?: string | null;
-  provider?: string | null;
-  width?: number | null;
-  height?: number | null;
-  createdAt?: string;
-}
+import type { ChatImage } from "../../../shared/types/gallery";
 
 export function useGalleryImages(chatId: string | null) {
   return useQuery({

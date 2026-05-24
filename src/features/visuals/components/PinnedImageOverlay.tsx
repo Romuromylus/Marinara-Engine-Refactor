@@ -4,7 +4,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Move, Download, X } from "lucide-react";
 import { useGalleryStore } from "../../../shared/stores/gallery.store";
-import type { ChatImage } from "../../gallery/hooks/use-gallery";
+import type { ChatImage } from "../../../shared/types/gallery";
 
 function PinnedImageViewer({ image, onClose }: { image: ChatImage; onClose: () => void }) {
   const isMobile = window.innerWidth < 640;

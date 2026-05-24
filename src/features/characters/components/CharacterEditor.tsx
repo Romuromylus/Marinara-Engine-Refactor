@@ -4,7 +4,7 @@
 // Sections: Metadata, Description, Personality, Backstory,
 //           Appearance, Scenario, Dialogue, Advanced, Lorebook
 // ──────────────────────────────────────────────
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -160,6 +160,15 @@ export function CharacterEditor() {
   const uploadPersonaAvatar = useUploadPersonaAvatar();
   const { startChatFromCharacter, isStartingChat } = useStartChatFromCharacter();
   const { data: connectionsList } = useConnections();
+  const imageConnections = useMemo(
+    () =>
+      Array.isArray(connectionsList)
+        ? (connectionsList as Array<{ id: string; name: string; model?: string | null; provider?: string | null }>).filter(
+            (connection) => connection.provider === "image_generation",
+          )
+        : [],
+    [connectionsList],
+  );
 
   const [activeTab, setActiveTab] = useState<TabId>("metadata");
   const [formData, setFormData] = useState<CharacterData | null>(null);
@@ -192,9 +201,7 @@ export function CharacterEditor() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const latestAvatarUploadRef = useRef<{ token: string; characterId: string } | null>(null);
   const avatarUploadInFlightRef = useRef(false);
-  const imageGenerationAvailable =
-    Array.isArray(connectionsList) &&
-    (connectionsList as Array<{ provider?: string }>).some((connection) => connection.provider === "image_generation");
+  const imageGenerationAvailable = imageConnections.length > 0;
 
   useEffect(() => {
     activeCharacterIdRef.current = characterId;
@@ -691,6 +698,7 @@ export function CharacterEditor() {
           ((formData.extensions.appearance as string | undefined) || formData.description || formData.personality) ?? ""
         }
         defaultAvatarUrl={avatarPreview}
+        imageConnections={imageConnections}
         onClose={() => setAvatarGeneratorOpen(false)}
         onUseAvatar={handleGeneratedAvatar}
       />
@@ -918,6 +926,7 @@ export function CharacterEditor() {
                 characterId={characterId}
                 defaultAppearance={(formData.extensions.appearance as string) ?? formData.description}
                 defaultAvatarUrl={avatarPreview}
+                imageConnections={imageConnections}
               />
             )}
             {activeTab === "gallery" && characterId && (
@@ -2080,10 +2089,12 @@ function SpritesTab({
   characterId,
   defaultAppearance,
   defaultAvatarUrl,
+  imageConnections,
 }: {
   characterId: string;
   defaultAppearance?: string;
   defaultAvatarUrl?: string | null;
+  imageConnections: Array<{ id: string; name: string; model?: string | null; provider?: string | null }>;
 }) {
   type SpriteCategory = "expressions" | "full-body";
 
@@ -2818,6 +2829,8 @@ function SpritesTab({
         existingExpressionNames={portraitExpressionNames}
         defaultAppearance={defaultAppearance}
         defaultAvatarUrl={defaultAvatarUrl}
+        imageConnections={imageConnections}
+        spriteCapabilities={spriteCapabilities}
         onSpritesGenerated={() => {
           queryClient.invalidateQueries({ queryKey: spriteKeys.list(characterId) });
         }}

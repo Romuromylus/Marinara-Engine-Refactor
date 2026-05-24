@@ -7,10 +7,10 @@ import {
   useGalleryImages,
   useUploadGalleryImage,
   useDeleteGalleryImage,
-  type ChatImage,
 } from "../../gallery/hooks/use-gallery";
 import { useGalleryStore } from "../../../shared/stores/gallery.store";
 import { ImagePromptPanel } from "./ImagePromptPanel";
+import type { ChatImage } from "../../../shared/types/gallery";
 
 interface ChatGalleryProps {
   chatId: string;

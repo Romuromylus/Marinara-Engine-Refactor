@@ -6,7 +6,6 @@ import type { AvatarCropValue } from "../lib/utils";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { Chat, ChatMode, Message } from "../../engine/contracts/types/chat";
 import { useAgentStore } from "./agent.store";
-import { useGameStateStore } from "../../features/world-state/stores/world-state.store";
 
 const STORAGE_KEY = "marinara-active-chat-id";
 const DRAFTS_KEY = "marinara-input-drafts";
@@ -18,6 +17,20 @@ type NewChatSetupIntent = {
   openWizard: boolean;
   shortcutMode: boolean;
 };
+
+type ChatSwitchHandler = (nextChatId: string | null, previousChatId: string | null) => void;
+const chatSwitchHandlers = new Set<ChatSwitchHandler>();
+
+export function registerChatSwitchHandler(handler: ChatSwitchHandler): () => void {
+  chatSwitchHandlers.add(handler);
+  return () => chatSwitchHandlers.delete(handler);
+}
+
+function notifyChatSwitchHandlers(nextChatId: string | null, previousChatId: string | null) {
+  for (const handler of chatSwitchHandlers) {
+    handler(nextChatId, previousChatId);
+  }
+}
 
 /** Read drafts from localStorage so typed input survives reloads, tab closes, and app restarts. */
 function loadDrafts(): Map<string, string> {
@@ -234,7 +247,7 @@ export const useChatStore = create<ChatState>()(
       // same chat should not blow away loaded tracker data.
       if (id !== prev) {
         useAgentStore.getState().reset();
-        useGameStateStore.getState().setGameState(null);
+        notifyChatSwitchHandlers(id, prev);
         // Background is NOT cleared here — it's managed by ChatArea's restore effect.
         // Clearing it would cause a black flash and wipe the background for new chats.
         // Restore per-chat typing/delayed indicators for the newly active chat

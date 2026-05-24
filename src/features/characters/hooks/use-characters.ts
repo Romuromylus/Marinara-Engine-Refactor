@@ -6,6 +6,7 @@ import { storageApi } from "../../../shared/api/storage-api";
 import { invokeTauri } from "../../../shared/api/tauri-client";
 import { galleryApi, spriteApi } from "../../../shared/api/image-generation-api";
 import type { CharacterCardVersion } from "../../../engine/contracts/types/character";
+import type { SpriteCapabilities, SpriteCleanupEngine } from "../../../shared/types/sprite-capabilities";
 
 export const characterKeys = {
   all: ["characters"] as const,
@@ -137,23 +138,6 @@ export interface SpriteInfo {
   expression: string;
   filename: string;
   url: string;
-}
-
-export type SpriteCleanupEngine = "auto" | "builtin";
-
-export interface SpriteCapabilities {
-  imageProcessingAvailable: boolean;
-  spriteGenerationAvailable: boolean;
-  backgroundRemovalAvailable: boolean;
-  reason: string | null;
-  cleanupEngine?: {
-    engine: SpriteCleanupEngine;
-    installed: boolean;
-    command: string | null;
-    source: "env" | "local" | "path" | null;
-    runtimeDir: string;
-    reason: string | null;
-  };
 }
 
 export interface SpriteCleanupResult {

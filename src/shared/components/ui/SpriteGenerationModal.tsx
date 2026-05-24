@@ -7,11 +7,11 @@ import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { X, Loader2, Check, ImagePlus, Sparkles, ArrowLeft, Crop, RotateCcw } from "lucide-react";
 import { Modal } from "./Modal";
 import { cn } from "../../lib/utils";
-import { useConnections } from "../../../features/connections/hooks/use-connections";
-import { useSpriteCapabilities } from "../../../features/characters/hooks/use-characters";
 import { useUIStore } from "../../stores/ui.store";
 import { spriteApi } from "../../api/image-generation-api";
 import { ImagePromptReviewModal, type ImagePromptOverride, type ImagePromptReviewItem } from "./ImagePromptReviewModal";
+import type { ImageGenerationConnectionOption } from "../../types/image-generation";
+import type { SpriteCapabilities } from "../../types/sprite-capabilities";
 
 // ── Types ──
 
@@ -28,6 +28,8 @@ interface SpriteGenerationModalProps {
   defaultAppearance?: string;
   /** Pre-filled avatar (base64 data URL) for reference */
   defaultAvatarUrl?: string | null;
+  imageConnections: ImageGenerationConnectionOption[];
+  spriteCapabilities?: SpriteCapabilities | null;
   /** Callback after sprites are saved */
   onSpritesGenerated?: () => void;
 }
@@ -486,6 +488,8 @@ export function SpriteGenerationModal({
   existingExpressionNames = [],
   defaultAppearance,
   defaultAvatarUrl,
+  imageConnections,
+  spriteCapabilities,
   onSpritesGenerated,
 }: SpriteGenerationModalProps) {
   // Step: 0 = configure, 1 = generating, 2 = preview & label
@@ -531,15 +535,7 @@ export function SpriteGenerationModal({
   const promptReviewResolveRef = useRef<((overrides: ImagePromptOverride[] | null) => void) | null>(null);
   const reviewImagePromptsBeforeSend = useUIStore((s) => s.reviewImagePromptsBeforeSend);
 
-  // Connections
-  const { data: connectionsList } = useConnections();
-  const { data: spriteCapabilities } = useSpriteCapabilities();
-  const imageConnections = useMemo(() => {
-    if (!connectionsList) return [];
-    return (connectionsList as Array<{ id: string; name: string; model?: string; provider?: string }>).filter(
-      (c) => c.provider === "image_generation",
-    );
-  }, [connectionsList]);
+  // Connections and capabilities are injected by feature-owned containers.
   const spriteGenerationUnavailable = spriteCapabilities?.spriteGenerationAvailable === false;
   const spriteGenerationReason = spriteCapabilities?.reason ?? "Sprite generation is unavailable on this platform.";
   const cleanupEngineUnavailable = spriteCapabilities?.cleanupEngine?.installed === false;

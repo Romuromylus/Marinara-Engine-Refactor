@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
-import { useRegexScripts, type RegexScriptRow } from "../../features/agents/hooks/use-regex-scripts";
-import { applyRegexReplacement } from "../../engine/shared/regex/regex-replacement";
+import { applyRegexReplacement } from "../../../engine/shared/regex/regex-replacement";
+import { useRegexScripts, type RegexScriptRow } from "./use-regex-scripts";
 
 type RegexPlacement = "ai_output" | "user_input";
 

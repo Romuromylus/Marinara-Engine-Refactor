@@ -4,7 +4,7 @@
 // Sections: Description, Personality, Backstory,
 //           Appearance, Scenario
 // ──────────────────────────────────────────────
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { usePersonas, useUpdatePersona, useUploadPersonaAvatar, useDeletePersona } from "../../characters/hooks/use-characters";
 import { useConnections } from "../../connections/hooks/use-connections";
@@ -142,6 +142,15 @@ export function PersonaEditor() {
   const uploadAvatar = useUploadPersonaAvatar();
   const deletePersona = useDeletePersona();
   const { data: connectionsList } = useConnections();
+  const imageConnections = useMemo(
+    () =>
+      Array.isArray(connectionsList)
+        ? (connectionsList as Array<{ id: string; name: string; model?: string | null; provider?: string | null }>).filter(
+            (connection) => connection.provider === "image_generation",
+          )
+        : [],
+    [connectionsList],
+  );
 
   const [activeTab, setActiveTab] = useState<TabId>("description");
   const [formData, setFormData] = useState<PersonaFormData | null>(null);
@@ -158,9 +167,7 @@ export function PersonaEditor() {
   const [saving, setSaving] = useState(false);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageGenerationAvailable =
-    Array.isArray(connectionsList) &&
-    (connectionsList as Array<{ provider?: string }>).some((connection) => connection.provider === "image_generation");
+  const imageGenerationAvailable = imageConnections.length > 0;
 
   // Find the persona from the list
   const rawPersona = (allPersonas as PersonaRow[] | undefined)?.find((p) => p.id === personaId);
@@ -390,6 +397,7 @@ export function PersonaEditor() {
         entityName={formData.name}
         defaultAppearance={formData.appearance || formData.description || formData.personality}
         defaultAvatarUrl={avatarPreview}
+        imageConnections={imageConnections}
         onClose={() => setAvatarGeneratorOpen(false)}
         onUseAvatar={handleGeneratedAvatar}
       />
@@ -620,6 +628,7 @@ export function PersonaEditor() {
                 personaId={personaId}
                 defaultAppearance={formData.appearance || formData.description}
                 defaultAvatarUrl={avatarPreview}
+                imageConnections={imageConnections}
               />
             )}
             {activeTab === "stats" && <PersonaStatsTab formData={formData} updateField={updateField} />}
@@ -651,10 +660,12 @@ function PersonaSpritesTab({
   personaId,
   defaultAppearance,
   defaultAvatarUrl,
+  imageConnections,
 }: {
   personaId: string;
   defaultAppearance?: string;
   defaultAvatarUrl?: string | null;
+  imageConnections: Array<{ id: string; name: string; model?: string | null; provider?: string | null }>;
 }) {
   type SpriteCategory = "expressions" | "full-body";
 
@@ -1359,6 +1370,8 @@ function PersonaSpritesTab({
         existingExpressionNames={portraitExpressionNames}
         defaultAppearance={defaultAppearance}
         defaultAvatarUrl={defaultAvatarUrl}
+        imageConnections={imageConnections}
+        spriteCapabilities={spriteCapabilities}
         onSpritesGenerated={() => {
           queryClient.invalidateQueries({ queryKey: spriteKeys.list(personaId) });
         }}

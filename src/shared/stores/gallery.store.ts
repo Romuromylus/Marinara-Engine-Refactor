@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatImage } from "../../features/gallery/hooks/use-gallery";
+import type { ChatImage } from "../types/gallery";
 
 interface GalleryStore {
   pinnedImages: ChatImage[];

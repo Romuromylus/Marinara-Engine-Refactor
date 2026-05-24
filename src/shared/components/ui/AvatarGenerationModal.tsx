@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, ImagePlus, Loader2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
-import { useConnections } from "../../../features/connections/hooks/use-connections";
 import { useUIStore } from "../../stores/ui.store";
 import { imageGenerationApi } from "../../api/image-generation-api";
 import { cn } from "../../lib/utils";
 import { urlToDataUrl } from "../../lib/url-blob";
 import { Modal } from "./Modal";
 import { ImagePromptReviewModal, type ImagePromptOverride, type ImagePromptReviewItem } from "./ImagePromptReviewModal";
+import type { ImageGenerationConnectionOption } from "../../types/image-generation";
 
 type AvatarGenerationModalProps = {
   open: boolean;
@@ -15,6 +15,7 @@ type AvatarGenerationModalProps = {
   entityName: string;
   defaultAppearance?: string;
   defaultAvatarUrl?: string | null;
+  imageConnections: ImageGenerationConnectionOption[];
   onClose: () => void;
   onUseAvatar: (avatarDataUrl: string) => Promise<void> | void;
 };
@@ -32,10 +33,10 @@ export function AvatarGenerationModal({
   entityName,
   defaultAppearance,
   defaultAvatarUrl,
+  imageConnections,
   onClose,
   onUseAvatar,
 }: AvatarGenerationModalProps) {
-  const { data: connectionsList } = useConnections();
   const reviewImagePromptsBeforeSend = useUIStore((s) => s.reviewImagePromptsBeforeSend);
   const imagePortraitWidth = useUIStore((s) => s.imagePortraitWidth);
   const imagePortraitHeight = useUIStore((s) => s.imagePortraitHeight);
@@ -50,12 +51,6 @@ export function AvatarGenerationModal({
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const reviewResolveRef = useRef<((overrides: ImagePromptOverride[] | null) => void) | null>(null);
 
-  const imageConnections = useMemo(() => {
-    if (!connectionsList) return [];
-    return (connectionsList as Array<{ id: string; name: string; model?: string; provider?: string }>).filter(
-      (connection) => connection.provider === "image_generation",
-    );
-  }, [connectionsList]);
   const effectiveConnectionId = connectionId ?? imageConnections[0]?.id ?? null;
 
   useEffect(() => {
