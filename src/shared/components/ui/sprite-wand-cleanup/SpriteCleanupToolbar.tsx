@@ -86,7 +86,7 @@ export function SpriteCleanupToolbar({
           className={navigationButtonClass(tool === "pan")}
           aria-label="Pan"
           aria-pressed={tool === "pan"}
-          title="Drag around while zoomed in"
+          title="Pan (middle mouse drag also pans)"
         >
           <Hand size="0.875rem" />
         </button>

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
   type PointerEvent,
   type WheelEvent,
 } from "react";
@@ -51,6 +52,18 @@ interface UseSpriteCleanupEditorOptions {
   onApply: (cleanedDataUrl: string) => Promise<void> | void;
 }
 
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+
+  if (target instanceof HTMLInputElement) {
+    return !["button", "checkbox", "color", "radio", "range", "reset", "submit"].includes(target.type);
+  }
+
+  return false;
+}
+
 export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSpriteCleanupEditorOptions) {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -79,17 +92,26 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [hoverPoint, setHoverPoint] = useState<HoverPoint | null>(null);
   const [history, setHistoryState] = useState<ImageData[]>([]);
-  // Keep undo history synchronous for repeated undo clicks before React re-renders.
+  const [redoHistory, setRedoHistoryState] = useState<ImageData[]>([]);
+  // Keep history synchronous for repeated undo/redo clicks before React re-renders.
   const historyRef = useRef<ImageData[]>([]);
+  const redoHistoryRef = useRef<ImageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
 
   const setHistory = useCallback((update: ImageData[] | ((prev: ImageData[]) => ImageData[])) => {
     const next = typeof update === "function" ? update(historyRef.current) : update;
     historyRef.current = next;
     setHistoryState(next);
+  }, []);
+
+  const setRedoHistory = useCallback((update: ImageData[] | ((prev: ImageData[]) => ImageData[])) => {
+    const next = typeof update === "function" ? update(redoHistoryRef.current) : update;
+    redoHistoryRef.current = next;
+    setRedoHistoryState(next);
   }, []);
 
   const putCurrentImage = useCallback(() => {
@@ -138,7 +160,9 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
     setStatus(null);
     setHasChanges(false);
     setHistory([]);
+    setRedoHistory([]);
     setHoverPoint(null);
+    setIsPanning(false);
     setPickingBrushColor(false);
     setZoom(1);
     originalImageRef.current = null;
@@ -172,7 +196,7 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
       cancelled = true;
       if (frameId !== null) cancelAnimationFrame(frameId);
     };
-  }, [fitCanvasToStage, imageUrl, restoreImageData, setHistory]);
+  }, [fitCanvasToStage, imageUrl, restoreImageData, setHistory, setRedoHistory]);
 
   const updateHoverPoint = useCallback((event: PointerEvent<HTMLCanvasElement>): CanvasPoint | null => {
     const point = canvasPointFromClient(canvasRef.current, event.clientX, event.clientY);
@@ -188,8 +212,13 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
   }, []);
 
   const pushHistory = useCallback((snapshot: ImageData) => {
+    setRedoHistory([]);
     setHistory((prev) => [...prev.slice(Math.max(0, prev.length - MAX_HISTORY + 1)), snapshot]);
-  }, [setHistory]);
+  }, [setHistory, setRedoHistory]);
+
+  const pushRedoHistory = useCallback((snapshot: ImageData) => {
+    setRedoHistory((prev) => [...prev.slice(Math.max(0, prev.length - MAX_HISTORY + 1)), snapshot]);
+  }, [setRedoHistory]);
 
   const applyWandAtPoint = useCallback(
     (point: CanvasPoint) => {
@@ -247,38 +276,61 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
     [pushHistory],
   );
 
-  const commitPanGesture = useCallback((canvas: HTMLCanvasElement | null, pointerId: number) => {
+  const commitPanGesture = useCallback((target: Element | null, pointerId: number) => {
     const gesture = panGestureRef.current;
     if (!gesture || gesture.pointerId !== pointerId) return;
 
     panGestureRef.current = null;
-    if (canvas?.hasPointerCapture(gesture.pointerId)) {
-      canvas.releasePointerCapture(gesture.pointerId);
+    setIsPanning(false);
+    if (target?.hasPointerCapture(gesture.pointerId)) {
+      target.releasePointerCapture(gesture.pointerId);
     }
+  }, []);
+
+  const beginPanGesture = useCallback((event: PointerEvent<HTMLElement>) => {
+    const stage = stageRef.current;
+    if (!stage) return false;
+
+    panGestureRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startScrollLeft: stage.scrollLeft,
+      startScrollTop: stage.scrollTop,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsPanning(true);
+    setStatus("Panning");
+    return true;
+  }, []);
+
+  const updatePanGesture = useCallback((event: PointerEvent<HTMLElement>) => {
+    const panGesture = panGestureRef.current;
+    if (!panGesture || panGesture.pointerId !== event.pointerId) return false;
+
+    const stage = stageRef.current;
+    if (stage) {
+      stage.scrollLeft = panGesture.startScrollLeft - (event.clientX - panGesture.startClientX);
+      stage.scrollTop = panGesture.startScrollTop - (event.clientY - panGesture.startClientY);
+    }
+    return true;
   }, []);
 
   const handleCanvasPointerDown = useCallback(
     (event: PointerEvent<HTMLCanvasElement>) => {
       if (loading || applying) return;
 
+      const isPrimaryButton = event.button === 0;
+      const isMiddleButton = event.button === 1;
+      if (!isPrimaryButton && !isMiddleButton) return;
+
       event.preventDefault();
       const canvas = canvasRef.current;
       if (!canvas) return;
       if (brushGestureRef.current || panGestureRef.current) return;
 
-      if (tool === "pan") {
-        const stage = stageRef.current;
-        if (!stage) return;
-
-        panGestureRef.current = {
-          pointerId: event.pointerId,
-          startClientX: event.clientX,
-          startClientY: event.clientY,
-          startScrollLeft: stage.scrollLeft,
-          startScrollTop: stage.scrollTop,
-        };
-        canvas.setPointerCapture(event.pointerId);
-        setStatus("Panning");
+      if (tool === "pan" || isMiddleButton) {
+        beginPanGesture(event);
         return;
       }
 
@@ -351,18 +403,49 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
       putCurrentImage,
       tool,
       updateHoverPoint,
+      beginPanGesture,
     ],
   );
 
+  const handleStagePointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (loading || applying || event.button !== 1) return;
+      if (brushGestureRef.current || panGestureRef.current) return;
+
+      event.preventDefault();
+      beginPanGesture(event);
+    },
+    [applying, beginPanGesture, loading],
+  );
+
+  const handleStagePointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      updatePanGesture(event);
+    },
+    [updatePanGesture],
+  );
+
+  const handleStagePointerUp = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      commitPanGesture(event.currentTarget, event.pointerId);
+    },
+    [commitPanGesture],
+  );
+
+  const handleStagePointerCancel = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      commitPanGesture(event.currentTarget, event.pointerId);
+    },
+    [commitPanGesture],
+  );
+
+  const handleStageAuxClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.button === 1) event.preventDefault();
+  }, []);
+
   const handleCanvasPointerMove = useCallback(
     (event: PointerEvent<HTMLCanvasElement>) => {
-      const panGesture = panGestureRef.current;
-      if (panGesture && panGesture.pointerId === event.pointerId) {
-        const stage = stageRef.current;
-        if (stage) {
-          stage.scrollLeft = panGesture.startScrollLeft - (event.clientX - panGesture.startClientX);
-          stage.scrollTop = panGesture.startScrollTop - (event.clientY - panGesture.startClientY);
-        }
+      if (updatePanGesture(event)) {
         return;
       }
 
@@ -402,7 +485,7 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
       brushGesture.lastPoint = point;
       putCurrentImage();
     },
-    [putCurrentImage, updateHoverPoint],
+    [putCurrentImage, updateHoverPoint, updatePanGesture],
   );
 
   const handleCanvasPointerUp = useCallback(
@@ -427,23 +510,64 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
 
   const handleUndo = useCallback(() => {
     const previous = historyRef.current[historyRef.current.length - 1];
-    if (!previous) return;
+    const current = currentImageRef.current;
+    if (!previous || !current) return;
 
     setHistory(historyRef.current.slice(0, -1));
+    pushRedoHistory(cloneImageData(current));
     restoreImageData(previous);
     setHasChanges(!imageDataEquals(previous, originalImageRef.current));
     setStatus("Undo applied");
     setError(null);
-  }, [restoreImageData, setHistory]);
+  }, [pushRedoHistory, restoreImageData, setHistory]);
+
+  const handleRedo = useCallback(() => {
+    const next = redoHistoryRef.current[redoHistoryRef.current.length - 1];
+    const current = currentImageRef.current;
+    if (!next || !current) return;
+
+    setRedoHistory(redoHistoryRef.current.slice(0, -1));
+    setHistory((prev) => [...prev.slice(Math.max(0, prev.length - MAX_HISTORY + 1)), cloneImageData(current)]);
+    restoreImageData(next);
+    setHasChanges(!imageDataEquals(next, originalImageRef.current));
+    setStatus("Redo applied");
+    setError(null);
+  }, [restoreImageData, setHistory, setRedoHistory]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (loading || applying || isTextEntryTarget(event.target)) return;
+      if ((!event.ctrlKey && !event.metaKey) || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+      const wantsUndo = key === "z" && !event.shiftKey;
+      const wantsRedo = key === "y" || (key === "z" && event.shiftKey);
+
+      if (wantsUndo && historyRef.current.length > 0) {
+        event.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      if (wantsRedo && redoHistoryRef.current.length > 0) {
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [applying, handleRedo, handleUndo, loading]);
 
   const handleReset = useCallback(() => {
     if (!originalImageRef.current) return;
     restoreImageData(originalImageRef.current);
     setHistory([]);
+    setRedoHistory([]);
     setHasChanges(false);
     setStatus("Reset");
     setError(null);
-  }, [restoreImageData, setHistory]);
+  }, [restoreImageData, setHistory, setRedoHistory]);
 
   const handleResetWandDefaults = useCallback(() => {
     setTolerance(DEFAULT_TOLERANCE);
@@ -528,11 +652,13 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
   }, [activeBrushMode, brushSize, hoverPoint, pickingBrushColor, zoom]);
 
   const cursorClass =
-    tool === "pan"
-      ? "cursor-grab active:cursor-grabbing"
-      : tool === "wand" || pickingBrushColor
-        ? "cursor-crosshair"
-        : "cursor-none";
+    isPanning
+      ? "cursor-grabbing"
+      : tool === "pan"
+        ? "cursor-grab active:cursor-grabbing"
+        : tool === "wand" || pickingBrushColor
+          ? "cursor-crosshair"
+          : "cursor-none";
 
   const hoverReadout = hoverPoint
     ? `x ${hoverPoint.x}, y ${hoverPoint.y} · ${formatRgba(hoverPoint.color)}`
@@ -588,17 +714,24 @@ export function useSpriteCleanupEditor({ imageUrl, applying, onApply }: UseSprit
     status,
     hasChanges,
     canUndo: history.length > 0,
+    canRedo: redoHistory.length > 0,
     hoverReadout,
     canvasDisplayStyle,
     reticleStyle,
     cursorClass,
     handleStageWheel,
+    handleStagePointerDown,
+    handleStagePointerMove,
+    handleStagePointerUp,
+    handleStagePointerCancel,
+    handleStageAuxClick,
     handleCanvasPointerDown,
     handleCanvasPointerMove,
     handleCanvasPointerUp,
     handleCanvasPointerCancel,
     handleCanvasPointerLeave,
     handleUndo,
+    handleRedo,
     handleReset,
     handleApply,
   };

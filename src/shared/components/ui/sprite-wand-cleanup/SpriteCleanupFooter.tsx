@@ -1,14 +1,16 @@
-import { Eraser, Loader2, RotateCcw, Undo2 } from "lucide-react";
+import { Eraser, Loader2, Redo2, RotateCcw, Undo2 } from "lucide-react";
 
 interface SpriteCleanupFooterProps {
   applying: boolean;
   loading: boolean;
   hasChanges: boolean;
   canUndo: boolean;
+  canRedo: boolean;
   error: string | null;
   status: string | null;
   hoverReadout: string;
   onUndo: () => void;
+  onRedo: () => void;
   onReset: () => void;
   onClose: () => void;
   onApply: () => void;
@@ -19,10 +21,12 @@ export function SpriteCleanupFooter({
   loading,
   hasChanges,
   canUndo,
+  canRedo,
   error,
   status,
   hoverReadout,
   onUndo,
+  onRedo,
   onReset,
   onClose,
   onApply,
@@ -40,9 +44,22 @@ export function SpriteCleanupFooter({
         onClick={onUndo}
         disabled={loading || applying || !canUndo}
         className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-colors hover:text-[var(--foreground)] disabled:opacity-45"
+        title="Undo (Ctrl/Cmd+Z)"
+        aria-keyshortcuts="Control+Z Meta+Z"
       >
         <Undo2 size="0.875rem" />
         Undo
+      </button>
+      <button
+        type="button"
+        onClick={onRedo}
+        disabled={loading || applying || !canRedo}
+        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] ring-1 ring-[var(--border)] transition-colors hover:text-[var(--foreground)] disabled:opacity-45"
+        title="Redo (Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z)"
+        aria-keyshortcuts="Control+Y Meta+Y Control+Shift+Z Meta+Shift+Z"
+      >
+        <Redo2 size="0.875rem" />
+        Redo
       </button>
       <button
         type="button"

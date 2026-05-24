@@ -1,4 +1,10 @@
-import type { CSSProperties, PointerEventHandler, RefObject, WheelEventHandler } from "react";
+import type {
+  CSSProperties,
+  MouseEventHandler,
+  PointerEventHandler,
+  RefObject,
+  WheelEventHandler,
+} from "react";
 import { Loader2 } from "lucide-react";
 import { previewBackgroundStyles, type PreviewBackground } from "./sprite-cleanup-model";
 
@@ -13,6 +19,11 @@ interface SpriteCleanupCanvasStageProps {
   stageRef: RefObject<HTMLDivElement | null>;
   canvasRef: RefObject<HTMLCanvasElement | null>;
   onStageWheel: WheelEventHandler<HTMLDivElement>;
+  onStagePointerDown: PointerEventHandler<HTMLDivElement>;
+  onStagePointerMove: PointerEventHandler<HTMLDivElement>;
+  onStagePointerUp: PointerEventHandler<HTMLDivElement>;
+  onStagePointerCancel: PointerEventHandler<HTMLDivElement>;
+  onStageAuxClick: MouseEventHandler<HTMLDivElement>;
   onCanvasPointerDown: PointerEventHandler<HTMLCanvasElement>;
   onCanvasPointerMove: PointerEventHandler<HTMLCanvasElement>;
   onCanvasPointerUp: PointerEventHandler<HTMLCanvasElement>;
@@ -31,6 +42,11 @@ export function SpriteCleanupCanvasStage({
   stageRef,
   canvasRef,
   onStageWheel,
+  onStagePointerDown,
+  onStagePointerMove,
+  onStagePointerUp,
+  onStagePointerCancel,
+  onStageAuxClick,
   onCanvasPointerDown,
   onCanvasPointerMove,
   onCanvasPointerUp,
@@ -42,6 +58,11 @@ export function SpriteCleanupCanvasStage({
       <div
         ref={stageRef}
         onWheel={onStageWheel}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={onStagePointerMove}
+        onPointerUp={onStagePointerUp}
+        onPointerCancel={onStagePointerCancel}
+        onAuxClick={onStageAuxClick}
         className="relative flex h-full min-h-0 items-start justify-start overflow-auto rounded-xl border border-[var(--border)] p-3"
         style={previewBackgroundStyles[previewBackground]}
       >

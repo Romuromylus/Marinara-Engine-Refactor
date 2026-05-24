@@ -42,6 +42,11 @@ export function SpriteWandCleanupEditor({
           stageRef={editor.stageRef}
           canvasRef={editor.canvasRef}
           onStageWheel={editor.handleStageWheel}
+          onStagePointerDown={editor.handleStagePointerDown}
+          onStagePointerMove={editor.handleStagePointerMove}
+          onStagePointerUp={editor.handleStagePointerUp}
+          onStagePointerCancel={editor.handleStagePointerCancel}
+          onStageAuxClick={editor.handleStageAuxClick}
           onCanvasPointerDown={editor.handleCanvasPointerDown}
           onCanvasPointerMove={editor.handleCanvasPointerMove}
           onCanvasPointerUp={editor.handleCanvasPointerUp}
@@ -54,10 +59,12 @@ export function SpriteWandCleanupEditor({
           loading={editor.loading}
           hasChanges={editor.hasChanges}
           canUndo={editor.canUndo}
+          canRedo={editor.canRedo}
           error={editor.error}
           status={editor.status}
           hoverReadout={editor.hoverReadout}
           onUndo={editor.handleUndo}
+          onRedo={editor.handleRedo}
           onReset={editor.handleReset}
           onClose={onClose}
           onApply={() => void editor.handleApply()}
