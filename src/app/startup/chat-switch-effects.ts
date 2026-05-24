@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useGameStateStore } from "../../features/world-state/stores/world-state.store";
+import { useGameStateStore } from "../../features/runtime/world-state/index";
 import { useAgentStore } from "../../shared/stores/agent.store";
 import { useChatStore } from "../../shared/stores/chat.store";
 

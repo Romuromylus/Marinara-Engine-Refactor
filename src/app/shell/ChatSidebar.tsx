@@ -31,7 +31,7 @@ import {
   useChats,
   useDeleteChat,
   useDeleteChatGroup,
-} from "../../features/chats/hooks/use-chats";
+} from "../../features/catalog/chats/index";
 import {
   useChatFolders,
   useCreateFolder,
@@ -39,8 +39,8 @@ import {
   useDeleteFolder,
   useReorderFolders,
   useMoveChat,
-} from "../../features/chats/hooks/use-chat-folders";
-import { useCharacters } from "../../features/characters/hooks/use-characters";
+} from "../../features/catalog/chats/index";
+import { useCharacters } from "../../features/catalog/characters/index";
 import { useChatStore } from "../../shared/stores/chat.store";
 import { showConfirmDialog } from "../../shared/lib/app-dialogs";
 import { useUIStore, type UserStatus } from "../../shared/stores/ui.store";

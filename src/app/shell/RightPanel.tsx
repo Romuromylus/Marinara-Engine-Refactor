@@ -6,24 +6,24 @@ import { X, Users, BookOpen, FileText, Link, Sparkles, Settings, User, Bot } fro
 import { useUIStore } from "../../shared/stores/ui.store";
 
 const CharactersPanel = lazy(() =>
-  import("../../features/characters/components/CharactersPanel").then((module) => ({ default: module.CharactersPanel })),
+  import("../../features/catalog/characters/shell").then((module) => ({ default: module.CharactersPanel })),
 );
 const LorebooksPanel = lazy(() =>
-  import("../../features/lorebooks/components/LorebooksPanel").then((module) => ({ default: module.LorebooksPanel })),
+  import("../../features/catalog/lorebooks/shell").then((module) => ({ default: module.LorebooksPanel })),
 );
-const PresetsPanel = lazy(() => import("../../features/presets/components/PresetsPanel").then((module) => ({ default: module.PresetsPanel })));
+const PresetsPanel = lazy(() => import("../../features/catalog/presets/shell").then((module) => ({ default: module.PresetsPanel })));
 const ConnectionsPanel = lazy(() =>
-  import("../../features/connections/components/ConnectionsPanel").then((module) => ({ default: module.ConnectionsPanel })),
+  import("../../features/shell/connections/shell").then((module) => ({ default: module.ConnectionsPanel })),
 );
-const AgentsPanel = lazy(() => import("../../features/agents/components/AgentsPanel").then((module) => ({ default: module.AgentsPanel })));
+const AgentsPanel = lazy(() => import("../../features/catalog/agents/shell").then((module) => ({ default: module.AgentsPanel })));
 const PersonasPanel = lazy(() =>
-  import("../../features/personas/components/PersonasPanel").then((module) => ({ default: module.PersonasPanel })),
+  import("../../features/catalog/personas/shell").then((module) => ({ default: module.PersonasPanel })),
 );
 const SettingsPanel = lazy(() =>
-  import("../../features/settings/components/SettingsPanel").then((module) => ({ default: module.SettingsPanel })),
+  import("../../features/shell/settings/shell").then((module) => ({ default: module.SettingsPanel })),
 );
 const BotBrowserPanel = lazy(() =>
-  import("../../features/bot-browser/components/BotBrowserPanel").then((module) => ({ default: module.BotBrowserPanel })),
+  import("../../features/shell/bot-browser/shell").then((module) => ({ default: module.BotBrowserPanel })),
 );
 
 const PANEL_CONFIG: Record<string, { title: string; icon: ReactNode; gradient: string }> = {

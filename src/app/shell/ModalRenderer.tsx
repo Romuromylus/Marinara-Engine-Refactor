@@ -3,52 +3,52 @@
 // ──────────────────────────────────────────────
 import { lazy, Suspense } from "react";
 import { useUIStore } from "../../shared/stores/ui.store";
-import type { AgentData } from "../../features/agents/components/EditAgentModal";
+import type { AgentData } from "../../features/catalog/agents/shell";
 
 const CreateCharacterModal = lazy(() =>
-  import("../../features/characters/components/CreateCharacterModal").then((module) => ({ default: module.CreateCharacterModal })),
+  import("../../features/catalog/characters/shell").then((module) => ({ default: module.CreateCharacterModal })),
 );
 const ImportCharacterModal = lazy(() =>
-  import("../../features/characters/components/ImportCharacterModal").then((module) => ({ default: module.ImportCharacterModal })),
+  import("../../features/catalog/characters/shell").then((module) => ({ default: module.ImportCharacterModal })),
 );
 const CharacterMakerModal = lazy(() =>
-  import("../../features/characters/components/CharacterMakerModal").then((module) => ({ default: module.CharacterMakerModal })),
+  import("../../features/catalog/characters/shell").then((module) => ({ default: module.CharacterMakerModal })),
 );
 const CreateLorebookModal = lazy(() =>
-  import("../../features/lorebooks/components/CreateLorebookModal").then((module) => ({ default: module.CreateLorebookModal })),
+  import("../../features/catalog/lorebooks/shell").then((module) => ({ default: module.CreateLorebookModal })),
 );
 const ImportLorebookModal = lazy(() =>
-  import("../../features/lorebooks/components/ImportLorebookModal").then((module) => ({ default: module.ImportLorebookModal })),
+  import("../../features/catalog/lorebooks/shell").then((module) => ({ default: module.ImportLorebookModal })),
 );
 const LorebookMakerModal = lazy(() =>
-  import("../../features/lorebooks/components/LorebookMakerModal").then((module) => ({ default: module.LorebookMakerModal })),
+  import("../../features/catalog/lorebooks/shell").then((module) => ({ default: module.LorebookMakerModal })),
 );
 const CreatePresetModal = lazy(() =>
-  import("../../features/presets/components/CreatePresetModal").then((module) => ({ default: module.CreatePresetModal })),
+  import("../../features/catalog/presets/shell").then((module) => ({ default: module.CreatePresetModal })),
 );
 const ImportPresetModal = lazy(() =>
-  import("../../features/presets/components/ImportPresetModal").then((module) => ({ default: module.ImportPresetModal })),
+  import("../../features/catalog/presets/shell").then((module) => ({ default: module.ImportPresetModal })),
 );
 const EditAgentModal = lazy(() =>
-  import("../../features/agents/components/EditAgentModal").then((module) => ({ default: module.EditAgentModal })),
+  import("../../features/catalog/agents/shell").then((module) => ({ default: module.EditAgentModal })),
 );
 const STBulkImportModal = lazy(() =>
-  import("../../features/imports/components/STBulkImportModal").then((module) => ({ default: module.STBulkImportModal })),
+  import("../../features/shell/imports/shell").then((module) => ({ default: module.STBulkImportModal })),
 );
 const ImportPersonaModal = lazy(() =>
-  import("../../features/personas/components/ImportPersonaModal").then((module) => ({ default: module.ImportPersonaModal })),
+  import("../../features/catalog/personas/shell").then((module) => ({ default: module.ImportPersonaModal })),
 );
 const PersonaMakerModal = lazy(() =>
-  import("../../features/personas/components/PersonaMakerModal").then((module) => ({ default: module.PersonaMakerModal })),
+  import("../../features/catalog/personas/shell").then((module) => ({ default: module.PersonaMakerModal })),
 );
 const CreateConnectionModal = lazy(() =>
-  import("../../features/connections/components/CreateConnectionModal").then((module) => ({ default: module.CreateConnectionModal })),
+  import("../../features/shell/connections/shell").then((module) => ({ default: module.CreateConnectionModal })),
 );
 const CreatePersonaModal = lazy(() =>
-  import("../../features/personas/components/CreatePersonaModal").then((module) => ({ default: module.CreatePersonaModal })),
+  import("../../features/catalog/personas/shell").then((module) => ({ default: module.CreatePersonaModal })),
 );
 const CharacterCardUpdateModal = lazy(() =>
-  import("../../features/characters/components/CharacterCardUpdateModal").then((module) => ({ default: module.CharacterCardUpdateModal })),
+  import("../../features/catalog/characters/shell").then((module) => ({ default: module.CharacterCardUpdateModal })),
 );
 
 export function ModalRenderer() {

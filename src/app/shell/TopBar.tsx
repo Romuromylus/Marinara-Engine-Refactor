@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Layout: Top Bar (polished, with hover glow)
 // ──────────────────────────────────────────────
-import { SpotifyMiniPlayer } from "../../features/spotify/components/SpotifyMiniPlayer";
+import { SpotifyMiniPlayer } from "../../features/shell/spotify/shell";
 import { PanelNavButtons } from "./PanelNavButtons";
 
 export function TopBar() {

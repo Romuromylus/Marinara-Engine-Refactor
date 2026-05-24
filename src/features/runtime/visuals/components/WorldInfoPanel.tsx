@@ -1,0 +1,170 @@
+import { useState } from "react";
+import { AlertTriangle, ChevronDown, ChevronRight, Globe, Loader2, X } from "lucide-react";
+import { type BudgetSkippedLorebookEntry, useActiveLorebookEntries } from "../../../catalog/lorebooks/index";
+
+function WorldInfoEntryRow({
+  entry,
+}: {
+  entry: { name: string; keys: string[]; content: string; constant: boolean; order: number };
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div
+      className="cursor-pointer rounded-lg bg-[var(--secondary)] p-2 text-xs transition-colors hover:bg-[var(--accent)]"
+      onClick={() => setExpanded((prev) => !prev)}
+    >
+      <div className="flex items-center gap-2">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+        <span className="truncate font-medium text-[var(--foreground)]/80">{entry.name}</span>
+        {entry.constant && (
+          <span className="shrink-0 rounded bg-amber-400/15 px-1 py-0.5 text-[0.5rem] font-medium text-amber-400">
+            CONST
+          </span>
+        )}
+        <span className="ml-auto shrink-0 text-[0.625rem] text-[var(--muted-foreground)]">#{entry.order}</span>
+      </div>
+      {entry.keys.length > 0 && (
+        <p className="mt-0.5 truncate text-[0.625rem] text-[var(--muted-foreground)]">
+          Keys: {entry.keys.slice(0, 5).join(", ")}
+          {entry.keys.length > 5 && ` +${entry.keys.length - 5}`}
+        </p>
+      )}
+      {expanded && (
+        <p className="mt-1.5 max-h-40 overflow-y-auto whitespace-pre-wrap border-t border-[var(--border)] pt-1.5 text-[0.6875rem] leading-relaxed text-[var(--muted-foreground)]">
+          {entry.content || "(empty)"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function formatBudgetName(blockedBy: BudgetSkippedLorebookEntry["blockedBy"]) {
+  if (blockedBy === "lorebook") return "lorebook budget";
+  if (blockedBy === "chat") return "chat budget";
+  return "lorebook and chat budgets";
+}
+
+function formatBudgetCap(entry: BudgetSkippedLorebookEntry) {
+  if (entry.blockedBy === "lorebook") {
+    return `${entry.lorebookUsedTokens.toLocaleString()} / ${entry.lorebookBudget.toLocaleString()}`;
+  }
+  if (entry.blockedBy === "chat") {
+    return `${entry.chatUsedTokens.toLocaleString()} / ${entry.chatBudget.toLocaleString()}`;
+  }
+  const lorebookPart = `${entry.lorebookUsedTokens.toLocaleString()} / ${entry.lorebookBudget.toLocaleString()} lorebook`;
+  const chatPart = `${entry.chatUsedTokens.toLocaleString()} / ${entry.chatBudget.toLocaleString()} chat`;
+  return `${lorebookPart}, ${chatPart}`;
+}
+
+function BudgetSkippedEntryRow({ entry }: { entry: BudgetSkippedLorebookEntry }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <button
+      type="button"
+      className="w-full rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-left text-xs transition-colors hover:bg-amber-500/15"
+      onClick={() => setExpanded((prev) => !prev)}
+    >
+      <div className="flex items-center gap-1.5">
+        {expanded ? <ChevronDown size="0.75rem" /> : <ChevronRight size="0.75rem" />}
+        <span className="min-w-0 flex-1 truncate font-medium text-amber-200">{entry.name}</span>
+        <span className="shrink-0 text-[0.625rem] text-amber-200/70">~{entry.estimatedTokens.toLocaleString()}</span>
+      </div>
+      <p className="mt-0.5 truncate pl-5 text-[0.625rem] text-amber-100/70">
+        {entry.lorebookName} blocked by {formatBudgetName(entry.blockedBy)}
+      </p>
+      {expanded && (
+        <div className="mt-1.5 space-y-1 border-t border-amber-500/20 pt-1.5 pl-5 text-[0.625rem] leading-relaxed text-amber-50/75">
+          <p>Matched: {entry.matchedKeys.length > 0 ? entry.matchedKeys.slice(0, 5).join(", ") : "No key recorded"}</p>
+          <p>Entry estimate: ~{entry.estimatedTokens.toLocaleString()} tokens</p>
+          <p>Budget used before entry: {formatBudgetCap(entry)}</p>
+        </div>
+      )}
+    </button>
+  );
+}
+
+function BudgetSkippedEntriesNotice({ entries }: { entries: BudgetSkippedLorebookEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2 text-xs text-amber-50/85">
+      <button type="button" className="flex w-full items-start gap-2 text-left" onClick={() => setExpanded((prev) => !prev)}>
+        <AlertTriangle size="0.875rem" className="mt-0.5 shrink-0 text-amber-300" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-amber-100">
+            {entries.length} matching lore {entries.length === 1 ? "entry was" : "entries were"} skipped by token budget
+          </span>
+          <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-amber-50/65">
+            Expand for budget details. Knowledge Retrieval or Knowledge Router may fit large lorebooks better than simply
+            raising caps.
+          </span>
+        </span>
+        {expanded ? <ChevronDown size="0.75rem" /> : <ChevronRight size="0.75rem" />}
+      </button>
+      {expanded && (
+        <div className="mt-2 space-y-1.5">
+          {entries.map((entry) => (
+            <BudgetSkippedEntryRow key={entry.id} entry={entry} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function WorldInfoPanel({
+  chatId,
+  isMobile,
+  onClose,
+}: {
+  chatId: string;
+  isMobile: boolean;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = useActiveLorebookEntries(chatId, true);
+  const entries = data?.entries ?? [];
+  const skippedEntries = data?.budgetSkippedEntries ?? [];
+
+  return (
+    <>
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--foreground)]">
+        <Globe size="0.75rem" />
+        Active World Info
+        {isMobile && (
+          <button
+            onClick={onClose}
+            className="ml-auto rounded-md p-1 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+          >
+            <X size="0.75rem" />
+          </button>
+        )}
+      </h3>
+      {isLoading ? (
+        <div className="flex items-center gap-2 py-4 text-xs text-[var(--muted-foreground)]">
+          <Loader2 size="0.75rem" className="animate-spin" />
+          Scanning entries...
+        </div>
+      ) : entries.length === 0 ? (
+        <>
+          <BudgetSkippedEntriesNotice entries={skippedEntries} />
+          <p className="py-3 text-center text-xs text-[var(--muted-foreground)]">No active entries for this chat</p>
+        </>
+      ) : (
+        <>
+          <p className="mb-2 text-[0.625rem] text-[var(--muted-foreground)]">
+            {entries.length} active * ~{(data?.totalTokens ?? 0).toLocaleString()} tokens
+          </p>
+          <BudgetSkippedEntriesNotice entries={skippedEntries} />
+          <div className="space-y-1.5">
+            {entries.map((entry) => (
+              <WorldInfoEntryRow key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}

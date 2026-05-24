@@ -1,8 +1,8 @@
 import { useCallback } from "react";
 import type { ChatMode } from "../../engine/contracts/types/chat";
-import { useApplyChatPreset, useChatPresets } from "../../features/chat-presets/hooks/use-chat-presets";
-import { useCreateChat } from "../../features/chats/hooks/use-chats";
-import { useConnections } from "../../features/connections/hooks/use-connections";
+import { useApplyChatPreset, useChatPresets } from "../../features/catalog/chat-presets/index";
+import { useCreateChat } from "../../features/catalog/chats/index";
+import { useConnections } from "../../features/catalog/connections/index";
 import { useChatStore } from "../../shared/stores/chat.store";
 import { useUIStore } from "../../shared/stores/ui.store";
 

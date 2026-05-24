@@ -1,35 +1,35 @@
 import { lazy, type ReactNode } from "react";
 
 const CharacterEditor = lazy(() =>
-  import("../../features/characters/components/CharacterEditor").then((module) => ({ default: module.CharacterEditor })),
+  import("../../features/catalog/characters/shell").then((module) => ({ default: module.CharacterEditor })),
 );
 const CharacterLibraryView = lazy(() =>
-  import("../../features/characters/components/CharacterLibraryView").then((module) => ({
+  import("../../features/catalog/characters/shell").then((module) => ({
     default: module.CharacterLibraryView,
   })),
 );
 const LorebookEditor = lazy(() =>
-  import("../../features/lorebooks/components/LorebookEditor").then((module) => ({ default: module.LorebookEditor })),
+  import("../../features/catalog/lorebooks/shell").then((module) => ({ default: module.LorebookEditor })),
 );
 const PresetEditor = lazy(() =>
-  import("../../features/presets/components/PresetEditor").then((module) => ({ default: module.PresetEditor })),
+  import("../../features/catalog/presets/shell").then((module) => ({ default: module.PresetEditor })),
 );
 const ConnectionEditor = lazy(() =>
-  import("../../features/connections/components/ConnectionEditor").then((module) => ({
+  import("../../features/shell/connections/shell").then((module) => ({
     default: module.ConnectionEditor,
   })),
 );
 const AgentEditor = lazy(() =>
-  import("../../features/agents/components/AgentEditor").then((module) => ({ default: module.AgentEditor })),
+  import("../../features/catalog/agents/shell").then((module) => ({ default: module.AgentEditor })),
 );
 const ToolEditor = lazy(() =>
-  import("../../features/agents/components/ToolEditor").then((module) => ({ default: module.ToolEditor })),
+  import("../../features/catalog/agents/shell").then((module) => ({ default: module.ToolEditor })),
 );
 const PersonaEditor = lazy(() =>
-  import("../../features/personas/components/PersonaEditor").then((module) => ({ default: module.PersonaEditor })),
+  import("../../features/catalog/personas/shell").then((module) => ({ default: module.PersonaEditor })),
 );
 const RegexScriptEditor = lazy(() =>
-  import("../../features/agents/components/RegexScriptEditor").then((module) => ({
+  import("../../features/catalog/agents/shell").then((module) => ({
     default: module.RegexScriptEditor,
   })),
 );

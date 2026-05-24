@@ -1,28 +1,51 @@
 const { readdirSync } = require("node:fs");
 const { join } = require("node:path");
 
-const featureNames = readdirSync(join(__dirname, "src/features"), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .sort();
-
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const crossFeaturePrivateRules = featureNames.flatMap((featureName) => {
-  const escapedFeatureName = escapeRegExp(featureName);
-  const outsideFeaturePath = `^src/(app|shared|engine|features/(?!${escapedFeatureName}/))`;
-  const privateFeaturePath = `^src/features/${escapedFeatureName}/(components|hooks|stores|state)/`;
+function listLayerPackages() {
+  const packages = [];
+  for (const layer of ["catalog", "runtime", "shell"]) {
+    const layerPath = join(__dirname, "src/features", layer);
+    for (const entry of readdirSync(layerPath, { withFileTypes: true })) {
+      if (entry.isDirectory()) packages.push(`${layer}/${entry.name}`);
+    }
+  }
+
+  const modesPath = join(__dirname, "src/features/modes");
+  for (const entry of readdirSync(modesPath, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name !== "shared") {
+      packages.push(`modes/${entry.name}`);
+      continue;
+    }
+    const sharedPath = join(modesPath, "shared");
+    for (const sharedEntry of readdirSync(sharedPath, { withFileTypes: true })) {
+      if (sharedEntry.isDirectory()) packages.push(`modes/shared/${sharedEntry.name}`);
+    }
+  }
+
+  return packages.sort();
+}
+
+const featurePackageRoots = listLayerPackages();
+
+const crossPackagePrivateRules = featurePackageRoots.flatMap((packageRoot) => {
+  const escapedPackageRoot = escapeRegExp(packageRoot);
+  const packageName = packageRoot.replace(/\//g, "-");
+  const outsidePackagePath = `^src/(app|shared|engine|features/(?!${escapedPackageRoot}/))`;
+  const privatePackagePath = `^src/features/${escapedPackageRoot}/(components|hooks|stores|state|lib|api|encounter)/`;
 
   return [
     {
-      name: `no-cross-feature-private-imports-${featureName}`,
+      name: `no-cross-package-private-imports-${packageName}`,
       severity: "error",
       comment:
-        "Feature internals are private to their owning feature. Cross-feature callers must use an explicit public API.",
-      from: { path: outsideFeaturePath },
-      to: { path: privateFeaturePath },
+        "Feature package internals are private to their owning package. Cross-package callers must use a public entrypoint.",
+      from: { path: outsidePackagePath },
+      to: { path: privatePackagePath },
     },
   ];
 });
@@ -82,27 +105,55 @@ module.exports = {
       to: { path: "^node_modules/zustand/" },
     },
     {
+      name: "catalog-must-not-import-higher-feature-layers",
+      severity: "error",
+      comment: "Catalog packages are the resource/data layer and cannot depend on runtime systems, modes, or shell tools.",
+      from: { path: "^src/features/catalog/" },
+      to: { path: "^src/features/(runtime|modes|shell)/" },
+    },
+    {
+      name: "runtime-must-not-import-higher-feature-layers",
+      severity: "error",
+      comment: "Runtime packages can depend on catalog resources, but not modes or shell tools.",
+      from: { path: "^src/features/runtime/" },
+      to: { path: "^src/features/(modes|shell)/" },
+    },
+    {
+      name: "modes-must-not-import-shell",
+      severity: "error",
+      comment: "Mode packages must not depend on app shell tools.",
+      from: { path: "^src/features/modes/" },
+      to: { path: "^src/features/shell/" },
+    },
+    {
       name: "chat-mode-must-not-import-roleplay-or-game",
       severity: "error",
       comment: "Top-level modes are separate product paths.",
-      from: { path: "^src/engine/modes/chat/" },
-      to: { path: "^src/engine/modes/(roleplay|game)/" },
+      from: { path: "^(src/engine/modes/chat/|src/features/modes/conversation/)" },
+      to: { path: "^(src/engine/modes/(roleplay|game)/|src/features/modes/(roleplay|game)/)" },
     },
     {
       name: "roleplay-mode-must-not-import-chat-or-game",
       severity: "error",
       comment: "Top-level modes are separate product paths.",
-      from: { path: "^src/engine/modes/roleplay/" },
-      to: { path: "^src/engine/modes/(chat|game)/" },
+      from: { path: "^(src/engine/modes/roleplay/|src/features/modes/roleplay/)" },
+      to: { path: "^(src/engine/modes/(chat|game)/|src/features/modes/(conversation|game)/)" },
     },
     {
       name: "game-mode-must-not-import-chat-or-roleplay",
       severity: "error",
       comment: "Top-level modes are separate product paths.",
-      from: { path: "^src/engine/modes/game/" },
-      to: { path: "^src/engine/modes/(chat|roleplay)/" },
+      from: { path: "^(src/engine/modes/game/|src/features/modes/game/)" },
+      to: { path: "^(src/engine/modes/(chat|roleplay)/|src/features/modes/(conversation|roleplay)/)" },
     },
-    ...crossFeaturePrivateRules,
+    {
+      name: "shared-mode-ui-must-not-import-concrete-modes",
+      severity: "error",
+      comment: "Shared mode UI is a lower mode layer and cannot import concrete conversation, roleplay, or game packages.",
+      from: { path: "^src/features/modes/shared/" },
+      to: { path: "^src/features/modes/(conversation|roleplay|game)/" },
+    },
+    ...crossPackagePrivateRules,
   ],
   options: {
     doNotFollow: {

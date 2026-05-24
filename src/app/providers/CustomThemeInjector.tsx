@@ -3,8 +3,8 @@
 // CSS and enabled extension CSS/JS into the DOM
 // ──────────────────────────────────────────────
 import { useEffect } from "react";
-import { useThemes } from "../../features/settings/hooks/use-themes";
-import { useExtensions } from "../../features/settings/hooks/use-extensions";
+import { useThemes } from "../../features/shell/settings/index";
+import { useExtensions } from "../../features/shell/settings/index";
 import { storageApi } from "../../shared/api/storage-api";
 
 type ExtensionGlobal = typeof globalThis & {

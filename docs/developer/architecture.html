@@ -47,19 +47,15 @@ flowchart TB
   end
 
   subgraph FeatureLayer[src/features]
-    ModeRouter[modes<br/>ModeSurface]
-    ChatUI[chats<br/>conversation UI, chat hooks, message surfaces]
-    RoleplayUI[roleplay<br/>scene UI, HUD, choices, encounters]
-    GameUI[game<br/>game surface, hooks, stores, API facade]
-    GameAssetsUI[game-assets<br/>asset browser and editors]
-    MariUI[mari<br/>Professor Mari surface]
-    VisualsUI[visuals<br/>sprites, weather, pinned images, world info]
-    TrackerUI[tracker<br/>character, persona, quest, world panels]
-    WorldStateUI[world-state<br/>world state API, store, patching]
-    AgentsUI[agents<br/>agent configuration and debug UI]
-    LibraryUI[characters, personas, lorebooks,<br/>presets, chat-presets]
-    ConnectionsUI[connections and settings<br/>providers, themes, profile, TTS]
-    UtilityFeatures[imports, knowledge, bot-browser,<br/>gallery, spotify, onboarding, hooks]
+    FeatureCatalog[catalog<br/>resource data hooks, query keys, library surfaces]
+    FeatureRuntime[runtime<br/>generation, world-state, visuals, tracker, haptics]
+    ModeShared[modes/shared<br/>chat UI and scene UI primitives]
+    ConversationUI[modes/conversation<br/>conversation surface and autonomous UI]
+    RoleplayUI[modes/roleplay<br/>scene UI, HUD, choices, encounters]
+    GameUI[modes/game<br/>game surface, hooks, stores, API facade]
+    GameAssetsUI[modes/game-assets<br/>asset browser and editors]
+    ModeRouter[modes/router<br/>ModeSurface composition point]
+    ShellFeatures[shell<br/>settings, integrations, Mari, imports, onboarding]
   end
 
   subgraph SharedLayer[src/shared]
@@ -106,39 +102,45 @@ flowchart TB
   AppProviders --> AppShell
   AppStartup --> AppRoot
   AppShell --> ModeRouter
-  AppShell --> MariUI
+  AppShell --> ShellFeatures
 
-  ModeRouter --> ChatUI
+  ModeRouter --> ConversationUI
   ModeRouter --> RoleplayUI
   ModeRouter --> GameUI
-  ChatUI -. current UI bridge .-> RoleplayUI
-  ChatUI -. current UI bridge .-> GameUI
-  RoleplayUI -. reuses chat message UI .-> ChatUI
-  GameUI -. reuses chat hooks and gallery .-> ChatUI
+  ConversationUI --> ModeShared
+  RoleplayUI --> ModeShared
+  GameUI --> ModeShared
+  ShellFeatures --> ModeRouter
+  ShellFeatures --> FeatureRuntime
+  ShellFeatures --> FeatureCatalog
+  ConversationUI --> FeatureRuntime
+  RoleplayUI --> FeatureRuntime
+  GameUI --> FeatureRuntime
+  GameAssetsUI --> FeatureRuntime
+  FeatureRuntime --> FeatureCatalog
 
-  ChatUI --> SharedComponents
+  ConversationUI --> SharedComponents
   RoleplayUI --> SharedComponents
   GameUI --> SharedComponents
-  MariUI --> SharedComponents
+  ModeShared --> SharedComponents
+  ShellFeatures --> SharedComponents
   GameAssetsUI --> SharedApi
-  LibraryUI --> SharedApi
-  ConnectionsUI --> SharedApi
-  UtilityFeatures --> SharedApi
-  TrackerUI --> WorldStateUI
-  VisualsUI --> SharedLib
-  AgentsUI --> SharedStores
-  ChatUI --> SharedStores
+  FeatureCatalog --> SharedApi
+  FeatureRuntime --> SharedApi
+  ShellFeatures --> SharedApi
+  FeatureRuntime --> SharedLib
+  FeatureCatalog --> SharedStores
+  ConversationUI --> SharedStores
   RoleplayUI --> SharedStores
   GameUI --> SharedStores
 
-  ChatUI --> ChatEngine
+  ConversationUI --> ChatEngine
   RoleplayUI --> RoleplayEngine
   GameUI --> GameEngine
-  MariUI --> MariEngine
-  ChatUI --> SharedApi
+  ShellFeatures --> MariEngine
+  ConversationUI --> SharedApi
   RoleplayUI --> SharedApi
   GameUI --> SharedApi
-  MariUI --> SharedApi
 
   ChatEngine --> Generation
   RoleplayEngine --> Generation
@@ -192,46 +194,52 @@ flowchart TB
               <td>Routes between product areas but should not own product rules.</td>
             </tr>
             <tr>
-              <td><code>features/modes</code></td>
-              <td>The mode router that chooses conversation, roleplay, or game surface for the active chat.</td>
-              <td><code>features/chats</code>, <code>features/roleplay</code>, <code>features/game</code>.</td>
-              <td>This is the intentional UI composition point for the three modes.</td>
+              <td><code>features/catalog</code></td>
+              <td>Resource and data owners: chats, characters, personas, lorebooks, presets, chat presets, connections, agents, gallery, and knowledge.</td>
+              <td>Storage/import/generation APIs, engine contracts, shared UI primitives.</td>
+              <td>Expose data hooks, query keys, types, and library shell surfaces through public entrypoints.</td>
             </tr>
             <tr>
-              <td><code>features/chats</code></td>
-              <td>Conversation surface, chat input, message rendering, setup, settings, summaries, swipes, branches, galleries, and normal chat hooks.</td>
-              <td>Chat engine services, generation hook, shared API adapters, shared stores.</td>
-              <td>Owns conversation UI; currently also hosts reusable message pieces used by roleplay and game.</td>
+              <td><code>features/runtime</code></td>
+              <td>Shared runtime systems: generation, world state, visuals, tracker UI, and haptics.</td>
+              <td>Catalog public APIs, shared API adapters, shared stores, engine services.</td>
+              <td>Runtime can depend on catalog resources, but catalog code must not reach back into runtime stores or UI.</td>
             </tr>
             <tr>
-              <td><code>features/roleplay</code></td>
+              <td><code>features/modes/shared</code></td>
+              <td>Mode-neutral React UI shared by concrete modes, including transcript/chat UI and scene banner primitives.</td>
+              <td>Runtime public APIs, catalog public APIs, generic shared components.</td>
+              <td>Shared mode UI must not import concrete conversation, roleplay, or game packages.</td>
+            </tr>
+            <tr>
+              <td><code>features/modes/conversation</code></td>
+              <td>Conversation surface, setup, recent chats, quick switching, and autonomous conversation UI/effects.</td>
+              <td>Chat engine services, runtime generation, catalog chat hooks, shared chat UI.</td>
+              <td>Conversation is a concrete mode; it must not import roleplay or game internals.</td>
+            </tr>
+            <tr>
+              <td><code>features/modes/roleplay</code></td>
               <td>Roleplay surface, scene HUD, scene lifecycle controls, choices, encounters, and roleplay panels.</td>
-              <td>Roleplay engine services, chat hooks/message components, visuals, storage and LLM adapters.</td>
-              <td>Product behavior is roleplay-owned; UI still reuses chat message/input components.</td>
+              <td>Roleplay engine services, runtime visuals/generation, catalog resources, shared chat/scene UI.</td>
+              <td>Product behavior is roleplay-owned; reusable UI goes through <code>features/modes/shared</code>.</td>
             </tr>
             <tr>
-              <td><code>features/game</code></td>
+              <td><code>features/modes/game</code></td>
               <td>Game surface, setup, party UI, narration, maps, combat, inventory, journal, sessions, audio, game stores, and game API facade.</td>
-              <td>Game engine services, shared API adapters, game assets, chat hooks/types for session messages.</td>
-              <td>Game rules are separate; UI still reuses chat hooks and gallery/message types.</td>
+              <td>Game engine services, runtime systems, catalog resources, game assets, shared chat UI.</td>
+              <td>Game rules stay separate from conversation and roleplay; only the router composes concrete modes.</td>
             </tr>
             <tr>
-              <td><code>features/mari</code></td>
-              <td>Professor Mari standalone assistant surface, local conversation state, connection/persona selectors, attachments, and Mari send flow.</td>
-              <td><code>engine/mari</code>, <code>shared/api/mari-api</code>, chat message component, connections/personas hooks.</td>
-              <td>Not a chat, roleplay, or game mode; it is a shell-level assistant path.</td>
+              <td><code>features/modes/router</code></td>
+              <td>The mode router that chooses conversation, roleplay, or game surface for the active chat.</td>
+              <td>Concrete mode public surfaces only.</td>
+              <td>This is the only intentional React composition point for concrete modes.</td>
             </tr>
             <tr>
-              <td><code>features/game-assets</code>, <code>features/visuals</code>, <code>features/tracker</code>, <code>features/world-state</code></td>
-              <td>Mode-adjacent UI for assets, sprites/weather/world display, trackers, and world state persistence.</td>
-              <td>Shared API adapters, shared stores, game and roleplay surfaces.</td>
-              <td>These are shared UI support areas; changes can affect more than one mode.</td>
-            </tr>
-            <tr>
-              <td>Library, provider, import, and integration features</td>
-              <td>Characters, personas, lorebooks, presets, chat presets, connections, settings, imports, knowledge, gallery, Spotify, bot browser, onboarding.</td>
-              <td>Storage/import/export/LLM/integration APIs, engine contracts, shared UI.</td>
-              <td>They should expose feature hooks or facades instead of being reached through private component internals.</td>
+              <td><code>features/shell</code></td>
+              <td>App-level tools such as settings, connection management, Spotify, onboarding, Mari, bot browser, imports, and notifications.</td>
+              <td>Mode public surfaces, runtime systems, catalog hooks, shared APIs.</td>
+              <td>Shell code may coordinate top-level workflows, but product rules still belong in modes, runtime, engine, or Rust capabilities.</td>
             </tr>
           </tbody>
         </table>
@@ -240,7 +248,10 @@ flowchart TB
         <pre class="mermaid">
 flowchart TB
   App[src/app<br/>bootstrap, shell, providers]
-  Features[src/features<br/>feature UI, hooks, UI stores]
+  ShellFeatures[src/features/shell<br/>app-level tools]
+  ModeFeatures[src/features/modes<br/>conversation, roleplay, game, router]
+  RuntimeFeatures[src/features/runtime<br/>shared runtime systems]
+  CatalogFeatures[src/features/catalog<br/>resource/data owners]
   SharedUI[src/shared<br/>UI primitives, browser helpers, stores]
   SharedAPI[src/shared/api<br/>typed Tauri adapters]
   Engine[src/engine<br/>React-free product engine]
@@ -248,11 +259,23 @@ flowchart TB
   Commands[src-tauri/src/commands<br/>thin command facades]
   RustCrates[src-tauri/crates<br/>storage, llm, assets, integrations, security]
 
-  App --> Features
+  App --> ShellFeatures
+  App --> ModeFeatures
   App --> SharedUI
-  Features --> SharedUI
-  Features --> SharedAPI
-  Features --> Engine
+  ShellFeatures --> ModeFeatures
+  ModeFeatures --> RuntimeFeatures
+  RuntimeFeatures --> CatalogFeatures
+  ShellFeatures --> SharedUI
+  ModeFeatures --> SharedUI
+  RuntimeFeatures --> SharedUI
+  CatalogFeatures --> SharedUI
+  ShellFeatures --> SharedAPI
+  ModeFeatures --> SharedAPI
+  RuntimeFeatures --> SharedAPI
+  CatalogFeatures --> SharedAPI
+  ShellFeatures --> Engine
+  ModeFeatures --> Engine
+  RuntimeFeatures --> Engine
   Engine --> Ports
   SharedAPI --> Commands
   Commands --> RustCrates
@@ -370,27 +393,27 @@ flowchart LR
               <td>Game turns, game prompts, state repair, maps, mechanics, weather, time, and sessions stay game-owned.</td>
             </tr>
             <tr>
-              <td><code>features/chats</code></td>
-              <td>Dedicated conversation UI, but not fully UI-isolated.</td>
-              <td>Imports the roleplay scene banner for active scene controls and the game mode store for notification bubbles.</td>
-              <td>These are UI bridge points. If they grow, move the shared contract into <code>features/modes</code> or <code>src/shared</code>.</td>
+              <td><code>features/modes/conversation</code></td>
+              <td>Dedicated conversation UI.</td>
+              <td>Imports catalog chat hooks, runtime generation, and shared chat UI through public entrypoints.</td>
+              <td>Do not import roleplay or game internals; shared transcript primitives belong in <code>features/modes/shared/chat-ui</code>.</td>
             </tr>
             <tr>
-              <td><code>features/roleplay</code></td>
-              <td>Dedicated roleplay UI, but it reuses chat UI pieces.</td>
-              <td>Uses chat hooks plus chat message, input, branch selector, overlays, echo chamber, summary popover, and chat-area types.</td>
-              <td>This is component reuse, not roleplay using the chat engine. Reusable message primitives are candidates for a shared UI owner later.</td>
+              <td><code>features/modes/roleplay</code></td>
+              <td>Dedicated roleplay UI.</td>
+              <td>Uses roleplay engine services, runtime visuals/generation, catalog resources, and shared chat/scene UI.</td>
+              <td>Roleplay can reuse public shared UI, but must not use conversation or game private files.</td>
             </tr>
             <tr>
-              <td><code>features/game</code></td>
-              <td>Dedicated game UI, but it reuses chat session hooks and message/gallery types.</td>
-              <td>Uses chat hooks for session messages, chat-area types for shared display data, and the chat gallery drawer.</td>
-              <td>Game rules remain in <code>engine/modes/game</code>. UI reuse should not become shared game/chat orchestration.</td>
+              <td><code>features/modes/game</code></td>
+              <td>Dedicated game UI.</td>
+              <td>Uses game engine services, runtime systems, catalog resources, game assets, and shared chat UI.</td>
+              <td>Game rules remain in <code>engine/modes/game</code>; UI reuse goes through public shared mode/runtime APIs.</td>
             </tr>
             <tr>
-              <td><code>features/modes</code></td>
+              <td><code>features/modes/router</code></td>
               <td>Intentionally coupled to all three mode surfaces.</td>
-              <td>Imports chat, roleplay, and game surfaces because it is the UI router.</td>
+              <td>Imports conversation, roleplay, and game public surfaces because it is the UI router.</td>
               <td>Keep routing here; do not add prompt rules or mode state machines to the router.</td>
             </tr>
           </tbody>
@@ -398,18 +421,18 @@ flowchart LR
 
         <div class="callout">
           Current answer: conversation, roleplay, and game are separated in the
-          TypeScript engine where product behavior lives. They are not fully
-          separated at the React UI component layer because roleplay and game
-          reuse chat message/session UI, and chat has small roleplay/game bridge
-          imports. Treat those as UI composition points, not permission to share
-          mode orchestration.
+          TypeScript engine and in the React feature tree. Shared transcript,
+          scene, visual, and runtime pieces now live in lower owners under
+          <code>features/modes/shared</code> or <code>features/runtime</code>;
+          only <code>features/modes/router</code> composes concrete mode
+          surfaces.
         </div>
 
         <h2>Standalone Professor Mari Boundary</h2>
         <pre class="mermaid">
 flowchart LR
   Shell[src/app shell<br/>titlebar and surface routing]
-  MariUI[features/mari<br/>ProfessorMariSurface]
+  MariUI[features/shell/mari<br/>ProfessorMariSurface]
   MariEngine[engine/mari<br/>entry request contract]
   MariApi[shared/api/mari-api<br/>typed Tauri wrapper]
   MariCommand[src-tauri commands<br/>professor_mari_prompt]

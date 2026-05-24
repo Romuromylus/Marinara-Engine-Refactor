@@ -4,8 +4,8 @@
 import { ChatSidebar, type ChatSidebarTab } from "./ChatSidebar";
 import { TopBar } from "./TopBar";
 import { WindowTitleBar } from "./WindowTitleBar";
-import { SpotifyMobileWidget } from "../../features/spotify/components/SpotifyMiniPlayer";
-import { ChatNotificationBubbles } from "../../features/chats/components/ChatNotificationBubbles";
+import { SpotifyMobileWidget } from "../../features/shell/spotify/shell";
+import { ChatNotificationBubbles } from "../../features/shell/notifications/shell";
 import {
   getTrackerPanelWidthForProfile,
   RIGHT_PANEL_WIDTH_MAX,
@@ -15,8 +15,8 @@ import {
   useUIStore,
 } from "../../shared/stores/ui.store";
 import { useChatStore } from "../../shared/stores/chat.store";
-import { useBackgroundAutonomousPolling } from "../../features/chats/hooks/autonomous/use-background-autonomous";
-import { useClearAutonomousUnread } from "../../features/chats/hooks/use-chats";
+import { useBackgroundAutonomousPolling } from "../../features/modes/conversation/index";
+import { useClearAutonomousUnread } from "../../features/catalog/chats/index";
 import { useIdleDetection } from "../../shared/hooks/use-idle-detection";
 import { usePageActivity } from "../../shared/hooks/use-page-activity";
 import { cn } from "../../shared/lib/utils";
@@ -37,23 +37,23 @@ import {
 } from "react";
 
 const ModeSurface = lazy(() =>
-  import("../../features/modes/components/ModeSurface").then((module) => ({ default: module.ModeSurface })),
+  import("../../features/modes/router/shell").then((module) => ({ default: module.ModeSurface })),
 );
 const BotBrowserView = lazy(() =>
-  import("../../features/bot-browser/components/BotBrowserView").then((module) => ({ default: module.BotBrowserView })),
+  import("../../features/shell/bot-browser/shell").then((module) => ({ default: module.BotBrowserView })),
 );
 const GameAssetsBrowserView = lazy(() =>
-  import("../../features/game-assets/components/GameAssetsBrowserView").then((module) => ({ default: module.GameAssetsBrowserView })),
+  import("../../features/modes/game-assets/shell").then((module) => ({ default: module.GameAssetsBrowserView })),
 );
 const ProfessorMariSurface = lazy(() =>
-  import("../../features/mari/components/ProfessorMariSurface").then((module) => ({ default: module.ProfessorMariSurface })),
+  import("../../features/shell/mari/shell").then((module) => ({ default: module.ProfessorMariSurface })),
 );
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
 const TrackerDataSidebar = lazy(() =>
-  import("../../features/tracker/components/TrackerDataSidebar").then((module) => ({ default: module.TrackerDataSidebar })),
+  import("../../features/runtime/tracker/shell").then((module) => ({ default: module.TrackerDataSidebar })),
 );
 const OnboardingTutorial = lazy(() =>
-  import("../../features/onboarding/components/OnboardingTutorial").then((module) => ({ default: module.OnboardingTutorial })),
+  import("../../features/shell/onboarding/shell").then((module) => ({ default: module.OnboardingTutorial })),
 );
 
 function clampWidth(width: number, min: number, max: number) {

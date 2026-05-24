@@ -31,7 +31,7 @@ Also keep the root `AGENTS.md` in force.
 ## Placement Rules
 
 - Product rules live in `src/engine`, not Rust and not React components.
-- React feature code lives in `src/features/<feature>` and calls hooks, feature APIs, or shared API adapters.
+- React feature code lives in layered packages under `src/features/<layer>/<package>` and calls hooks, feature APIs, or shared API adapters through public entrypoints.
 - Generic UI and browser-only utilities live in `src/shared`.
 - Tauri invoke wrappers live in `src/shared/api`.
 - Privileged local IO, storage, secrets, provider transport, and native integrations live in Rust.

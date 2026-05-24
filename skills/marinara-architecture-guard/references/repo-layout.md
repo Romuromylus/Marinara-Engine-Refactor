@@ -9,7 +9,19 @@ src/app/
   React bootstrap, shell, providers, startup effects.
 
 src/features/
-  React feature UI, feature hooks, UI-only stores, feature API facades.
+  Layered React feature packages. Import direction is shell -> modes -> runtime -> catalog.
+
+src/features/catalog/
+  Resource and data owners: chats, characters, personas, lorebooks, presets, chat-presets, connections, agents, gallery, knowledge.
+
+src/features/runtime/
+  Shared runtime systems: generation, world-state, visuals, tracker, haptics.
+
+src/features/modes/
+  User mode surfaces and mode-specific UI: shared, conversation, roleplay, game, game-assets, router.
+
+src/features/shell/
+  App-level tools: settings, connections, spotify, onboarding, mari, bot-browser, imports, notifications.
 
 src/shared/
   Reusable frontend-only components, hooks, lib helpers, UI stores, and Tauri adapters.
@@ -68,14 +80,22 @@ src-tauri/crates/integrations/
 
 Rust owns capability execution. TypeScript owns product meaning.
 
-## UI Features
+## UI Feature Layers
 
 Important feature owners:
 
-- `features/chats`: normal chat UI and shared chat/message components.
-- `features/roleplay`: roleplay UI surfaces and roleplay-only panels.
-- `features/game`: game UI surfaces, game hooks, game stores, and game feature API.
-- `features/visuals`: shared visual components only when multiple features need visual primitives.
-- `features/agents`, `features/characters`, `features/personas`, `features/lorebooks`, `features/presets`, `features/connections`, `features/settings`: feature-owned UI and hooks.
+- `features/catalog/chats`: chat data hooks, mutations, folders, query keys, and storage-facing types.
+- `features/catalog/characters`, `features/catalog/personas`, `features/catalog/lorebooks`, `features/catalog/presets`, `features/catalog/chat-presets`: library data and editing surfaces.
+- `features/catalog/connections`, `features/catalog/agents`, `features/catalog/gallery`, `features/catalog/knowledge`: data owners and resource hooks.
+- `features/runtime/generation`: generation hook binding UI state and capability adapters to engine generation.
+- `features/runtime/world-state`, `features/runtime/visuals`, `features/runtime/tracker`, `features/runtime/haptics`: shared runtime systems used by modes and shell.
+- `features/modes/shared/chat-ui`: shared transcript, message, input, overlay, settings, branch, summary, gallery, and quick-switcher UI.
+- `features/modes/shared/scene-ui`: shared scene banner UI.
+- `features/modes/conversation`: conversation surface, setup, recent chats, and autonomous conversation UI.
+- `features/modes/roleplay`: roleplay surface, HUD, choices, encounters, scene controls, and roleplay tracker UI.
+- `features/modes/game`: game surface, hooks, stores, API facade, and gameplay UI.
+- `features/modes/game-assets`: game asset browser and editor UI.
+- `features/modes/router`: the only concrete mode composition point.
+- `features/shell/settings`, `features/shell/connections`, `features/shell/spotify`, `features/shell/onboarding`, `features/shell/mari`, `features/shell/bot-browser`, `features/shell/imports`, `features/shell/notifications`: app-level tools and shell workflows.
 
-Shared UI belongs in `src/shared/components` only when it is genuinely generic.
+Cross-package imports should use curated public files such as `index.ts`, `shell.ts`, `query-keys.ts`, and `types.ts`. Shared UI belongs in `src/shared/components` only when it is genuinely generic across the app, not merely shared by concrete modes.

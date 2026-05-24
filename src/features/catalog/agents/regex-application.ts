@@ -1,0 +1,94 @@
+import { useCallback, useMemo } from "react";
+import { applyRegexReplacement } from "../../../engine/shared/regex/regex-replacement";
+import { useRegexScripts, type RegexScriptRow } from "./hooks/use-regex-scripts";
+
+type RegexPlacement = "ai_output" | "user_input";
+
+interface ApplyRegexOptions {
+  depth?: number;
+  resolveMacros?: (value: string) => string;
+}
+
+interface ParsedRegexScript extends RegexScriptRow {
+  enabledBool: boolean;
+  promptOnlyBool: boolean;
+  placements: RegexPlacement[];
+  trimList: string[];
+}
+
+function parseJsonArray<T extends string>(value: string, allowed?: Set<T>): T[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is T => typeof entry === "string" && (!allowed || allowed.has(entry as T)));
+  } catch {
+    return allowed?.has(value as T) ? [value as T] : [];
+  }
+}
+
+function parseScript(row: RegexScriptRow): ParsedRegexScript {
+  return {
+    ...row,
+    enabledBool: row.enabled === "true" || row.enabled === "1",
+    promptOnlyBool: row.promptOnly === "true" || row.promptOnly === "1",
+    placements: parseJsonArray(row.placement, new Set<RegexPlacement>(["ai_output", "user_input"])),
+    trimList: parseJsonArray(row.trimStrings),
+  };
+}
+
+function resolveText(value: string, options?: ApplyRegexOptions): string {
+  return options?.resolveMacros ? options.resolveMacros(value) : value;
+}
+
+function applyScripts(
+  text: string,
+  scripts: ParsedRegexScript[],
+  placement: RegexPlacement,
+  options?: ApplyRegexOptions & { promptOnly?: boolean },
+): string {
+  let result = text;
+  for (const script of scripts) {
+    if (!script.enabledBool) continue;
+    if (!script.placements.includes(placement)) continue;
+    if (options?.promptOnly ? !script.promptOnlyBool : script.promptOnlyBool) continue;
+    if (options?.depth != null) {
+      if (script.minDepth != null && options.depth < script.minDepth) continue;
+      if (script.maxDepth != null && options.depth > script.maxDepth) continue;
+    }
+
+    try {
+      const findRegex = resolveText(script.findRegex, options);
+      if (!findRegex) continue;
+      const regex = new RegExp(findRegex, script.flags);
+      result = applyRegexReplacement(result, regex, script.replaceString, (value) => resolveText(value, options));
+      for (const trim of script.trimList) {
+        const resolvedTrim = resolveText(trim, options);
+        if (resolvedTrim) result = result.split(resolvedTrim).join("");
+      }
+    } catch {
+      // Invalid user regexes are skipped; the editor remains the validation surface.
+    }
+  }
+  return result;
+}
+
+export function useApplyRegex() {
+  const { data: regexScripts } = useRegexScripts();
+  const scripts = useMemo(() => (regexScripts ?? []).map(parseScript), [regexScripts]);
+
+  const applyToAIOutput = useCallback(
+    (text: string, options?: ApplyRegexOptions) => applyScripts(text, scripts, "ai_output", options),
+    [scripts],
+  );
+  const applyToUserInput = useCallback(
+    (text: string, options?: ApplyRegexOptions) => applyScripts(text, scripts, "user_input", options),
+    [scripts],
+  );
+  const applyPromptOnly = useCallback(
+    (text: string, placement: RegexPlacement, options?: ApplyRegexOptions) =>
+      applyScripts(text, scripts, placement, { ...options, promptOnly: true }),
+    [scripts],
+  );
+
+  return { applyToAIOutput, applyToUserInput, applyPromptOnly };
+}

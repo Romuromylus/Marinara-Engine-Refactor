@@ -7,8 +7,9 @@ Use this before touching chat, roleplay, game, or shared generation behavior.
 Owner paths:
 
 - `src/engine/modes/chat`
-- `src/features/chats`
-- chat-related hooks under `src/features/chats/hooks`
+- `src/features/modes/conversation`
+- shared transcript/input UI under `src/features/modes/shared/chat-ui`
+- chat data hooks and query keys under `src/features/catalog/chats`
 - chat stores under `src/shared/stores` only when they are UI/session stores
 
 Owns:
@@ -29,7 +30,8 @@ Must not own:
 Owner paths:
 
 - `src/engine/modes/roleplay`
-- `src/features/roleplay`
+- `src/features/modes/roleplay`
+- roleplay encounter UI/hooks under `src/features/modes/roleplay/encounter`
 
 Owns:
 
@@ -50,8 +52,8 @@ Must not own:
 Owner paths:
 
 - `src/engine/modes/game`
-- `src/features/game`
-- `src/features/game-assets` for game asset browser UI
+- `src/features/modes/game`
+- `src/features/modes/game-assets` for game asset browser UI
 
 Owns:
 
@@ -78,7 +80,10 @@ Allowed shared homes:
 - `engine/generation-core`: prompt/lorebook/regex/LLM message building blocks.
 - `engine/generation`: shared generation lifecycle, but not mode-specific orchestration.
 - `shared/components`: generic UI atoms.
-- `features/visuals`: shared visual primitives when roleplay and game both need them.
+- `features/modes/shared/chat-ui`: shared transcript, input, overlays, settings, branch, summary, and gallery UI.
+- `features/modes/shared/scene-ui`: shared scene banner UI.
+- `features/runtime/visuals`: shared visual primitives when roleplay and game both need them.
+- `features/runtime/generation`, `features/runtime/world-state`, `features/runtime/tracker`: shared runtime systems used by mode surfaces.
 
 ## Impact Report Questions
 
